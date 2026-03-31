@@ -4,6 +4,10 @@ export interface BusinessProfile {
   businessName: string;
   gstNumber: string;
   fmcgNumber: string;
+  gstCertificate?: string;
+  fssaiLicense?: string;
+  udyamRegistration?: string;
+  tradeCertificate?: string;
   shopImageUri?: string;
   userIdUri?: string;
 }

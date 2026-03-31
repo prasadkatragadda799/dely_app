@@ -63,7 +63,11 @@ const LoginScreen = ({ navigation }: Props) => {
   const onSubmitDelivery = async (values: DeliveryLoginForm) => {
     try {
       setLoading(true);
-      await loginAsDelivery(values);
+      const digitsOnly = values.phone.replace(/\D/g, '');
+      await loginAsDelivery({
+        phone: digitsOnly,
+        password: values.password,
+      });
     } catch (e) {
       Toast.show({
         type: 'error',
@@ -83,7 +87,7 @@ const LoginScreen = ({ navigation }: Props) => {
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.topBar}>
@@ -185,24 +189,28 @@ const LoginScreen = ({ navigation }: Props) => {
 
             <View style={styles.deliveryCard}>
               <Text style={styles.deliveryLabel}>
-                Phone Number or Partner ID
+                Registered mobile number
               </Text>
 
                 <Controller
                   control={deliveryControl}
                   name="phone"
                   render={({ field: { onChange, value } }) => (
-                    <View style={styles.deliveryInputRow}>
+                    <View style={styles.deliveryInputRow} collapsable={false}>
                       <Icon name="account-outline" size={18} color="#94A3B8" />
                       <TextInput
-                        placeholder="Phone number"
+                        placeholder="10-digit mobile number"
                         placeholderTextColor="#94A3B8"
-                        value={value}
-                        onChangeText={text => onChange(text.replace(/[^\d]/g, ''))}
+                        value={value ?? ''}
+                        onChangeText={onChange}
                         style={styles.deliveryInput}
-                        keyboardType="number-pad"
-                        inputMode="numeric"
+                        keyboardType="phone-pad"
                         autoCapitalize="none"
+                        autoCorrect={false}
+                        textContentType="telephoneNumber"
+                        importantForAutofill="yes"
+                        returnKeyType="next"
+                        blurOnSubmit={false}
                       />
                     </View>
                   )}
@@ -223,12 +231,12 @@ const LoginScreen = ({ navigation }: Props) => {
                 control={deliveryControl}
                 name="password"
                 render={({ field: { onChange, value } }) => (
-                  <View style={styles.deliveryInputRow}>
+                  <View style={styles.deliveryInputRow} collapsable={false}>
                     <Icon name="lock-outline" size={18} color="#94A3B8" />
                     <TextInput
                       placeholder="Password"
                       placeholderTextColor="#94A3B8"
-                      value={value}
+                      value={value ?? ''}
                       onChangeText={onChange}
                       style={styles.deliveryInput}
                       secureTextEntry={!showDeliveryPassword}
@@ -311,12 +319,12 @@ const LoginScreen = ({ navigation }: Props) => {
                 control={control}
                 name="phone"
                 render={({ field: { onChange, value } }) => (
-                  <View style={styles.deliveryInputRow}>
+                  <View style={styles.deliveryInputRow} collapsable={false}>
                     <Icon name="phone-outline" size={18} color="#94A3B8" />
                     <TextInput
                       placeholder="Enter phone number"
                       placeholderTextColor="#94A3B8"
-                      value={value}
+                      value={value ?? ''}
                       onChangeText={onChange}
                       style={styles.deliveryInput}
                       keyboardType="phone-pad"
@@ -565,6 +573,7 @@ const styles = StyleSheet.create({
   },
   deliveryInput: {
     flex: 1,
+    minWidth: 0,
     paddingVertical: 14,
     color: '#0F172A',
   },

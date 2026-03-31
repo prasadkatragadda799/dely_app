@@ -40,6 +40,10 @@ type RegisterForm = {
   businessName: string;
   gstNumber: string;
   fmcgNumber: string;
+  gstCertificate: string;
+  fssaiLicense: string;
+  udyamRegistration: string;
+  tradeCertificate: string;
   shopImageUri?: string;
   userIdUri?: string;
   requestId?: string;
@@ -67,6 +71,10 @@ const RegisterScreen = ({ navigation }: Props) => {
       businessName: '',
       gstNumber: '',
       fmcgNumber: '',
+      gstCertificate: '',
+      fssaiLicense: '',
+      udyamRegistration: '',
+      tradeCertificate: '',
       shopImageUri: undefined,
       userIdUri: undefined,
       requestId: undefined,
@@ -111,13 +119,17 @@ const RegisterScreen = ({ navigation }: Props) => {
         !form.pincode.trim() ||
         !form.businessName.trim() ||
         !form.gstNumber.trim() ||
+        !form.gstCertificate.trim() ||
+        !form.fssaiLicense.trim() ||
+        !form.udyamRegistration.trim() ||
+        !form.tradeCertificate.trim() ||
         !form.fmcgNumber.trim() ||
         !shopImageUri ||
         !userIdUri
       ) {
         Alert.alert(
           'Complete your profile',
-          'Address, business name, GST, FMCG number, shop image, and user ID are required.',
+          'Address, business name, GST, GST certificate, FSSAI license, Udyam registration, trade certificate, FMCG number, shop image, and user ID are required.',
         );
         return;
       }
@@ -135,6 +147,10 @@ const RegisterScreen = ({ navigation }: Props) => {
           ? {
               businessName: form.businessName,
               gstNumber: form.gstNumber,
+              gstCertificate: form.gstCertificate,
+              fssaiLicense: form.fssaiLicense,
+              udyamRegistration: form.udyamRegistration,
+              tradeCertificate: form.tradeCertificate,
               fmcgNumber: form.fmcgNumber,
               shopImageUri,
               userIdUri,
@@ -482,6 +498,86 @@ const RegisterScreen = ({ navigation }: Props) => {
                         />
                         <TextInput
                           placeholder="Enter FMCG number"
+                          placeholderTextColor="#94A3B8"
+                          value={value}
+                          onChangeText={onChange}
+                          style={styles.input}
+                        />
+                      </View>
+                    )}
+                  />
+                </View>
+
+                <View style={{ marginTop: 10 }}>
+                  <Text style={styles.smallLabel}>GST certificate</Text>
+                  <Controller
+                    control={control}
+                    name="gstCertificate"
+                    render={({ field: { onChange, value } }) => (
+                      <View style={styles.inputRow}>
+                        <Icon name="file-certificate-outline" size={18} color="#64748B" />
+                        <TextInput
+                          placeholder="Enter GST certificate"
+                          placeholderTextColor="#94A3B8"
+                          value={value}
+                          onChangeText={onChange}
+                          style={styles.input}
+                        />
+                      </View>
+                    )}
+                  />
+                </View>
+
+                <View style={{ marginTop: 10 }}>
+                  <Text style={styles.smallLabel}>FSSAI license</Text>
+                  <Controller
+                    control={control}
+                    name="fssaiLicense"
+                    render={({ field: { onChange, value } }) => (
+                      <View style={styles.inputRow}>
+                        <Icon name="file-document-outline" size={18} color="#64748B" />
+                        <TextInput
+                          placeholder="Enter FSSAI license"
+                          placeholderTextColor="#94A3B8"
+                          value={value}
+                          onChangeText={onChange}
+                          style={styles.input}
+                        />
+                      </View>
+                    )}
+                  />
+                </View>
+
+                <View style={{ marginTop: 10 }}>
+                  <Text style={styles.smallLabel}>Udyam registration</Text>
+                  <Controller
+                    control={control}
+                    name="udyamRegistration"
+                    render={({ field: { onChange, value } }) => (
+                      <View style={styles.inputRow}>
+                        <Icon name="file-document-outline" size={18} color="#64748B" />
+                        <TextInput
+                          placeholder="Enter Udyam registration"
+                          placeholderTextColor="#94A3B8"
+                          value={value}
+                          onChangeText={onChange}
+                          style={styles.input}
+                        />
+                      </View>
+                    )}
+                  />
+                </View>
+
+                <View style={{ marginTop: 10 }}>
+                  <Text style={styles.smallLabel}>Trade certificate</Text>
+                  <Controller
+                    control={control}
+                    name="tradeCertificate"
+                    render={({ field: { onChange, value } }) => (
+                      <View style={styles.inputRow}>
+                        <Icon name="file-check-outline" size={18} color="#64748B" />
+                        <TextInput
+                          placeholder="Enter trade certificate"
                           placeholderTextColor="#94A3B8"
                           value={value}
                           onChangeText={onChange}

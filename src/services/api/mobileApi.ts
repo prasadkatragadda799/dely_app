@@ -40,6 +40,10 @@ type RegisterBody = {
   password: string;
   confirm_password: string;
   gst_number?: string;
+  gst_certificate?: string;
+  fssai_license?: string;
+  udyam_registration?: string;
+  trade_certificate?: string;
   address?: Record<string, unknown>;
   city?: string;
   state?: string;
