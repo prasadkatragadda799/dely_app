@@ -22,8 +22,7 @@ export const useCart = () => {
 
   const items = useMemo(() => {
     const rawItems: any[] = (data as any)?.data?.items ?? [];
-    // If we ever add `division_slug` support to the mobileApi.getCart query,
-    // it should be passed there. For now, trust backend's single-division rule.
+    // Optional: pass division_slug to getCart to show only one division's lines in a tab.
     return rawItems.map(it => {
       const p = it.product ?? {};
       const images = Array.isArray(p.images) ? p.images : [];
