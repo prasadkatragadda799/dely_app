@@ -216,6 +216,13 @@ type UpdateDeliveryCurrentLocationBody = {
   latitude: number;
   longitude: number;
 };
+type UpdateDeliveryMeBody = {
+  name?: string;
+  phone?: string;
+  email?: string;
+  vehicleNumber?: string;
+  vehicleType?: string;
+};
 
 type PaymentInitiateBody = {
   order_id: string;
@@ -616,6 +623,14 @@ export const mobileApi = createApi({
       query: () => '/delivery/auth/me',
       providesTags: ['Delivery'],
     }),
+    updateDeliveryMe: builder.mutation<ApiEnvelope<DeliveryPerson>, UpdateDeliveryMeBody>({
+      query: body => ({
+        url: '/delivery/auth/me',
+        method: 'PUT',
+        body,
+      }),
+      invalidatesTags: ['Delivery'],
+    }),
 
     getDeliveryDashboardSummary: builder.query<
       ApiEnvelope<DeliveryDashboardSummary>,
@@ -768,6 +783,7 @@ export const {
   useUpdateDeliveryLocationMutation,
   useDeleteDeliveryLocationMutation,
   useGetDeliveryMeQuery,
+  useUpdateDeliveryMeMutation,
   useGetDeliveryDashboardSummaryQuery,
   useGetDeliveryAssignedOrdersQuery,
   useUpdateDeliveryOrderStatusMutation,

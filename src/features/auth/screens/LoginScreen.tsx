@@ -25,11 +25,6 @@ type LoginForm = {
   phone: string;
 };
 
-type DeliveryLoginForm = {
-  phone: string;
-  password: string;
-};
-
 const LoginScreen = ({ navigation }: Props) => {
   const { sendCustomerOtp, loginAsDelivery } = useAuth();
   const { control, handleSubmit } = useForm<LoginForm>({
@@ -39,10 +34,8 @@ const LoginScreen = ({ navigation }: Props) => {
   const [mode, setMode] = useState<'customer' | 'delivery'>('customer');
   const [showDeliveryPassword, setShowDeliveryPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { control: deliveryControl, handleSubmit: handleSubmitDelivery } =
-    useForm<DeliveryLoginForm>({
-      defaultValues: { phone: '', password: '' },
-    });
+  const [deliveryPhone, setDeliveryPhone] = useState('');
+  const [deliveryPassword, setDeliveryPassword] = useState('');
 
   const onSubmitCustomer = async (values: LoginForm) => {
     try {
@@ -60,13 +53,13 @@ const LoginScreen = ({ navigation }: Props) => {
     }
   };
 
-  const onSubmitDelivery = async (values: DeliveryLoginForm) => {
+  const onSubmitDelivery = async () => {
     try {
       setLoading(true);
-      const digitsOnly = values.phone.replace(/\D/g, '');
+      const digitsOnly = deliveryPhone.replace(/\D/g, '');
       await loginAsDelivery({
         phone: digitsOnly,
-        password: values.password,
+        password: deliveryPassword,
       });
     } catch (e) {
       Toast.show({
@@ -192,29 +185,20 @@ const LoginScreen = ({ navigation }: Props) => {
                 Registered mobile number
               </Text>
 
-                <Controller
-                  control={deliveryControl}
-                  name="phone"
-                  render={({ field: { onChange, value } }) => (
-                    <View style={styles.deliveryInputRow} collapsable={false}>
-                      <Icon name="account-outline" size={18} color="#94A3B8" />
-                      <TextInput
-                        placeholder="10-digit mobile number"
-                        placeholderTextColor="#94A3B8"
-                        value={value ?? ''}
-                        onChangeText={onChange}
-                        style={styles.deliveryInput}
-                        keyboardType="phone-pad"
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        textContentType="telephoneNumber"
-                        importantForAutofill="yes"
-                        returnKeyType="next"
-                        blurOnSubmit={false}
-                      />
-                    </View>
-                  )}
-                />
+                <View style={styles.deliveryInputRow} collapsable={false}>
+                  <Icon name="account-outline" size={18} color="#94A3B8" />
+                  <TextInput
+                    placeholder="10-digit mobile number"
+                    placeholderTextColor="#94A3B8"
+                    value={deliveryPhone}
+                    onChangeText={setDeliveryPhone}
+                    style={styles.deliveryInput}
+                    keyboardType="phone-pad"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    maxLength={15}
+                  />
+                </View>
 
               <View style={styles.passwordLabelRow}>
                 <Text style={styles.deliveryLabel}>Password</Text>
@@ -227,43 +211,33 @@ const LoginScreen = ({ navigation }: Props) => {
                 </TouchableOpacity>
               </View>
 
-              <Controller
-                control={deliveryControl}
-                name="password"
-                render={({ field: { onChange, value } }) => (
-                  <View style={styles.deliveryInputRow} collapsable={false}>
-                    <Icon name="lock-outline" size={18} color="#94A3B8" />
-                    <TextInput
-                      placeholder="Password"
-                      placeholderTextColor="#94A3B8"
-                      value={value ?? ''}
-                      onChangeText={onChange}
-                      style={styles.deliveryInput}
-                      secureTextEntry={!showDeliveryPassword}
-                    />
-                    <TouchableOpacity
-                      onPress={() => setShowDeliveryPassword(prev => !prev)}
-                      style={styles.eyeBtn}
-                      activeOpacity={0.9}
-                    >
-                      <Icon
-                        name={
-                          showDeliveryPassword
-                            ? 'eye-off-outline'
-                            : 'eye-outline'
-                        }
-                        size={18}
-                        color="#94A3B8"
-                      />
-                    </TouchableOpacity>
-                  </View>
-                )}
-              />
+              <View style={styles.deliveryInputRow} collapsable={false}>
+                <Icon name="lock-outline" size={18} color="#94A3B8" />
+                <TextInput
+                  placeholder="Password"
+                  placeholderTextColor="#94A3B8"
+                  value={deliveryPassword}
+                  onChangeText={setDeliveryPassword}
+                  style={styles.deliveryInput}
+                  secureTextEntry={!showDeliveryPassword}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowDeliveryPassword(prev => !prev)}
+                  style={styles.eyeBtn}
+                  activeOpacity={0.9}
+                >
+                  <Icon
+                    name={showDeliveryPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={18}
+                    color="#94A3B8"
+                  />
+                </TouchableOpacity>
+              </View>
 
               <TouchableOpacity
                 style={styles.primaryButton}
                 disabled={loading}
-                onPress={handleSubmitDelivery(onSubmitDelivery)}
+                onPress={onSubmitDelivery}
               >
                 <Text style={styles.primaryButtonText}>
                   Continue as Partner
