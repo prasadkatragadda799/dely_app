@@ -8,6 +8,7 @@ import {
   useDeliveryLoginMutation,
   useDeliveryLogoutApiMutation,
   useRegisterMutation,
+  useRegisterMultipartMutation,
   useSendOtpMutation,
   useVerifyOtpMutation,
 } from '../services/api/mobileApi';
@@ -15,6 +16,18 @@ import {
   BusinessProfile,
   setBusinessProfile,
 } from '../features/customer/businessProfileSlice';
+
+function appendRegistrationFile(form: FormData, field: string, uri?: string) {
+  if (!uri) return;
+  const last = uri.split('/').pop() ?? 'photo.jpg';
+  const base = last.split('?')[0] || 'photo.jpg';
+  const ext = base.includes('.') ? base.split('.').pop()?.toLowerCase() : '';
+  const mime =
+    ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+  const name = base.includes('.') ? base : `${base}.jpg`;
+  // React Native FormData file shape (not a web Blob)
+  form.append(field, { uri, type: mime, name } as any);
+}
 
 export const useAuth = () => {
   const dispatch = useAppDispatch();
@@ -24,6 +37,7 @@ export const useAuth = () => {
   const [deliveryLoginApi] = useDeliveryLoginMutation();
   const [deliveryLogoutApi] = useDeliveryLogoutApiMutation();
   const [registerApi] = useRegisterMutation();
+  const [registerMultipartApi] = useRegisterMultipartMutation();
   const [sendOtpApi] = useSendOtpMutation();
   const [verifyOtpApi] = useVerifyOtpMutation();
 
@@ -104,27 +118,85 @@ export const useAuth = () => {
             dispatch(setBusinessProfile(input.businessProfile));
           }
 
-          // Backend registration schema (UserCreate)
-          const res = await registerApi({
-            name: input.name,
-            email: input.email,
-            phone: input.phone,
-            business_name:
-              input.businessProfile?.businessName ??
-              // Backend requires a value; keep this safe if UI ever changes.
-              'Business',
-            password: input.password,
-            confirm_password: input.password,
-            gst_number: input.businessProfile?.gstNumber || undefined,
-            gst_certificate: input.businessProfile?.gstCertificate || undefined,
-            fssai_license: input.businessProfile?.fssaiLicense || undefined,
-            udyam_registration: input.businessProfile?.udyamRegistration || undefined,
-            trade_certificate: input.businessProfile?.tradeCertificate || undefined,
-            address: input.address,
-            city: input.city,
-            state: input.state,
-            pincode: input.pincode,
-          }).unwrap();
+          const fssaiDigits =
+            input.businessProfile?.fmcgNumber?.replace(/\D/g, '') ?? '';
+          const fssaiNumber =
+            fssaiDigits.length === 14 ? fssaiDigits : undefined;
+
+          const res =
+            input.role === 'customer' && input.businessProfile
+              ? await (async () => {
+                  const bp = input.businessProfile!;
+                  const form = new FormData();
+                  form.append('name', input.name);
+                  form.append('email', input.email);
+                  form.append('phone', input.phone);
+                  form.append('password', input.password);
+                  form.append('confirm_password', input.password);
+                  form.append('business_name', bp.businessName || 'Business');
+                  if (bp.gstNumber?.trim())
+                    form.append('gst_number', bp.gstNumber.trim());
+                  if (fssaiNumber) form.append('fssai_number', fssaiNumber);
+                  if (input.city?.trim()) form.append('city', input.city.trim());
+                  if (input.state?.trim())
+                    form.append('state', input.state.trim());
+                  if (input.pincode?.trim())
+                    form.append('pincode', input.pincode.trim());
+                  form.append(
+                    'address_json',
+                    JSON.stringify(input.address ?? {}),
+                  );
+                  appendRegistrationFile(
+                    form,
+                    'gst_certificate',
+                    bp.gstCertificate,
+                  );
+                  appendRegistrationFile(
+                    form,
+                    'fssai_license',
+                    bp.fssaiLicense,
+                  );
+                  appendRegistrationFile(
+                    form,
+                    'udyam_registration',
+                    bp.udyamRegistration,
+                  );
+                  appendRegistrationFile(
+                    form,
+                    'trade_certificate',
+                    bp.tradeCertificate,
+                  );
+                  appendRegistrationFile(form, 'shop_photo', bp.shopImageUri);
+                  appendRegistrationFile(
+                    form,
+                    'user_id_document',
+                    bp.userIdUri,
+                  );
+                  return registerMultipartApi(form).unwrap();
+                })()
+              : await registerApi({
+                  name: input.name,
+                  email: input.email,
+                  phone: input.phone,
+                  business_name:
+                    input.businessProfile?.businessName ?? 'Business',
+                  password: input.password,
+                  confirm_password: input.password,
+                  gst_number: input.businessProfile?.gstNumber || undefined,
+                  fssai_number: fssaiNumber,
+                  gst_certificate:
+                    input.businessProfile?.gstCertificate || undefined,
+                  fssai_license:
+                    input.businessProfile?.fssaiLicense || undefined,
+                  udyam_registration:
+                    input.businessProfile?.udyamRegistration || undefined,
+                  trade_certificate:
+                    input.businessProfile?.tradeCertificate || undefined,
+                  address: input.address,
+                  city: input.city,
+                  state: input.state,
+                  pincode: input.pincode,
+                }).unwrap();
 
           const data = res?.data as
             | { request_id?: string; user_id?: string; phone?: string }
@@ -206,6 +278,7 @@ export const useAuth = () => {
       deliveryLoginApi,
       deliveryLogoutApi,
       registerApi,
+      registerMultipartApi,
       sendOtpApi,
       verifyOtpApi,
     ],

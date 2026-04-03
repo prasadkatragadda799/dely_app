@@ -40,6 +40,7 @@ type RegisterBody = {
   password: string;
   confirm_password: string;
   gst_number?: string;
+  fssai_number?: string;
   gst_certificate?: string;
   fssai_license?: string;
   udyam_registration?: string;
@@ -270,6 +271,15 @@ export const mobileApi = createApi({
   endpoints: builder => ({
     register: builder.mutation<ApiEnvelope<RegisterData>, RegisterBody>({
       query: body => ({ url: '/auth/register', method: 'POST', body }),
+      invalidatesTags: ['Auth'],
+    }),
+    /** Multipart registration: certificate images saved on server; stores URLs on user row */
+    registerMultipart: builder.mutation<ApiEnvelope<RegisterData>, FormData>({
+      query: body => ({
+        url: '/auth/register/multipart',
+        method: 'POST',
+        body,
+      }),
       invalidatesTags: ['Auth'],
     }),
     login: builder.mutation<ApiEnvelope<unknown>, LoginBody>({
@@ -719,6 +729,7 @@ export const mobileApi = createApi({
 
 export const {
   useRegisterMutation,
+  useRegisterMultipartMutation,
   useLoginMutation,
   useSendOtpMutation,
   useVerifyOtpMutation,
