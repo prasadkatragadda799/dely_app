@@ -1,5 +1,7 @@
 import React, { useMemo } from 'react';
 import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useGetProductsQuery } from '../../products/api/productsApi';
 import { useWishlist } from '../../../hooks/useWishlist';
@@ -14,6 +16,8 @@ const WishlistScreen = () => {
 
   const isHomeKitchen = homeDivision === 'homeKitchen';
   const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
 
   const wishlistProducts = useMemo(() => {
     const allowedCategories = isHomeKitchen ? ['home', 'kitchen'] : ['fmcg'];
@@ -23,7 +27,7 @@ const WishlistScreen = () => {
   }, [products, productIds, isHomeKitchen]);
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { paddingTop: insets.top + 12 }]}>
       <View style={[styles.headerCard, { borderColor: `${primary}33` }]}>
         <View>
           <Text style={styles.title}>My Wishlist</Text>
@@ -42,7 +46,11 @@ const WishlistScreen = () => {
       <FlatList
         data={wishlistProducts}
         keyExtractor={item => item.id}
-        contentContainerStyle={wishlistProducts.length === 0 ? styles.emptyContent : styles.content}
+        contentContainerStyle={
+          wishlistProducts.length === 0
+            ? [styles.emptyContent, { paddingBottom: tabBarHeight + insets.bottom + 16 }]
+            : [styles.content, { paddingBottom: tabBarHeight + insets.bottom + 16 }]
+        }
         ListEmptyComponent={
           <View style={styles.emptyCard}>
             <View style={[styles.emptyIconWrap, { backgroundColor: `${primary}14` }]}>
@@ -91,7 +99,7 @@ const WishlistScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F8FAFC', paddingHorizontal: 14, paddingTop: 12 },
+  root: { flex: 1, backgroundColor: '#F8FAFC', paddingHorizontal: 14 },
   headerCard: {
     borderWidth: 1,
     backgroundColor: '#FFFFFF',

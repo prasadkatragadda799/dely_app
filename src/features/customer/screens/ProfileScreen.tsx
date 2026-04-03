@@ -106,7 +106,10 @@ const ProfileScreen = () => {
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: insets.bottom + 96 },
+          {
+            paddingTop: insets.top + 14,
+            paddingBottom: insets.bottom + 96,
+          },
         ]}
         showsVerticalScrollIndicator={false}>
         <View style={[styles.heroCard, { borderColor: `${primary}30` }]}>
@@ -285,7 +288,7 @@ const ProfileScreen = () => {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F1F5F9' },
-  content: { paddingHorizontal: 14, paddingTop: 14 },
+  content: { paddingHorizontal: 14 },
   heroCard: {
     borderRadius: 20,
     backgroundColor: '#FFFFFF',

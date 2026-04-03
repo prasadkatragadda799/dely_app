@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppSelector } from '../../../hooks/redux';
 import {
@@ -105,6 +106,7 @@ const OrdersScreen = () => {
   const isHomeKitchen = homeDivision === 'homeKitchen';
   const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
   const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
   const [invoiceOrderId, setInvoiceOrderId] = React.useState<string | null>(null);
   const [cancellingOrderId, setCancellingOrderId] = React.useState<string | null>(null);
 
@@ -192,7 +194,10 @@ const OrdersScreen = () => {
   return (
     <View style={styles.root}>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + 26 }]}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + 14, paddingBottom: tabBarHeight + insets.bottom + 26 },
+        ]}
         refreshControl={<RefreshControl refreshing={isFetching && !isLoading} onRefresh={refetch} />}
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
@@ -410,7 +415,7 @@ const OrdersScreen = () => {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F1F5F9' },
-  content: { paddingHorizontal: 14, paddingTop: 14 },
+  content: { paddingHorizontal: 14 },
   header: { marginBottom: 8 },
   title: { fontSize: 26, fontWeight: '900', color: '#0F172A' },
   subtitle: { marginTop: 4, color: '#475569', fontWeight: '600' },

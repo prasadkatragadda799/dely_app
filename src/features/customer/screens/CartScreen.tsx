@@ -37,7 +37,7 @@ const CartScreen = () => {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { backgroundColor: primary }]}>
+      <View style={[styles.header, { backgroundColor: primary, paddingTop: insets.top + 14 }]}>
         <View style={styles.headerLeft}>
           <Icon name="cart-outline" size={22} color="#FFFFFF" />
           <Text style={styles.headerTitle}>Cart</Text>
@@ -158,7 +158,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FBFF' },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 18,
     paddingBottom: 14,
     flexDirection: 'row',
     justifyContent: 'space-between',

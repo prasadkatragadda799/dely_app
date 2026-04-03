@@ -4,9 +4,13 @@ export interface BusinessProfile {
   businessName: string;
   gstNumber: string;
   fmcgNumber: string;
+  /** Local file URI or uploaded URL for GST certificate document */
   gstCertificate?: string;
+  /** Local file URI or uploaded URL for FSSAI license document */
   fssaiLicense?: string;
+  /** Local file URI or uploaded URL for Udyam registration certificate */
   udyamRegistration?: string;
+  /** Local file URI or uploaded URL for trade certificate */
   tradeCertificate?: string;
   shopImageUri?: string;
   userIdUri?: string;
