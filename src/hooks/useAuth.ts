@@ -113,9 +113,21 @@ export const useAuth = () => {
         pincode?: string;
       }) =>
         (async () => {
-          // Persist the app-only business profile fields (images/fmcgNumber) locally.
+          // Persist business + address locally (same shape as registration flow).
           if (input.role === 'customer' && input.businessProfile) {
-            dispatch(setBusinessProfile(input.businessProfile));
+            const addr = input.address as
+              | { address_line1?: string; address_line2?: string }
+              | undefined;
+            dispatch(
+              setBusinessProfile({
+                ...input.businessProfile,
+                addressLine1: addr?.address_line1?.trim() || undefined,
+                addressLine2: addr?.address_line2?.trim() || undefined,
+                city: input.city?.trim() || undefined,
+                state: input.state?.trim() || undefined,
+                pincode: input.pincode?.trim() || undefined,
+              }),
+            );
           }
 
           const fssaiDigits =

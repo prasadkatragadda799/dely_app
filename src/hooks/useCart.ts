@@ -14,7 +14,7 @@ export const useCart = () => {
   const homeDivision = useAppSelector(state => state.homeDivision.division);
   const isHomeKitchen = homeDivision === 'homeKitchen';
 
-  const { data } = useGetCartQuery(undefined);
+  const { data } = useGetCartQuery(homeDivision);
   const [addToCartApi] = useAddToCartApiMutation();
   const [updateCartItemApi] = useUpdateCartItemApiMutation();
   const [deleteCartItemApi] = useDeleteCartItemApiMutation();
@@ -66,7 +66,17 @@ export const useCart = () => {
       items,
       total,
       add: (product: Product, quantity = 1) => {
-        const safeQuantity = Number.isFinite(quantity) ? Math.max(1, Math.trunc(quantity)) : 1;
+        const minOrder = Math.max(
+          1,
+          Math.trunc(Number(product.minOrderQuantity) || 1),
+        );
+        const requested = Number.isFinite(quantity)
+          ? Math.max(1, Math.trunc(quantity))
+          : 1;
+        const alreadyInCart = items.some(i => i.product.id === product.id);
+        const safeQuantity = alreadyInCart
+          ? requested
+          : Math.max(minOrder, requested);
         addToCartApi({ product_id: product.id, quantity: safeQuantity })
           .unwrap()
           .catch((e: any) => {
@@ -128,13 +138,6 @@ export const useCart = () => {
         });
       },
     }),
-    [
-      addToCartApi,
-      clearCartApi,
-      deleteCartItemApi,
-      items,
-      total,
-      updateCartItemApi,
-    ],
+    [addToCartApi, clearCartApi, deleteCartItemApi, items, total, updateCartItemApi],
   );
 };

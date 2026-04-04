@@ -386,8 +386,12 @@ export const mobileApi = createApi({
       providesTags: ['Divisions'],
     }),
 
-    getCart: builder.query<ApiEnvelope<unknown>, void>({
-      query: () => '/cart',
+    getCart: builder.query<ApiEnvelope<unknown>, 'fmcg' | 'homeKitchen'>({
+      query: division => {
+        const slug =
+          division === 'homeKitchen' ? 'kitchen' : 'fmcg';
+        return `/cart?division_slug=${encodeURIComponent(slug)}`;
+      },
       providesTags: ['Cart'],
     }),
     addToCartApi: builder.mutation<ApiEnvelope<unknown>, CartAddBody>({

@@ -14,6 +14,12 @@ export interface BusinessProfile {
   tradeCertificate?: string;
   shopImageUri?: string;
   userIdUri?: string;
+  /** Mirrors customer registration address fields (stored locally after signup). */
+  addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
 }
 
 interface BusinessProfileState {

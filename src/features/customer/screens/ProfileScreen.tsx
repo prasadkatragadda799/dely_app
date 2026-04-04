@@ -20,6 +20,32 @@ import {
   useSkipKycMutation,
   useSubmitKycMutation,
 } from '../../../services/api/mobileApi';
+import type { BusinessProfile } from '../businessProfileSlice';
+
+function KycDocTile({ uri, label }: { uri?: string; label: string }) {
+  return (
+    <View style={styles.docBox}>
+      {uri ? (
+        <Image source={{ uri }} style={styles.docImg} />
+      ) : (
+        <View style={[styles.docImg, styles.docPlaceholder]}>
+          <Text style={styles.docPlaceholderText}>Not uploaded</Text>
+        </View>
+      )}
+      <Text style={styles.docLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function hasAnyAddress(bp: BusinessProfile) {
+  return Boolean(
+    bp.addressLine1?.trim() ||
+      bp.addressLine2?.trim() ||
+      bp.city?.trim() ||
+      bp.state?.trim() ||
+      bp.pincode?.trim(),
+  );
+}
 
 const ProfileScreen = () => {
   const { user, logout } = useAuth();
@@ -73,9 +99,10 @@ const ProfileScreen = () => {
         business_name: business.businessName,
         gst_number: business.gstNumber,
         fssai_number: fssaiDigits,
-        // Store image URIs as strings for now.
         shop_image_url: business.shopImageUri ?? undefined,
-        fssai_license_image_url: business.userIdUri ?? undefined,
+        // Prefer FSSAI license from registration; fall back for older local profiles.
+        fssai_license_image_url:
+          business.fssaiLicense ?? business.userIdUri ?? undefined,
       }).unwrap();
 
       await refetchKyc();
@@ -190,9 +217,40 @@ const ProfileScreen = () => {
         </View>
 
         <View style={styles.sectionWrap}>
-          <Text style={styles.sectionTitle}>Business details</Text>
+          <Text style={styles.sectionTitle}>Business & KYC</Text>
           {business ? (
             <>
+              {hasAnyAddress(business) ? (
+                <>
+                  <Text style={[styles.label, { marginTop: 6 }]}>Address details</Text>
+                  {business.addressLine1?.trim() ? (
+                    <View style={styles.infoRow}>
+                      <Text style={styles.label}>Address line 1</Text>
+                      <Text style={styles.value}>{business.addressLine1.trim()}</Text>
+                    </View>
+                  ) : null}
+                  {business.addressLine2?.trim() ? (
+                    <View style={styles.infoRow}>
+                      <Text style={styles.label}>Address line 2</Text>
+                      <Text style={styles.value}>{business.addressLine2.trim()}</Text>
+                    </View>
+                  ) : null}
+                  <View style={styles.infoRow}>
+                    <Text style={styles.label}>City</Text>
+                    <Text style={styles.value}>{business.city?.trim() || '—'}</Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.label}>State</Text>
+                    <Text style={styles.value}>{business.state?.trim() || '—'}</Text>
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Text style={styles.label}>Pincode</Text>
+                    <Text style={styles.value}>{business.pincode?.trim() || '—'}</Text>
+                  </View>
+                </>
+              ) : null}
+
+              <Text style={[styles.label, { marginTop: 14 }]}>Business details</Text>
               <View style={styles.infoRow}>
                 <Text style={styles.label}>Business name</Text>
                 <Text style={styles.value}>{business.businessName}</Text>
@@ -202,24 +260,25 @@ const ProfileScreen = () => {
                 <Text style={styles.value}>{business.gstNumber}</Text>
               </View>
               <View style={styles.infoRow}>
-                <Text style={styles.label}>FMCG number</Text>
+                <Text style={styles.label}>FMCG number (FSSAI)</Text>
                 <Text style={styles.value}>{business.fmcgNumber}</Text>
               </View>
 
-              <Text style={[styles.label, { marginTop: 14 }]}>Documents</Text>
+              <Text style={[styles.label, { marginTop: 14 }]}>Certificates & documents</Text>
+              <Text style={styles.docHint}>
+                Same uploads as registration (GST, FSSAI, Udyam, trade, shop, user ID).
+              </Text>
               <View style={styles.docRow}>
-                <View style={styles.docBox}>
-                  {business.shopImageUri ? (
-                    <Image source={{ uri: business.shopImageUri }} style={styles.docImg} />
-                  ) : null}
-                  <Text style={styles.docLabel}>Shop image</Text>
-                </View>
-                <View style={styles.docBox}>
-                  {business.userIdUri ? (
-                    <Image source={{ uri: business.userIdUri }} style={styles.docImg} />
-                  ) : null}
-                  <Text style={styles.docLabel}>User ID</Text>
-                </View>
+                <KycDocTile uri={business.gstCertificate} label="GST certificate" />
+                <KycDocTile uri={business.fssaiLicense} label="FSSAI license" />
+              </View>
+              <View style={styles.docRow}>
+                <KycDocTile uri={business.udyamRegistration} label="Udyam registration" />
+                <KycDocTile uri={business.tradeCertificate} label="Trade certificate" />
+              </View>
+              <View style={styles.docRow}>
+                <KycDocTile uri={business.shopImageUri} label="Shop photo" />
+                <KycDocTile uri={business.userIdUri} label="User ID" />
               </View>
 
               <View style={{ marginTop: 18 }}>
@@ -402,7 +461,26 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   docImg: { width: '100%', height: 86, borderRadius: 12, backgroundColor: '#EEF2FF' },
+  docPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+  },
+  docPlaceholderText: {
+    color: '#94A3B8',
+    fontWeight: '700',
+    fontSize: 11,
+    textAlign: 'center',
+    paddingHorizontal: 6,
+  },
   docLabel: { marginTop: 8, textAlign: 'center', color: '#475569', fontWeight: '800', fontSize: 12 },
+  docHint: {
+    marginTop: 6,
+    color: '#64748B',
+    fontWeight: '600',
+    fontSize: 12,
+    lineHeight: 17,
+  },
   emptyText: { marginTop: 10, color: '#64748B', fontWeight: '700', lineHeight: 18 },
   logout: {
     marginTop: 16,

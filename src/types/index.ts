@@ -27,6 +27,8 @@ export interface Product {
   isVeg?: boolean;
   rating?: number;
   reviewCount?: number;
+  /** From backend `minOrderQuantity`; cart API requires at least this many per line. */
+  minOrderQuantity?: number;
 }
 
 export interface Deal {

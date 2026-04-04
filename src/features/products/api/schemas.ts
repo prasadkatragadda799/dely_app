@@ -40,6 +40,8 @@ type ProductApiEntity = {
   etaMinutes?: number | string;
   is_veg?: boolean;
   isVeg?: boolean;
+  minOrderQuantity?: number | string | null;
+  min_order_quantity?: number | string | null;
 };
 
 type OfferApiEntity = {
@@ -136,6 +138,10 @@ export const mapProductFromApi = (
           : undefined,
     rating: maybeAsNumber(item.rating ?? item.reviewCount),
     reviewCount: maybeAsNumber(item.reviewCount ?? item.reviews_count),
+    minOrderQuantity: Math.max(
+      1,
+      asNumber(item.minOrderQuantity ?? item.min_order_quantity ?? 1, 1),
+    ),
   };
 };
 
