@@ -12,6 +12,16 @@ export interface User {
 
 export type ProductCategory = 'fmcg' | 'kitchen' | 'home';
 
+export type PriceOptionKey = 'unit' | 'set' | 'remaining';
+
+export interface ProductPriceOption {
+  key: PriceOptionKey;
+  label: string;
+  sellingPrice: number;
+  mrp: number;
+  discount?: number;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -21,6 +31,8 @@ export interface Product {
   subCategory?: string; // e.g. "Cleaning", "Snacks", etc.
   price: number;
   discountPercent: number;
+  /** When the API exposes multiple tiers (unit / set / remaining), customer picks one. */
+  priceOptions?: ProductPriceOption[];
   // Backend product payload currently doesn't provide these fields consistently.
   // Keep them optional and render UI conditionally.
   etaMinutes?: number;
@@ -53,6 +65,14 @@ export interface Deal {
 export interface CartItem {
   product: Product;
   quantity: number;
+  /** Present when cart is backed by API (per-line tier). */
+  priceOptionKey?: PriceOptionKey;
+}
+
+/** Cart row from `useCart` (API-backed). */
+export interface CartLineItem extends CartItem {
+  cartItemId: string;
+  priceOptionKey: PriceOptionKey;
 }
 
 export type OrderStatus =

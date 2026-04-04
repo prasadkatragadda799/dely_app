@@ -265,6 +265,7 @@ const CheckoutScreen = () => {
         items: visibleItems.map(i => ({
           product_id: i.product.id,
           quantity: i.quantity,
+          price_option_key: i.priceOptionKey,
         })),
         delivery_address: deliveryAddress,
         payment_method: 'online',

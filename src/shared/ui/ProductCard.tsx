@@ -40,9 +40,21 @@ const ProductCard = ({
   const borderTint = useMemo(() => hexToRgba(accentColor, 0.45), [accentColor]);
 
   const Wrapper = onCardPress ? TouchableOpacity : View;
-  const qty = items.find(i => i.product.id === product.id)?.quantity ?? 0;
+  const qty = items
+    .filter(i => i.product.id === product.id)
+    .reduce((sum, i) => sum + i.quantity, 0);
+  const opts = product.priceOptions;
+  let displayPrice = product.price;
+  let discountPct = product.discountPercent;
+  if (opts && opts.length > 1) {
+    const cheapest = opts.reduce((a, b) =>
+      a.sellingPrice <= b.sellingPrice ? a : b,
+    );
+    displayPrice = cheapest.sellingPrice;
+    discountPct = cheapest.discount ?? product.discountPercent;
+  }
   const originalPrice = Math.round(
-    product.price / Math.max(1 - product.discountPercent / 100, 0.01),
+    displayPrice / Math.max(1 - discountPct / 100, 0.01),
   );
   const packHint = packagingShortLine(product);
 
@@ -55,7 +67,7 @@ const ProductCard = ({
       <View style={styles.imageWrap}>
         <Image source={{ uri: product.image }} style={styles.image} />
         <View style={[styles.discountPill, { backgroundColor: accentColor }]}>
-          <Text style={styles.discountPillText}>{product.discountPercent}% OFF</Text>
+          <Text style={styles.discountPillText}>{Math.round(discountPct)}% OFF</Text>
         </View>
       </View>
       <TouchableOpacity
@@ -117,7 +129,10 @@ const ProductCard = ({
         ) : null}
       </View>
       <View style={styles.priceBlock}>
-        <Text style={styles.price}>Rs {product.price}</Text>
+        {opts && opts.length > 1 ? (
+          <Text style={styles.fromHint}>From</Text>
+        ) : null}
+        <Text style={styles.price}>Rs {displayPrice}</Text>
         <Text style={styles.mrp}>Rs {originalPrice}</Text>
       </View>
       {packHint ? (
@@ -252,6 +267,12 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     fontSize: 10,
     fontWeight: '800',
+  },
+  fromHint: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#64748B',
+    marginBottom: -2,
   },
   priceBlock: {
     marginTop: 7,

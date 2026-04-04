@@ -22,7 +22,8 @@ import Voice, {
   isVoiceSearchAvailable,
   VOICE_NOT_AVAILABLE_MESSAGE,
 } from '../../../utils/voice';
-import { Product } from '../../../types';
+import { PriceOptionKey, Product } from '../../../types';
+import { defaultPriceTier, selectedPriceOption } from '../../../utils/productPricing';
 import { useWishlist } from '../../../hooks/useWishlist';
 import {
   orderQuantityPlural,
@@ -43,15 +44,25 @@ const ProductDetailCard = ({
   textColor,
 }: {
   item: Product;
-  onAdd: (product: Product) => void;
+  onAdd: (product: Product, tier: PriceOptionKey) => void;
   onToggleWishlist: (productId: string) => void;
   isWishlisted: boolean;
   accentColor: string;
   textColor: string;
 }) => {
-  const originalPrice = Math.round(
-    item.price / Math.max(1 - item.discountPercent / 100, 0.01),
+  const [tierKey, setTierKey] = React.useState<PriceOptionKey>(() =>
+    defaultPriceTier(item),
   );
+  React.useEffect(() => {
+    setTierKey(defaultPriceTier(item));
+  }, [item.id]);
+
+  const active = selectedPriceOption(item, tierKey);
+  const sell = active?.sellingPrice ?? item.price;
+  const discPct = active?.discount ?? item.discountPercent;
+  const strikeMrp =
+    active?.mrp ?? Math.round(sell / Math.max(1 - discPct / 100, 0.01));
+  const showTierPicker = (item.priceOptions?.length ?? 0) > 1;
   const packLine = packagingShortLine(item);
 
   return (
@@ -59,7 +70,7 @@ const ProductDetailCard = ({
       <View style={styles.imageWrap}>
         <Image source={{ uri: item.image }} style={styles.productImage} />
         <View style={[styles.discountBadge, { backgroundColor: accentColor }]}>
-          <Text style={styles.discountBadgeText}>{item.discountPercent}% OFF</Text>
+          <Text style={styles.discountBadgeText}>{Math.round(discPct)}% OFF</Text>
         </View>
       </View>
 
@@ -114,20 +125,51 @@ const ProductDetailCard = ({
         ) : null}
       </View>
 
+      {showTierPicker ? (
+        <View style={styles.tierChipRow}>
+          {item.priceOptions!.map(opt => {
+            const selected = opt.key === tierKey;
+            return (
+              <TouchableOpacity
+                key={opt.key}
+                style={[
+                  styles.tierChip,
+                  {
+                    borderColor: selected ? accentColor : '#E2E8F0',
+                    backgroundColor: selected ? `${accentColor}18` : '#F8FAFC',
+                  },
+                ]}
+                onPress={() => setTierKey(opt.key)}
+                activeOpacity={0.9}>
+                <Text
+                  style={[
+                    styles.tierChipText,
+                    { color: selected ? accentColor : '#64748B' },
+                  ]}>
+                  {opt.label}
+                </Text>
+                <Text style={[styles.tierChipPrice, { color: textColor }]}>
+                  Rs {opt.sellingPrice}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ) : null}
       <View style={styles.priceRow}>
         <View style={styles.priceMeta}>
           <View style={styles.priceLine}>
-            <Text style={[styles.currentPrice, { color: textColor }]}>Rs {item.price}</Text>
-            <Text style={styles.strikePrice}>MRP Rs {originalPrice}</Text>
+            <Text style={[styles.currentPrice, { color: textColor }]}>Rs {sell}</Text>
+            <Text style={styles.strikePrice}>MRP Rs {strikeMrp}</Text>
           </View>
           <Text style={[styles.discountText, { color: accentColor }]}>
-            You save Rs {Math.max(originalPrice - item.price, 0)}
+            You save Rs {Math.max(strikeMrp - sell, 0)}
           </Text>
           {packLine ? <Text style={styles.packagingShort}>{packLine}</Text> : null}
         </View>
         <TouchableOpacity
           style={[styles.addBtn, { backgroundColor: accentColor }]}
-          onPress={() => onAdd(item)}
+          onPress={() => onAdd(item, tierKey)}
           activeOpacity={0.9}>
           <Icon name="cart-plus" size={16} color="#FFFFFF" />
           <Text style={styles.addBtnText}>Add to cart</Text>
@@ -154,6 +196,7 @@ const ProductOverviewScreen = () => {
   const [query, setQuery] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [selectedSets, setSelectedSets] = useState(1);
+  const [detailTierKey, setDetailTierKey] = useState<PriceOptionKey>('unit');
   const [uiAlert, setUiAlert] = useState<{
     visible: boolean;
     title: string;
@@ -265,6 +308,24 @@ const ProductOverviewScreen = () => {
     setSelectedSets(1);
   }, [selectedProductId]);
 
+  React.useEffect(() => {
+    if (selectedProduct) {
+      setDetailTierKey(defaultPriceTier(selectedProduct));
+    }
+  }, [selectedProduct?.id]);
+
+  const detailPrice = useMemo(() => {
+    if (!selectedProduct) {
+      return { sell: 0, disc: 0, mrp: 0 };
+    }
+    const active = selectedPriceOption(selectedProduct, detailTierKey);
+    const sell = active?.sellingPrice ?? selectedProduct.price;
+    const disc = active?.discount ?? selectedProduct.discountPercent;
+    const mrp =
+      active?.mrp ?? Math.round(sell / Math.max(1 - disc / 100, 0.01));
+    return { sell, disc, mrp };
+  }, [selectedProduct, detailTierKey]);
+
   const dealsForDivision = useMemo(() => {
     const color = isHomeKitchen ? '#16A34A' : '#1D4ED8';
     return offers.map(d => ({
@@ -275,7 +336,7 @@ const ProductOverviewScreen = () => {
   }, [isHomeKitchen, offers]);
 
   const addSelectedProductToCart = (item: Product) => {
-    add(item, selectedSets);
+    add(item, selectedSets, detailTierKey);
     showUiAlert(
       'Added to cart',
       `${selectedSets} ${orderQuantityPlural(item.unit)} of ${item.name} added.`,
@@ -441,7 +502,9 @@ const ProductOverviewScreen = () => {
             <View style={styles.detailImageWrap}>
               <Image source={{ uri: selectedProduct.image }} style={styles.detailImage} />
               <View style={[styles.discountBadge, { backgroundColor: primary }]}>
-                <Text style={styles.discountBadgeText}>{selectedProduct.discountPercent}% OFF</Text>
+                <Text style={styles.discountBadgeText}>
+                  {Math.round(detailPrice.disc)}% OFF
+                </Text>
               </View>
               <TouchableOpacity
                 style={[
@@ -501,15 +564,43 @@ const ProductOverviewScreen = () => {
               </View>
               <Text style={styles.description}>{productDescription(selectedProduct)}</Text>
 
+              {(selectedProduct.priceOptions?.length ?? 0) > 1 ? (
+                <View style={styles.detailTierRow}>
+                  {selectedProduct.priceOptions!.map(opt => {
+                    const selected = opt.key === detailTierKey;
+                    return (
+                      <TouchableOpacity
+                        key={opt.key}
+                        style={[
+                          styles.detailTierChip,
+                          {
+                            borderColor: selected ? primary : '#E2E8F0',
+                            backgroundColor: selected ? `${primary}18` : '#F8FAFC',
+                          },
+                        ]}
+                        onPress={() => setDetailTierKey(opt.key)}
+                        activeOpacity={0.9}>
+                        <Text
+                          style={[
+                            styles.detailTierChipLabel,
+                            { color: selected ? primary : '#64748B' },
+                          ]}>
+                          {opt.label}
+                        </Text>
+                        <Text style={[styles.detailTierChipPrice, { color: primaryText }]}>
+                          Rs {opt.sellingPrice}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
+
               <View style={styles.priceLine}>
-                <Text style={[styles.currentPrice, { color: primaryText }]}>Rs {selectedProduct.price}</Text>
-                <Text style={styles.strikePrice}>
-                  MRP Rs{' '}
-                  {Math.round(
-                    selectedProduct.price /
-                      Math.max(1 - selectedProduct.discountPercent / 100, 0.01),
-                  )}
+                <Text style={[styles.currentPrice, { color: primaryText }]}>
+                  Rs {detailPrice.sell}
                 </Text>
+                <Text style={styles.strikePrice}>MRP Rs {detailPrice.mrp}</Text>
               </View>
               {selectedPackagingDetail ? (
                 <Text style={[styles.detailPackaging, { color: primary }]}>
@@ -575,7 +666,7 @@ const ProductOverviewScreen = () => {
                   }>
                   <ProductDetailCard
                     item={item}
-                    onAdd={add}
+                    onAdd={(p, tier) => add(p, 1, tier)}
                     onToggleWishlist={toggle}
                     isWishlisted={isWishlisted(item.id)}
                     accentColor={primary}
@@ -946,6 +1037,52 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     marginLeft: 5,
+  },
+  tierChipRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tierChip: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minWidth: '30%',
+    flexGrow: 1,
+  },
+  tierChipText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  tierChipPrice: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  detailTierRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  detailTierChip: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minWidth: '30%',
+    flexGrow: 1,
+  },
+  detailTierChipLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  detailTierChipPrice: {
+    marginTop: 4,
+    fontSize: 14,
+    fontWeight: '900',
   },
   priceRow: {
     marginTop: 12,

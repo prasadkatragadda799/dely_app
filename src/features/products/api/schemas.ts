@@ -1,4 +1,4 @@
-import { Deal, Product } from '../../../types';
+import { Deal, PriceOptionKey, Product, ProductPriceOption } from '../../../types';
 
 export interface ApiResponseEnvelope<T> {
   success: boolean;
@@ -50,6 +50,21 @@ type ProductApiEntity = {
     setPieces?: string | null;
     set_pcs?: string | null;
   }> | null;
+  priceOptions?: Array<{
+    key?: string;
+    label?: string;
+    sellingPrice?: number | string | null;
+    mrp?: number | string | null;
+    discount?: number | string | null;
+  }> | null;
+  price_options?: Array<{
+    key?: string;
+    label?: string;
+    sellingPrice?: number | string | null;
+    selling_price?: number | string | null;
+    mrp?: number | string | null;
+    discount?: number | string | null;
+  }> | null;
 };
 
 type OfferApiEntity = {
@@ -95,6 +110,51 @@ const normalizeCategory = (value?: string): Product['category'] => {
   return 'fmcg';
 };
 
+const normalizeTierKey = (raw?: string | null): PriceOptionKey | null => {
+  const k = String(raw ?? '')
+    .trim()
+    .toLowerCase();
+  if (k === 'unit' || k === 'set' || k === 'remaining') {
+    return k;
+  }
+  return null;
+};
+
+const mapPriceOptionsFromApi = (item: ProductApiEntity): ProductPriceOption[] | undefined => {
+  const raw = item.priceOptions ?? item.price_options;
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return undefined;
+  }
+  const out: ProductPriceOption[] = [];
+  for (const row of raw) {
+    const key = normalizeTierKey(row?.key);
+    if (!key) {
+      continue;
+    }
+    const rawSell =
+      row && typeof row === 'object' && 'sellingPrice' in row
+        ? (row as { sellingPrice?: unknown }).sellingPrice
+        : row && typeof row === 'object' && 'selling_price' in row
+          ? (row as { selling_price?: unknown }).selling_price
+          : undefined;
+    const sp = asNumber(rawSell, NaN);
+    const mrpVal = asNumber(row.mrp, NaN);
+    if (!Number.isFinite(sp) || !Number.isFinite(mrpVal)) {
+      continue;
+    }
+    out.push({
+      key,
+      label: row.label != null && String(row.label).trim() ? String(row.label) : key,
+      sellingPrice: sp,
+      mrp: mrpVal,
+      discount: Number.isFinite(asNumber(row.discount, NaN))
+        ? asNumber(row.discount, 0)
+        : undefined,
+    });
+  }
+  return out.length ? out : undefined;
+};
+
 export const mapProductFromApi = (
   item: ProductApiEntity,
   index: number,
@@ -108,11 +168,18 @@ export const mapProductFromApi = (
     item.thumbnail ??
     '';
 
-  const sellingPrice = item.sellingPrice ?? item.price ?? item.offer_price;
+  const priceOptions = mapPriceOptionsFromApi(item);
+  const firstOpt = priceOptions?.[0];
+  const sellingPrice =
+    firstOpt != null
+      ? firstOpt.sellingPrice
+      : item.sellingPrice ?? item.price ?? item.offer_price;
   const price = asNumber(sellingPrice, 0);
 
   const discountPercent =
-    item.discount ?? item.discountPercent ?? item.discount_percent ?? 0;
+    firstOpt != null && firstOpt.discount != null
+      ? asNumber(firstOpt.discount, 0)
+      : item.discount ?? item.discountPercent ?? item.discount_percent ?? 0;
 
   const brandName =
     typeof item.brand === 'string'
@@ -145,6 +212,7 @@ export const mapProductFromApi = (
     subCategory: subCategory ? String(subCategory) : undefined,
     price,
     discountPercent: asNumber(discountPercent, 0),
+    priceOptions,
     // Backend currently doesn't provide ETA / veg-flag in the `GET /products` response.
     // Keep them optional so UI can hide these pills when absent.
     etaMinutes: maybeAsNumber(item.eta_minutes ?? item.etaMinutes),

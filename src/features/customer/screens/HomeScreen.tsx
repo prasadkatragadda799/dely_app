@@ -23,6 +23,7 @@ import Voice, {
   isVoiceSearchAvailable,
   VOICE_NOT_AVAILABLE_MESSAGE,
 } from '../../../utils/voice';
+import { defaultPriceTier } from '../../../utils/productPricing';
 
 type DivisionKey = 'fmcg' | 'homeKitchen';
 
@@ -657,7 +658,7 @@ const HomeScreen = () => {
         renderItem={({ item }) => (
           <ProductCard
             product={item}
-            onAdd={add}
+            onAdd={p => add(p, 1, defaultPriceTier(p))}
             accentColor={primary}
             onCardPress={() =>
               navigation.navigate('ProductOverview', {

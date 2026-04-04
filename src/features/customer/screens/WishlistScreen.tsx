@@ -6,6 +6,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useGetProductsQuery } from '../../products/api/productsApi';
 import { useWishlist } from '../../../hooks/useWishlist';
 import { useCart } from '../../../hooks/useCart';
+import { defaultPriceTier } from '../../../utils/productPricing';
 import { useAppSelector } from '../../../hooks/redux';
 
 const WishlistScreen = () => {
@@ -86,7 +87,7 @@ const WishlistScreen = () => {
               <TouchableOpacity
                 style={[styles.actionBtn, { backgroundColor: primary }]}
                 activeOpacity={0.9}
-                onPress={() => add(item)}>
+                onPress={() => add(item, 1, defaultPriceTier(item))}>
                 <Icon name="cart-plus" size={16} color="#FFFFFF" />
                 <Text style={styles.addText}>Add to Cart</Text>
               </TouchableOpacity>

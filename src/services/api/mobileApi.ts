@@ -61,12 +61,16 @@ type ChangePasswordBody = {
 type CartAddBody = {
   product_id: string;
   quantity: number;
+  price_option_key?: string;
+  priceOptionKey?: string;
 };
 type CartUpdateBody = CartItemIdParam & { quantity: number };
 
 type OrderItemCreateBody = {
   product_id: string;
   quantity: number;
+  price_option_key?: string;
+  priceOptionKey?: string;
 };
 
 type DeliveryAddressBody = Record<string, unknown>;

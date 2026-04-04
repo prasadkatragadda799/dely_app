@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import Toast from 'react-native-toast-message';
-import { Product } from '../types';
+import { CartLineItem, PriceOptionKey, Product } from '../types';
+import { defaultPriceTier } from '../utils/productPricing';
 import {
   useAddToCartApiMutation,
   useClearCartApiMutation,
@@ -20,7 +21,7 @@ export const useCart = () => {
   const [deleteCartItemApi] = useDeleteCartItemApiMutation();
   const [clearCartApi] = useClearCartApiMutation();
 
-  const items = useMemo(() => {
+  const items = useMemo((): CartLineItem[] => {
     const rawItems: any[] = (data as any)?.data?.items ?? [];
     // Optional: pass division_slug to getCart to show only one division's lines in a tab.
     return rawItems.map(it => {
@@ -32,6 +33,10 @@ export const useCart = () => {
           : typeof images[0]?.url === 'string'
             ? images[0].url
             : '';
+
+      const tierRaw = String(it.price_option_key ?? it.priceOptionKey ?? 'unit').toLowerCase();
+      const priceOptionKey: PriceOptionKey =
+        tierRaw === 'set' || tierRaw === 'remaining' ? tierRaw : 'unit';
 
       // Minimal mapping for cart/checkout UI.
       const mappedProduct: Product = {
@@ -64,6 +69,7 @@ export const useCart = () => {
         cartItemId: String(it.id),
         product: mappedProduct,
         quantity: Number(it.quantity ?? 0),
+        priceOptionKey,
       };
     });
   }, [data, isHomeKitchen]);
@@ -77,7 +83,8 @@ export const useCart = () => {
     () => ({
       items,
       total,
-      add: (product: Product, quantity = 1) => {
+      add: (product: Product, quantity = 1, priceOptionKey?: PriceOptionKey) => {
+        const tier = priceOptionKey ?? defaultPriceTier(product);
         const minOrder = Math.max(
           1,
           Math.trunc(Number(product.minOrderQuantity) || 1),
@@ -85,11 +92,17 @@ export const useCart = () => {
         const requested = Number.isFinite(quantity)
           ? Math.max(1, Math.trunc(quantity))
           : 1;
-        const alreadyInCart = items.some(i => i.product.id === product.id);
+        const alreadyInCart = items.some(
+          i => i.product.id === product.id && i.priceOptionKey === tier,
+        );
         const safeQuantity = alreadyInCart
           ? requested
           : Math.max(minOrder, requested);
-        addToCartApi({ product_id: product.id, quantity: safeQuantity })
+        addToCartApi({
+          product_id: product.id,
+          quantity: safeQuantity,
+          price_option_key: tier,
+        })
           .unwrap()
           .catch((e: any) => {
             Toast.show({
@@ -99,10 +112,9 @@ export const useCart = () => {
             });
           });
       },
-      remove: (productId: string) => {
-        const target = items.find(i => i.product.id === productId);
-        if (!target?.cartItemId) return;
-        deleteCartItemApi({ cartItemId: target.cartItemId })
+      remove: (cartItemId: string) => {
+        if (!cartItemId) return;
+        deleteCartItemApi({ cartItemId })
           .unwrap()
           .catch((e: any) => {
             Toast.show({

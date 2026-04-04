@@ -14,6 +14,7 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCart } from '../../../hooks/useCart';
 import { cartQuantityCaption } from '../../../utils/productPackaging';
+import { priceTierLabel } from '../../../utils/productPricing';
 import { useAppDispatch, useAppSelector } from '../../../hooks/redux';
 import { setHomeDivision } from '../homeDivisionSlice';
 
@@ -100,13 +101,14 @@ const CartScreen = () => {
                 <Text style={styles.name}>{item.product.name}</Text>
                 <Text style={styles.brand}>{item.product.brand}</Text>
                 <Text style={styles.meta}>
-                  Rs {item.product.price} × {cartQuantityCaption(item.product, item.quantity)}
+                  {priceTierLabel(item.priceOptionKey)} · Rs {item.product.price} ×{' '}
+                  {cartQuantityCaption(item.product, item.quantity)}
                 </Text>
               </View>
             </View>
             <Text style={styles.rowTotal}>Rs {item.product.price * item.quantity}</Text>
             <TouchableOpacity
-              onPress={() => remove(item.product.id)}
+              onPress={() => remove(item.cartItemId)}
               style={styles.removeBtn}>
               <Icon name="trash-can-outline" size={18} color="#DC2626" />
             </TouchableOpacity>
