@@ -43,9 +43,21 @@ export const useCart = () => {
         subCategory: undefined,
         price: Number(p.price ?? 0),
         discountPercent: Number(p.discount ?? 0),
-        // Backend cart payload doesn't provide these fields consistently.
         etaMinutes: undefined,
         isVeg: undefined,
+        minOrderQuantity: Math.max(
+          1,
+          Number(p.minOrderQuantity ?? p.min_order_quantity ?? 1) || 1,
+        ),
+        unit: p.unit != null && String(p.unit).trim() ? String(p.unit) : 'piece',
+        piecesPerSet: Math.max(
+          1,
+          Number(p.piecesPerSet ?? p.pieces_per_set ?? 1) || 1,
+        ),
+        variantSetPieces:
+          typeof p.variantSetPieces === 'string' && p.variantSetPieces.trim()
+            ? p.variantSetPieces.trim()
+            : undefined,
       };
 
       return {

@@ -24,6 +24,12 @@ import Voice, {
 } from '../../../utils/voice';
 import { Product } from '../../../types';
 import { useWishlist } from '../../../hooks/useWishlist';
+import {
+  orderQuantityPlural,
+  packagingDetailLine,
+  packagingShortLine,
+  quantityStepperTitle,
+} from '../../../utils/productPackaging';
 
 type DivisionKey = 'fmcg' | 'homeKitchen';
 const MAX_SETS_PER_ADD = 5;
@@ -46,6 +52,7 @@ const ProductDetailCard = ({
   const originalPrice = Math.round(
     item.price / Math.max(1 - item.discountPercent / 100, 0.01),
   );
+  const packLine = packagingShortLine(item);
 
   return (
     <View style={styles.productCard}>
@@ -116,6 +123,7 @@ const ProductDetailCard = ({
           <Text style={[styles.discountText, { color: accentColor }]}>
             You save Rs {Math.max(originalPrice - item.price, 0)}
           </Text>
+          {packLine ? <Text style={styles.packagingShort}>{packLine}</Text> : null}
         </View>
         <TouchableOpacity
           style={[styles.addBtn, { backgroundColor: accentColor }]}
@@ -246,6 +254,10 @@ const ProductOverviewScreen = () => {
         : undefined,
     [divisionProducts, selectedProductId],
   );
+  const selectedPackagingDetail = useMemo(
+    () => (selectedProduct ? packagingDetailLine(selectedProduct) : null),
+    [selectedProduct],
+  );
   const isDetailMode = Boolean(selectedProduct);
   const productsToShow = selectedProduct ? [selectedProduct] : products;
 
@@ -264,7 +276,11 @@ const ProductOverviewScreen = () => {
 
   const addSelectedProductToCart = (item: Product) => {
     add(item, selectedSets);
-    showUiAlert('Added to cart', `${selectedSets} set(s) of ${item.name} added.`, 'success');
+    showUiAlert(
+      'Added to cart',
+      `${selectedSets} ${orderQuantityPlural(item.unit)} of ${item.name} added.`,
+      'success',
+    );
   };
 
   const buyNow = (item: Product) => {
@@ -495,9 +511,14 @@ const ProductOverviewScreen = () => {
                   )}
                 </Text>
               </View>
+              {selectedPackagingDetail ? (
+                <Text style={[styles.detailPackaging, { color: primary }]}>
+                  {selectedPackagingDetail}
+                </Text>
+              ) : null}
 
               <View style={styles.qtyBlock}>
-                <Text style={styles.qtyTitle}>Quantity (sets)</Text>
+                <Text style={styles.qtyTitle}>{quantityStepperTitle(selectedProduct.unit)}</Text>
                 <View style={styles.qtyRow}>
                   <TouchableOpacity
                     style={styles.qtyBtn}
@@ -514,7 +535,7 @@ const ProductOverviewScreen = () => {
                   </TouchableOpacity>
                 </View>
                 <Text style={[styles.maxInfo, { color: primary }]}>
-                  You can add maximum {MAX_SETS_PER_ADD} sets at a time.
+                  Up to {MAX_SETS_PER_ADD} {orderQuantityPlural(selectedProduct.unit)} per add.
                 </Text>
               </View>
               <View style={styles.assuranceCard}>
@@ -748,6 +769,11 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     fontWeight: '600',
   },
+  detailPackaging: {
+    marginTop: 8,
+    fontSize: 13,
+    fontWeight: '800',
+  },
   qtyBlock: {
     marginTop: 14,
     borderWidth: 1,
@@ -942,6 +968,12 @@ const styles = StyleSheet.create({
     marginTop: 3,
     fontWeight: '700',
     fontSize: 12,
+  },
+  packagingShort: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
   },
   addBtn: {
     borderRadius: 12,

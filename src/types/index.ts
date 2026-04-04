@@ -29,6 +29,12 @@ export interface Product {
   reviewCount?: number;
   /** From backend `minOrderQuantity`; cart API requires at least this many per line. */
   minOrderQuantity?: number;
+  /** Sale unit from admin: piece, pack, set, kg, … */
+  unit?: string;
+  /** Pieces contained in one ordered unit (when unit is pack/box/set). */
+  piecesPerSet?: number;
+  /** First variant "set/pcs" label from admin (e.g. "6x100g"). */
+  variantSetPieces?: string;
 }
 
 export interface Deal {

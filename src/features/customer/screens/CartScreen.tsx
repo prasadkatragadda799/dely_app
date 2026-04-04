@@ -13,6 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCart } from '../../../hooks/useCart';
+import { cartQuantityCaption } from '../../../utils/productPackaging';
 import { useAppDispatch, useAppSelector } from '../../../hooks/redux';
 import { setHomeDivision } from '../homeDivisionSlice';
 
@@ -86,7 +87,7 @@ const CartScreen = () => {
       <FlatList
         style={{ flex: 1 }}
         data={visibleItems}
-        keyExtractor={item => item.product.id}
+        keyExtractor={item => item.cartItemId}
         contentContainerStyle={[
           styles.listContent,
           { paddingBottom: tabBarHeight + insets.bottom + 140 },
@@ -99,7 +100,7 @@ const CartScreen = () => {
                 <Text style={styles.name}>{item.product.name}</Text>
                 <Text style={styles.brand}>{item.product.brand}</Text>
                 <Text style={styles.meta}>
-                  Rs {item.product.price} x {item.quantity}
+                  Rs {item.product.price} × {cartQuantityCaption(item.product, item.quantity)}
                 </Text>
               </View>
             </View>

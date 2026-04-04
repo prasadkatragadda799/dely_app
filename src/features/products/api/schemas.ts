@@ -42,6 +42,14 @@ type ProductApiEntity = {
   isVeg?: boolean;
   minOrderQuantity?: number | string | null;
   min_order_quantity?: number | string | null;
+  unit?: string | null;
+  piecesPerSet?: number | string | null;
+  pieces_per_set?: number | string | null;
+  variantSetPieces?: string | null;
+  variants?: Array<{
+    setPieces?: string | null;
+    set_pcs?: string | null;
+  }> | null;
 };
 
 type OfferApiEntity = {
@@ -118,6 +126,16 @@ export const mapProductFromApi = (
     item.category_name ??
     undefined;
 
+  const variants = Array.isArray(item.variants) ? item.variants : [];
+  let variantSetPieces: string | undefined;
+  for (const v of variants) {
+    const sp = v?.setPieces ?? v?.set_pcs;
+    if (sp != null && String(sp).trim()) {
+      variantSetPieces = String(sp).trim();
+      break;
+    }
+  }
+
   return {
     id: String(item.id ?? item._id ?? `product-${index}`),
     name: String(item.name ?? item.title ?? 'Unnamed product'),
@@ -142,6 +160,14 @@ export const mapProductFromApi = (
       1,
       asNumber(item.minOrderQuantity ?? item.min_order_quantity ?? 1, 1),
     ),
+    unit: item.unit != null && String(item.unit).trim() ? String(item.unit) : 'piece',
+    piecesPerSet: Math.max(
+      1,
+      asNumber(item.piecesPerSet ?? item.pieces_per_set ?? 1, 1),
+    ),
+    variantSetPieces: item.variantSetPieces?.trim()
+      ? String(item.variantSetPieces).trim()
+      : variantSetPieces,
   };
 };
 

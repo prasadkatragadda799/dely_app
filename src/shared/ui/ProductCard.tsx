@@ -3,6 +3,7 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Product } from '../../types';
 import { useCart } from '../../hooks/useCart';
+import { packagingShortLine } from '../../utils/productPackaging';
 import { useWishlist } from '../../hooks/useWishlist';
 
 const hexToRgba = (hex: string, alpha: number) => {
@@ -43,6 +44,7 @@ const ProductCard = ({
   const originalPrice = Math.round(
     product.price / Math.max(1 - product.discountPercent / 100, 0.01),
   );
+  const packHint = packagingShortLine(product);
 
   return (
     <Wrapper
@@ -118,6 +120,11 @@ const ProductCard = ({
         <Text style={styles.price}>Rs {product.price}</Text>
         <Text style={styles.mrp}>Rs {originalPrice}</Text>
       </View>
+      {packHint ? (
+        <Text style={[styles.packHint, { color: accentColor }]} numberOfLines={2}>
+          {packHint}
+        </Text>
+      ) : null}
       {qty <= 0 ? (
         <TouchableOpacity
           style={[styles.stepPlus, { backgroundColor: accentColor }]}
@@ -261,6 +268,11 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     fontSize: 11,
     textDecorationLine: 'line-through',
+  },
+  packHint: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: '800',
   },
   stepper: {
     marginTop: 8,
