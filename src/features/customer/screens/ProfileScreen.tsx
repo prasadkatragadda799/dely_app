@@ -128,6 +128,19 @@ const ProfileScreen = () => {
     }
   };
 
+  const handleLogoutPress = () => {
+    Alert.alert('Log out', 'Are you sure you want to log out?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Log out',
+        style: 'destructive',
+        onPress: () => {
+          void logout();
+        },
+      },
+    ]);
+  };
+
   return (
     <View style={styles.root}>
       <ScrollView
@@ -336,7 +349,7 @@ const ProfileScreen = () => {
           )}
         </View>
 
-        <TouchableOpacity style={[styles.logout, { backgroundColor: '#EF4444' }]} onPress={logout}>
+        <TouchableOpacity style={[styles.logout, { backgroundColor: '#EF4444' }]} onPress={handleLogoutPress}>
           <Icon name="logout" size={18} color="#FFFFFF" />
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>

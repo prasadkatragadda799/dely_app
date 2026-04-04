@@ -245,7 +245,7 @@ const LoginScreen = ({ navigation }: Props) => {
                 <Icon name="arrow-right" size={18} color="#FFFFFF" />
               </TouchableOpacity>
 
-              <Text style={styles.bottomQuestion}>
+              {/* <Text style={styles.bottomQuestion}>
                 Don't have an account yet?
               </Text>
 
@@ -256,7 +256,7 @@ const LoginScreen = ({ navigation }: Props) => {
                 <Text style={styles.outlineButtonText}>
                   Join Delivery Network
                 </Text>
-              </TouchableOpacity>
+              </TouchableOpacity> */}
             </View>
 
             {/* Mode switch moved to the segmented control above */}
