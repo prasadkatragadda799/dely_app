@@ -20,6 +20,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { AuthStackParamList } from '../../../navigation/types';
 import { UserRole } from '../../../types';
 import { TERMS_AND_CONDITIONS_TEXT } from '../../../constants/termsAndConditionsText';
+import { getApiErrorMessage } from '../../../utils/apiErrorMessage';
 import {
   launchImageLibrary,
   type Asset,
@@ -181,11 +182,8 @@ const RegisterScreen = ({ navigation }: Props) => {
       setPendingForm({ ...enrichedForm, requestId: next.requestId });
       setOtpVisible(true);
       Alert.alert('OTP Sent', 'Check your phone for the verification code.');
-    } catch (e: any) {
-      Alert.alert(
-        'Registration failed',
-        e instanceof Error ? e.message : 'Please try again.',
-      );
+    } catch (e: unknown) {
+      Alert.alert('Registration failed', getApiErrorMessage(e));
     }
   };
 
@@ -205,11 +203,8 @@ const RegisterScreen = ({ navigation }: Props) => {
         otp: otpInput.trim(),
         role: selectedRole,
       });
-    } catch (e: any) {
-      Alert.alert(
-        'OTP verification failed',
-        e instanceof Error ? e.message : 'Please try again.',
-      );
+    } catch (e: unknown) {
+      Alert.alert('OTP verification failed', getApiErrorMessage(e));
       return;
     }
     setOtpVisible(false);
