@@ -14,6 +14,20 @@ type OffersData = {
   companyOffers?: unknown[];
 };
 
+/** Root row from GET /categories (tree roots for the active division). */
+export type ShopCategoryNode = {
+  id: string;
+  name: string;
+  slug?: string;
+  icon?: string | null;
+  color?: string | null;
+  image_url?: string | null;
+  product_count?: number;
+  children?: ShopCategoryNode[];
+};
+
+export type ShopCategoryDivision = 'fmcg' | 'homeKitchen';
+
 export const productsApi = createApi({
   reducerPath: 'productsApi',
   baseQuery: fetchBaseQuery({
@@ -103,7 +117,39 @@ export const productsApi = createApi({
         return { data: mapped };
       },
     }),
+    getCategoryTree: builder.query<ShopCategoryNode[], ShopCategoryDivision>({
+      async queryFn(division, _api, _extraOptions, baseQuery) {
+        const urls: string[] =
+          division === 'homeKitchen'
+            ? [
+                '/categories?division_slug=kitchen',
+                '/categories?division_slug=home',
+              ]
+            : ['/categories'];
+
+        const merged: ShopCategoryNode[] = [];
+        const seen = new Set<string>();
+
+        for (const url of urls) {
+          const result = await baseQuery(url);
+          if ('error' in result) {
+            continue;
+          }
+          const envelope = result.data as ApiResponseEnvelope<ShopCategoryNode[]>;
+          const roots = Array.isArray(envelope?.data) ? envelope.data : [];
+          for (const node of roots) {
+            if (node?.id && !seen.has(node.id)) {
+              seen.add(node.id);
+              merged.push(node);
+            }
+          }
+        }
+
+        merged.sort((a, b) => a.name.localeCompare(b.name));
+        return { data: merged };
+      },
+    }),
   }),
 });
 
-export const { useGetProductsQuery, useGetOffersQuery } = productsApi;
+export const { useGetProductsQuery, useGetOffersQuery, useGetCategoryTreeQuery } = productsApi;

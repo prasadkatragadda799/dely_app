@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,7 +13,11 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Alert, PermissionsAndroid, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useGetOffersQuery, useGetProductsQuery } from '../../products/api/productsApi';
+import {
+  useGetCategoryTreeQuery,
+  useGetOffersQuery,
+  useGetProductsQuery,
+} from '../../products/api/productsApi';
 import { API_V1_BASE_URL } from '../../../services/api/config';
 import { useCart } from '../../../hooks/useCart';
 import DealCard from '../../../shared/ui/DealCard';
@@ -43,6 +48,7 @@ const HomeScreen = () => {
   const { data: offers = [] } = useGetOffersQuery();
   const { add } = useCart();
   const [activeDivision, setActiveDivision] = useState<DivisionKey>('fmcg');
+  const { data: categoryTreeRoots = [] } = useGetCategoryTreeQuery(activeDivision);
   const [currentLocationText, setCurrentLocationText] = useState('Fetching location...');
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('All');
@@ -116,6 +122,14 @@ const HomeScreen = () => {
     });
     return map;
   }, [divisionProducts]);
+
+  /** Use API category images as boxed tiles when the catalog exposes at least one image. */
+  const showCategoryImageBoxes = useMemo(
+    () =>
+      categoryTreeRoots.length > 0 &&
+      categoryTreeRoots.some(n => Boolean(String(n.image_url ?? '').trim())),
+    [categoryTreeRoots],
+  );
 
   const brandCountMap = useMemo(() => {
     const map: Record<string, number> = {};
@@ -512,65 +526,161 @@ const HomeScreen = () => {
             Shop by Category
           </Text>
           <Text style={[styles.filterMeta, { color: primary }]}>
-            {categories.length - 1} options
+            {showCategoryImageBoxes
+              ? categoryTreeRoots.length
+              : categories.length - 1}{' '}
+            options
           </Text>
         </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipsRow}>
-          {categories.map(cat => {
-            const active = cat === activeCategory;
-            const count = cat === 'All' ? divisionProducts.length : categoryCountMap[cat] ?? 0;
-            return (
-              <TouchableOpacity
-                key={cat}
-                onPress={() => {
-                  if (cat === 'All') {
-                    setActiveCategory('All');
-                    return;
-                  }
-                  navigation.navigate('ProductOverview', {
-                    division: activeDivision,
-                    subCategory: cat,
-                  });
-                }}
+        {showCategoryImageBoxes ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryBoxesRow}>
+            <TouchableOpacity
+              style={styles.categoryBoxTile}
+              onPress={() => setActiveCategory('All')}
+              activeOpacity={0.95}>
+              <View
                 style={[
-                  styles.filterCard,
-                  active && {
-                    backgroundColor: primary,
+                  styles.categoryBoxImageWrap,
+                  { borderColor: primaryBorder },
+                  activeCategory === 'All' && {
                     borderColor: primary,
+                    borderWidth: 2,
                   },
-                ]}
-                activeOpacity={0.95}>
-                <View style={[styles.filterCardIconWrap, active && { backgroundColor: 'rgba(255,255,255,0.22)' }]}>
-                  <Icon
-                    name={cat === 'All' ? 'shape-outline' : 'view-grid-plus-outline'}
-                    size={14}
-                    color={active ? '#FFFFFF' : primary}
-                  />
-                </View>
-                <View>
-                  <Text
-                    numberOfLines={1}
+                ]}>
+                <Icon name="shape-outline" size={28} color={primary} />
+              </View>
+              <Text
+                numberOfLines={2}
+                style={[styles.categoryBoxName, { color: primaryText }]}>
+                All
+              </Text>
+              <Text style={styles.categoryBoxCount}>
+                {divisionProducts.length} products
+              </Text>
+            </TouchableOpacity>
+            {categoryTreeRoots.map(node => {
+              const img = String(node.image_url ?? '').trim();
+              const count =
+                typeof node.product_count === 'number'
+                  ? node.product_count
+                  : categoryCountMap[node.name] ?? 0;
+              return (
+                <TouchableOpacity
+                  key={node.id}
+                  style={styles.categoryBoxTile}
+                  onPress={() => {
+                    setActiveCategory(node.name);
+                    navigation.navigate('ProductOverview', {
+                      division: activeDivision,
+                      subCategory: node.name,
+                    });
+                  }}
+                  activeOpacity={0.95}>
+                  <View
                     style={[
-                      styles.filterCardTitle,
-                      active ? { color: '#FFFFFF' } : { color: primaryText },
+                      styles.categoryBoxImageWrap,
+                      { borderColor: primaryBorder },
+                      activeCategory === node.name && {
+                        borderColor: primary,
+                        borderWidth: 2,
+                      },
                     ]}>
-                    {cat}
-                  </Text>
+                    {img ? (
+                      <Image
+                        source={{ uri: img }}
+                        style={styles.categoryBoxImage}
+                        resizeMode="cover"
+                      />
+                    ) : node.icon ? (
+                      <Text style={styles.categoryBoxEmoji}>{node.icon}</Text>
+                    ) : (
+                      <Icon
+                        name="view-grid-plus-outline"
+                        size={26}
+                        color={primary}
+                      />
+                    )}
+                  </View>
                   <Text
-                    style={[
-                      styles.filterCardSub,
-                      active ? { color: 'rgba(255,255,255,0.9)' } : { color: '#64748B' },
-                    ]}>
-                    {count} products
+                    numberOfLines={2}
+                    style={[styles.categoryBoxName, { color: primaryText }]}>
+                    {node.name}
                   </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+                  <Text style={styles.categoryBoxCount}>{count} products</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipsRow}>
+            {categories.map(cat => {
+              const active = cat === activeCategory;
+              const count =
+                cat === 'All' ? divisionProducts.length : categoryCountMap[cat] ?? 0;
+              return (
+                <TouchableOpacity
+                  key={cat}
+                  onPress={() => {
+                    if (cat === 'All') {
+                      setActiveCategory('All');
+                      return;
+                    }
+                    navigation.navigate('ProductOverview', {
+                      division: activeDivision,
+                      subCategory: cat,
+                    });
+                  }}
+                  style={[
+                    styles.filterCard,
+                    active && {
+                      backgroundColor: primary,
+                      borderColor: primary,
+                    },
+                  ]}
+                  activeOpacity={0.95}>
+                  <View
+                    style={[
+                      styles.filterCardIconWrap,
+                      active && { backgroundColor: 'rgba(255,255,255,0.22)' },
+                    ]}>
+                    <Icon
+                      name={
+                        cat === 'All' ? 'shape-outline' : 'view-grid-plus-outline'
+                      }
+                      size={14}
+                      color={active ? '#FFFFFF' : primary}
+                    />
+                  </View>
+                  <View>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.filterCardTitle,
+                        active ? { color: '#FFFFFF' } : { color: primaryText },
+                      ]}>
+                      {cat}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.filterCardSub,
+                        active
+                          ? { color: 'rgba(255,255,255,0.9)' }
+                          : { color: '#64748B' },
+                      ]}>
+                      {count} products
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
 
         <View style={[styles.filterTitleRow, { marginTop: 10 }]}>
           <Text style={[styles.filterTitle, { color: primaryText }]}>
@@ -868,6 +978,50 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: 4,
     gap: 10,
+  },
+  categoryBoxesRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingBottom: 8,
+    gap: 4,
+    paddingRight: 8,
+  },
+  categoryBoxTile: {
+    width: 96,
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  categoryBoxImageWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: 14,
+    borderWidth: 1,
+    backgroundColor: 'rgba(248,250,252,0.95)',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryBoxImage: {
+    width: '100%',
+    height: '100%',
+  },
+  categoryBoxEmoji: {
+    fontSize: 32,
+    lineHeight: 40,
+  },
+  categoryBoxName: {
+    marginTop: 8,
+    fontWeight: '800',
+    fontSize: 11,
+    textAlign: 'center',
+    maxWidth: 96,
+  },
+  categoryBoxCount: {
+    marginTop: 2,
+    fontWeight: '600',
+    fontSize: 10,
+    color: '#64748B',
+    textAlign: 'center',
   },
   filterCard: {
     width: 146,
