@@ -47,8 +47,13 @@ type ProductApiEntity = {
   pieces_per_set?: number | string | null;
   variantSetPieces?: string | null;
   variants?: Array<{
+    packagingLabel?: string | null;
+    packaging_label?: string | null;
+    packagingLabelType?: string | null;
+    packaging_label_type?: string | null;
     setPieces?: string | null;
     set_pcs?: string | null;
+    weight?: string | null;
   }> | null;
   priceOptions?: Array<{
     key?: string;
@@ -119,6 +124,42 @@ const normalizeTierKey = (raw?: string | null): PriceOptionKey | null => {
   }
   return null;
 };
+
+const PACKAGING_TYPE_LABELS: Record<string, string> = {
+  set: 'Set',
+  pieces: 'Pieces',
+  pack: 'Pack',
+  unit: 'Unit',
+  pair: 'Pair',
+  dozen: 'Dozen',
+};
+
+/** First variant packaging line for cards (matches backend format_variant_packaging_line). */
+export function composeVariantPackagingFromApi(v: {
+  packagingLabel?: string | null;
+  packaging_label?: string | null;
+  packagingLabelType?: string | null;
+  packaging_label_type?: string | null;
+  setPieces?: string | null;
+  set_pcs?: string | null;
+  weight?: string | null;
+}): string | undefined {
+  const pl = String(v.packagingLabel ?? v.packaging_label ?? '').trim();
+  if (pl) return pl;
+  const type = String(v.packagingLabelType ?? v.packaging_label_type ?? '')
+    .trim()
+    .toLowerCase();
+  const head = type && PACKAGING_TYPE_LABELS[type] ? PACKAGING_TYPE_LABELS[type] : '';
+  const detail = String(v.setPieces ?? v.set_pcs ?? '').trim();
+  const w = String(v.weight ?? '').trim();
+  const parts: string[] = [];
+  if (head && detail) parts.push(`${head}: ${detail}`);
+  else if (head) parts.push(head);
+  else if (detail) parts.push(detail);
+  if (w) parts.push(w);
+  const line = parts.join(' · ');
+  return line || undefined;
+}
 
 const mapPriceOptionsFromApi = (item: ProductApiEntity): ProductPriceOption[] | undefined => {
   const raw = item.priceOptions ?? item.price_options;
@@ -196,9 +237,9 @@ export const mapProductFromApi = (
   const variants = Array.isArray(item.variants) ? item.variants : [];
   let variantSetPieces: string | undefined;
   for (const v of variants) {
-    const sp = v?.setPieces ?? v?.set_pcs;
-    if (sp != null && String(sp).trim()) {
-      variantSetPieces = String(sp).trim();
+    const line = composeVariantPackagingFromApi(v);
+    if (line) {
+      variantSetPieces = line;
       break;
     }
   }
