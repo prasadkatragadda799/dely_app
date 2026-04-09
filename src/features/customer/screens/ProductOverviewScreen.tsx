@@ -35,6 +35,15 @@ import {
 type DivisionKey = 'fmcg' | 'homeKitchen';
 const MAX_SETS_PER_ADD = 5;
 
+const getProductImages = (product: Product): string[] => {
+  const fromGallery = Array.isArray(product.images)
+    ? product.images.map((u) => String(u || '').trim()).filter(Boolean)
+    : [];
+  const primary = String(product.image || '').trim();
+  if (primary) return [primary, ...fromGallery.filter((u) => u !== primary)];
+  return fromGallery;
+};
+
 const ProductDetailCard = ({
   item,
   onAdd,
@@ -68,7 +77,7 @@ const ProductDetailCard = ({
   return (
     <View style={styles.productCard}>
       <View style={styles.imageWrap}>
-        <Image source={{ uri: item.image }} style={styles.productImage} />
+        <Image source={{ uri: getProductImages(item)[0] || item.image }} style={styles.productImage} />
         <View style={[styles.discountBadge, { backgroundColor: accentColor }]}>
           <Text style={styles.discountBadgeText}>{Math.round(discPct)}% OFF</Text>
         </View>
@@ -197,6 +206,7 @@ const ProductOverviewScreen = () => {
   const [isListening, setIsListening] = useState(false);
   const [selectedSets, setSelectedSets] = useState(1);
   const [detailTierKey, setDetailTierKey] = useState<PriceOptionKey>('unit');
+  const [selectedDetailImageIndex, setSelectedDetailImageIndex] = useState(0);
   const [uiAlert, setUiAlert] = useState<{
     visible: boolean;
     title: string;
@@ -311,6 +321,7 @@ const ProductOverviewScreen = () => {
   React.useEffect(() => {
     if (selectedProduct) {
       setDetailTierKey(defaultPriceTier(selectedProduct));
+      setSelectedDetailImageIndex(0);
     }
   }, [selectedProduct?.id]);
 
@@ -325,6 +336,11 @@ const ProductOverviewScreen = () => {
       active?.mrp ?? Math.round(sell / Math.max(1 - disc / 100, 0.01));
     return { sell, disc, mrp };
   }, [selectedProduct, detailTierKey]);
+  const detailImages = useMemo(
+    () => (selectedProduct ? getProductImages(selectedProduct) : []),
+    [selectedProduct],
+  );
+  const detailMainImage = detailImages[selectedDetailImageIndex] ?? selectedProduct?.image ?? '';
 
   const dealsForDivision = useMemo(() => {
     const color = isHomeKitchen ? '#16A34A' : '#1D4ED8';
@@ -500,7 +516,7 @@ const ProductOverviewScreen = () => {
         {selectedProduct ? (
           <View style={styles.detailWrap}>
             <View style={styles.detailImageWrap}>
-              <Image source={{ uri: selectedProduct.image }} style={styles.detailImage} />
+              <Image source={{ uri: detailMainImage }} style={styles.detailImage} />
               <View style={[styles.discountBadge, { backgroundColor: primary }]}>
                 <Text style={styles.discountBadgeText}>
                   {Math.round(detailPrice.disc)}% OFF
@@ -524,6 +540,26 @@ const ProductOverviewScreen = () => {
                 />
               </TouchableOpacity>
             </View>
+            {detailImages.length > 1 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.detailThumbRow}>
+                {detailImages.map((img, idx) => (
+                  <TouchableOpacity
+                    key={`${img}-${idx}`}
+                    style={[
+                      styles.detailThumbWrap,
+                      idx === selectedDetailImageIndex && styles.detailThumbWrapActive,
+                      idx === selectedDetailImageIndex && { borderColor: primary },
+                    ]}
+                    onPress={() => setSelectedDetailImageIndex(idx)}
+                    activeOpacity={0.9}>
+                    <Image source={{ uri: img }} style={styles.detailThumbImage} />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : null}
 
             <View style={styles.detailInfoCard}>
               <Text style={[styles.detailName, { color: primaryText }]}>{selectedProduct.name}</Text>
@@ -818,6 +854,27 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  detailThumbRow: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  detailThumbWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    overflow: 'hidden',
+    backgroundColor: '#F8FAFC',
+  },
+  detailThumbWrapActive: {
+    borderWidth: 2,
+  },
+  detailThumbImage: {
+    width: '100%',
+    height: '100%',
   },
   detailInfoCard: {
     padding: 14,

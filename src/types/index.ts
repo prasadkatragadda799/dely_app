@@ -26,6 +26,8 @@ export interface Product {
   id: string;
   name: string;
   image: string;
+  /** Optional gallery ordered with primary image first when available. */
+  images?: string[];
   category: ProductCategory;
   brand?: string; // e.g. "Domino", "Ariel", etc.
   subCategory?: string; // e.g. "Cleaning", "Snacks", etc.

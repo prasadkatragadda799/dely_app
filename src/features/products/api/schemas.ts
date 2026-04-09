@@ -15,7 +15,13 @@ type ProductApiEntity = {
   sellingPrice?: number | string | null;
   mrp?: number | string | null;
   discount?: number | string | null; // percentage
-  images?: Array<{ url?: string; isPrimary?: boolean }> | null;
+  images?: Array<{
+    url?: string;
+    imageUrl?: string;
+    image_url?: string;
+    isPrimary?: boolean;
+    is_primary?: boolean;
+  }> | null;
   brand?: { id?: string; name?: string; logoUrl?: string } | string | null;
   company?: { id?: string; name?: string; logoUrl?: string } | string | null;
   category?: { id?: string; name?: string; slug?: string } | null;
@@ -201,13 +207,27 @@ export const mapProductFromApi = (
   index: number,
   requestedCategory?: Product['category'],
 ): Product => {
+  const galleryFromApi = Array.isArray(item.images)
+    ? item.images
+        .map(img => img?.url ?? img?.imageUrl ?? img?.image_url ?? '')
+        .map(v => String(v).trim())
+        .filter(Boolean)
+    : [];
+  const dedupedGallery = Array.from(new Set(galleryFromApi));
+  const primaryFromApi = Array.isArray(item.images)
+    ? item.images.find(img => Boolean(img?.isPrimary ?? img?.is_primary))
+    : undefined;
   const primaryImage =
-    item.images?.find(img => img?.isPrimary)?.url ??
-    item.images?.[0]?.url ??
+    (primaryFromApi?.url ?? primaryFromApi?.imageUrl ?? primaryFromApi?.image_url) ??
+    dedupedGallery[0] ??
     item.image ??
     item.image_url ??
     item.thumbnail ??
     '';
+  const gallery = [
+    String(primaryImage || '').trim(),
+    ...dedupedGallery.filter(url => url !== String(primaryImage || '').trim()),
+  ].filter(Boolean);
 
   const priceOptions = mapPriceOptionsFromApi(item);
   const firstOpt = priceOptions?.[0];
@@ -248,6 +268,7 @@ export const mapProductFromApi = (
     id: String(item.id ?? item._id ?? `product-${index}`),
     name: String(item.name ?? item.title ?? 'Unnamed product'),
     image: String(primaryImage ?? ''),
+    images: gallery,
     category: requestedCategory ?? normalizeCategory((item.category as any)?.slug ?? item.division),
     brand: brandName ? String(brandName) : undefined,
     subCategory: subCategory ? String(subCategory) : undefined,
