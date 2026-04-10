@@ -5,6 +5,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Image,
+  Linking,
   Platform,
   ScrollView,
   StyleSheet,
@@ -203,8 +204,19 @@ const LoginScreen = ({ navigation }: Props) => {
               <View style={styles.passwordLabelRow}>
                 <Text style={styles.deliveryLabel}>Password</Text>
                 <TouchableOpacity
-                  onPress={() => {
+                  onPress={async () => {
                     Keyboard.dismiss();
+                    const url = 'mailto:support@delycart.app?subject=Delivery%20Password%20Reset';
+                    const canOpen = await Linking.canOpenURL(url);
+                    if (canOpen) {
+                      await Linking.openURL(url);
+                    } else {
+                      Toast.show({
+                        type: 'error',
+                        text1: 'Unable to open email app',
+                        text2: 'Please contact support@delycart.app',
+                      });
+                    }
                   }}
                 >
                   <Text style={styles.forgotText}>Forgot Password?</Text>

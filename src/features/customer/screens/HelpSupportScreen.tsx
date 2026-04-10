@@ -9,8 +9,18 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const HelpSupportScreen = () => {
+  const privacyPolicyUrl = 'https://delycart.in/privacy-policy';
+  const termsUrl = 'https://delycart.in/terms-and-conditions';
+
   const openSupportMail = async () => {
     const url = 'mailto:support@delycart.app';
+    const canOpen = await Linking.canOpenURL(url);
+    if (canOpen) {
+      await Linking.openURL(url);
+    }
+  };
+
+  const openExternal = async (url: string) => {
     const canOpen = await Linking.canOpenURL(url);
     if (canOpen) {
       await Linking.openURL(url);
@@ -38,6 +48,16 @@ const HelpSupportScreen = () => {
       <TouchableOpacity style={styles.button} onPress={openSupportMail}>
         <Text style={styles.buttonText}>Contact support</Text>
       </TouchableOpacity>
+
+      <View style={styles.linksCard}>
+        <Text style={styles.linksTitle}>Legal</Text>
+        <TouchableOpacity onPress={() => openExternal(privacyPolicyUrl)} activeOpacity={0.9}>
+          <Text style={styles.linkText}>Privacy Policy</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => openExternal(termsUrl)} activeOpacity={0.9}>
+          <Text style={styles.linkText}>Terms & Conditions</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -64,6 +84,17 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   buttonText: { color: '#FFFFFF', textAlign: 'center', fontWeight: '800' },
+  linksCard: {
+    marginTop: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    gap: 8,
+  },
+  linksTitle: { fontWeight: '800', color: '#0F172A' },
+  linkText: { color: '#1D4ED8', fontWeight: '700' },
 });
 
 export default HelpSupportScreen;

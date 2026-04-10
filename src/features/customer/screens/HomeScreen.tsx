@@ -179,8 +179,7 @@ const HomeScreen = () => {
   const fetchCurrentLocation = useCallback(async () => {
     const fallbackLocationText = 'Location unavailable';
     const googleMapsApiKey = String(
-      (globalThis as any)?.process?.env?.GOOGLE_MAPS_API_KEY ??
-        'AIzaSyAdChtoHHteVfd5O3Rmief-49HE_HX1IVo',
+      (globalThis as any)?.process?.env?.GOOGLE_MAPS_API_KEY ?? '',
     ).trim();
 
     const requestLocationPermissionAndroid = async () => {
