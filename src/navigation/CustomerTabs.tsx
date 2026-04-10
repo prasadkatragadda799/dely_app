@@ -11,6 +11,7 @@ import HelpSupportScreen from '../features/customer/screens/HelpSupportScreen';
 import HomeScreen from '../features/customer/screens/HomeScreen';
 import OrdersScreen from '../features/customer/screens/OrdersScreen';
 import OrderSuccessScreen from '../features/customer/screens/OrderSuccessScreen';
+import CategoryBrandGridScreen from '../features/customer/screens/CategoryBrandGridScreen';
 import ProductOverviewScreen from '../features/customer/screens/ProductOverviewScreen';
 import ProfileScreen from '../features/customer/screens/ProfileScreen';
 import SecurityScreen from '../features/customer/screens/SecurityScreen';
@@ -32,6 +33,10 @@ type HomeStackParamList = {
     /** When set, browse list is limited to this brand */
     brand?: string;
   };
+  CategoryBrandGrid: {
+    division: 'fmcg' | 'homeKitchen';
+    kind: 'categories' | 'brands';
+  };
 };
 
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
@@ -50,6 +55,10 @@ const HomeStackNavigator = () => {
       <HomeStack.Screen
         name="ProductOverview"
         component={ProductOverviewScreen}
+      />
+      <HomeStack.Screen
+        name="CategoryBrandGrid"
+        component={CategoryBrandGridScreen}
       />
     </HomeStack.Navigator>
   );

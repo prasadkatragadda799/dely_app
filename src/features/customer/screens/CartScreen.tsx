@@ -18,6 +18,12 @@ import { priceTierLabel } from '../../../utils/productPricing';
 import { useAppDispatch, useAppSelector } from '../../../hooks/redux';
 import { setHomeDivision } from '../homeDivisionSlice';
 
+const formatInrAmount = (value: number) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '0.00';
+  return (Math.round((n + Number.EPSILON) * 100) / 100).toFixed(2);
+};
+
 const CartScreen = () => {
   const navigation = useNavigation<any>();
   const dispatch = useAppDispatch();
@@ -101,12 +107,14 @@ const CartScreen = () => {
                 <Text style={styles.name}>{item.product.name}</Text>
                 <Text style={styles.brand}>{item.product.brand}</Text>
                 <Text style={styles.meta}>
-                  {priceTierLabel(item.priceOptionKey)} · Rs {item.product.price} ×{' '}
+                  {priceTierLabel(item.priceOptionKey)} · Rs {formatInrAmount(item.product.price)} ×{' '}
                   {cartQuantityCaption(item.product, item.quantity)}
                 </Text>
               </View>
             </View>
-            <Text style={styles.rowTotal}>Rs {item.product.price * item.quantity}</Text>
+            <Text style={styles.rowTotal}>
+              Rs {formatInrAmount(item.product.price * item.quantity)}
+            </Text>
             <TouchableOpacity
               onPress={() => remove(item.cartItemId)}
               style={styles.removeBtn}>
@@ -127,7 +135,7 @@ const CartScreen = () => {
       <View style={[styles.footer, { paddingBottom: tabBarHeight + insets.bottom + 12 }]}>
         <View style={styles.billRow}>
           <Text style={styles.billLabel}>Subtotal</Text>
-          <Text style={styles.billValue}>Rs {visibleTotal}</Text>
+          <Text style={styles.billValue}>Rs {formatInrAmount(visibleTotal)}</Text>
         </View>
         <View style={styles.billRow}>
           <Text style={styles.billLabel}>Delivery</Text>
@@ -136,7 +144,7 @@ const CartScreen = () => {
         <View style={styles.billDivider} />
         <View style={styles.billRow}>
           <Text style={styles.total}>Total</Text>
-          <Text style={styles.total}>Rs {visibleTotal}</Text>
+          <Text style={styles.total}>Rs {formatInrAmount(visibleTotal)}</Text>
         </View>
         <TouchableOpacity
           style={[styles.checkout, { backgroundColor: primary }]}

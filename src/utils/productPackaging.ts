@@ -40,7 +40,8 @@ export function packagingShortLine(p: PackFields): string | null {
   if (variant) return variant;
   const pcs = Math.max(1, p.piecesPerSet ?? 1);
   const u = (p.unit || 'piece').toLowerCase();
-  if (u === 'piece' && pcs <= 1) return null;
+  // "piece" is already atomic; showing "12 pcs / piece" is misleading.
+  if (u === 'piece') return null;
   if (pcs > 1) {
     return `${pcs} pcs / ${orderQuantityLabel(p.unit)}`;
   }
@@ -53,7 +54,8 @@ export function packagingDetailLine(p: PackFields): string | null {
   if (variant) return `Packaging: ${variant}`;
   const pcs = Math.max(1, p.piecesPerSet ?? 1);
   const u = (p.unit || 'piece').toLowerCase();
-  if (u === 'piece' && pcs <= 1) return null;
+  // Keep detail empty for single-piece sale units.
+  if (u === 'piece') return null;
   if (pcs > 1) {
     return `${pcs} pieces per ${orderQuantityLabel(p.unit)}`;
   }

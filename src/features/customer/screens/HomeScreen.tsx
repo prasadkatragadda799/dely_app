@@ -525,12 +525,24 @@ const HomeScreen = () => {
           <Text style={[styles.filterTitle, { color: primaryText }]}>
             Shop by Category
           </Text>
-          <Text style={[styles.filterMeta, { color: primary }]}>
-            {showCategoryImageBoxes
-              ? categoryTreeRoots.length
-              : categories.length - 1}{' '}
-            options
-          </Text>
+          <View style={styles.filterTitleRight}>
+            <Text style={[styles.filterMeta, { color: primary }]}>
+              {showCategoryImageBoxes
+                ? categoryTreeRoots.length
+                : categories.length - 1}{' '}
+              options
+            </Text>
+            <TouchableOpacity
+              onPress={() =>
+                navigation.navigate('CategoryBrandGrid', {
+                  division: activeDivision,
+                  kind: 'categories',
+                })
+              }
+              activeOpacity={0.9}>
+              <Text style={[styles.seeAll, { color: primary }]}>See all</Text>
+            </TouchableOpacity>
+          </View>
         </View>
         {showCategoryImageBoxes ? (
           <ScrollView
@@ -686,9 +698,21 @@ const HomeScreen = () => {
           <Text style={[styles.filterTitle, { color: primaryText }]}>
             Shop by Brand
           </Text>
-          <Text style={[styles.filterMeta, { color: primary }]}>
-            {brands.length - 1} brands
-          </Text>
+          <View style={styles.filterTitleRight}>
+            <Text style={[styles.filterMeta, { color: primary }]}>
+              {brands.length - 1} brands
+            </Text>
+            <TouchableOpacity
+              onPress={() =>
+                navigation.navigate('CategoryBrandGrid', {
+                  division: activeDivision,
+                  kind: 'brands',
+                })
+              }
+              activeOpacity={0.9}>
+              <Text style={[styles.seeAll, { color: primary }]}>See all</Text>
+            </TouchableOpacity>
+          </View>
         </View>
         <ScrollView
           horizontal
@@ -967,6 +991,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
+  },
+  filterTitleRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexShrink: 1,
+    justifyContent: 'flex-end',
   },
   filterTitle: {
     fontWeight: '900',

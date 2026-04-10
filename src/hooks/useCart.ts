@@ -23,8 +23,27 @@ export const useCart = () => {
 
   const items = useMemo((): CartLineItem[] => {
     const rawItems: any[] = (data as any)?.data?.items ?? [];
-    // Optional: pass division_slug to getCart to show only one division's lines in a tab.
-    return rawItems.map(it => {
+    const isHomeKitchenItem = (it: any) => {
+      const p = it?.product ?? {};
+      const divisionSlug = String(p.divisionSlug ?? p.division_slug ?? '')
+        .trim()
+        .toLowerCase();
+      const categorySlug = String(p.categorySlug ?? p.category_slug ?? '')
+        .trim()
+        .toLowerCase();
+      return (
+        divisionSlug === 'kitchen' ||
+        divisionSlug === 'home' ||
+        divisionSlug === 'homekitchen' ||
+        categorySlug === 'kitchen' ||
+        categorySlug === 'home'
+      );
+    };
+    const filteredRaw = rawItems.filter(it =>
+      isHomeKitchen ? isHomeKitchenItem(it) : !isHomeKitchenItem(it),
+    );
+
+    return filteredRaw.map(it => {
       const p = it.product ?? {};
       const images = Array.isArray(p.images) ? p.images : [];
       const firstImage =
@@ -38,12 +57,28 @@ export const useCart = () => {
       const priceOptionKey: PriceOptionKey =
         tierRaw === 'set' || tierRaw === 'remaining' ? tierRaw : 'unit';
 
+      const categorySlug = String(p.categorySlug ?? p.category_slug ?? '')
+        .trim()
+        .toLowerCase();
+      const divisionSlug = String(p.divisionSlug ?? p.division_slug ?? '')
+        .trim()
+        .toLowerCase();
+      const productCategory: Product['category'] =
+        categorySlug === 'home' ||
+        divisionSlug === 'home'
+          ? 'home'
+          : categorySlug === 'kitchen' ||
+              divisionSlug === 'kitchen' ||
+              divisionSlug === 'homekitchen'
+            ? 'kitchen'
+            : 'fmcg';
+
       // Minimal mapping for cart/checkout UI.
       const mappedProduct: Product = {
         id: String(p.id ?? it.product_id),
         name: String(p.name ?? 'Product'),
         image: firstImage,
-        category: isHomeKitchen ? 'kitchen' : 'fmcg',
+        category: productCategory,
         brand: typeof p.brand === 'string' ? p.brand : undefined,
         subCategory: undefined,
         price: Number(p.price ?? 0),
@@ -149,8 +184,13 @@ export const useCart = () => {
         const target = items.find(i => i.product.id === productId);
         if (!target?.cartItemId) return;
         const nextQty = Math.max(0, target.quantity - 1);
+        const minOrder = Math.max(
+          1,
+          Math.trunc(Number(target.product.minOrderQuantity) || 1),
+        );
         const op =
-          nextQty <= 0
+          // If decrement would violate backend minimum quantity, treat it as remove.
+          nextQty <= 0 || nextQty < minOrder
             ? deleteCartItemApi({ cartItemId: target.cartItemId })
             : updateCartItemApi({ cartItemId: target.cartItemId, quantity: nextQty });
         op.unwrap().catch((e: any) => {
