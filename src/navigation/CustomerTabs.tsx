@@ -15,6 +15,7 @@ import CategoryBrowseScreen from '../features/customer/screens/CategoryBrowseScr
 import ProductOverviewScreen from '../features/customer/screens/ProductOverviewScreen';
 import ProfileScreen from '../features/customer/screens/ProfileScreen';
 import SecurityScreen from '../features/customer/screens/SecurityScreen';
+import NotificationsScreen from '../features/customer/screens/NotificationsScreen';
 import WishlistScreen from '../features/customer/screens/WishlistScreen';
 import {
   CustomerProfileStackParamList,
@@ -42,6 +43,7 @@ type HomeStackParamList = {
     division: 'fmcg' | 'homeKitchen';
     mode?: 'categories' | 'brands' | 'companies';
   };
+  Notifications: undefined;
 };
 
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
@@ -64,6 +66,10 @@ const HomeStackNavigator = () => {
       <HomeStack.Screen
         name="CategoryBrowse"
         component={CategoryBrowseScreen}
+      />
+      <HomeStack.Screen
+        name="Notifications"
+        component={NotificationsScreen}
       />
     </HomeStack.Navigator>
   );

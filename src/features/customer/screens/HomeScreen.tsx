@@ -1,7 +1,11 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   FlatList,
   Image,
+  LayoutChangeEvent,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   PermissionsAndroid,
   Platform,
   ScrollView,
@@ -10,6 +14,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
@@ -21,7 +26,6 @@ import {
 } from '../../products/api/productsApi';
 import { API_V1_BASE_URL } from '../../../services/api/config';
 import { useCart } from '../../../hooks/useCart';
-import DealCard from '../../../shared/ui/DealCard';
 import ProductCard from '../../../shared/ui/ProductCard';
 import { useAppDispatch } from '../../../hooks/redux';
 import { setHomeDivision } from '../homeDivisionSlice';
@@ -31,15 +35,35 @@ import Voice, {
 } from '../../../utils/voice';
 import { defaultPriceTier } from '../../../utils/productPricing';
 import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
+import type { Deal } from '../../../types';
 
 type DivisionKey = 'fmcg' | 'homeKitchen';
 
-const divisions: Array<{ key: DivisionKey; label: string; icon: string }> = [
-  { key: 'fmcg', label: 'FMCG', icon: 'basket-outline' },
+const DIVISION_TRACK_PAD = 4;
+
+const divisions: Array<{
+  key: DivisionKey;
+  label: string;
+  shortLabel: string;
+  segmentLabel: string;
+  icon: string;
+  tagline: string;
+}> = [
+  {
+    key: 'fmcg',
+    label: 'FMCG & Groceries',
+    shortLabel: 'FMCG',
+    segmentLabel: 'FMCG',
+    icon: 'basket-outline',
+    tagline: 'Food, snacks & daily essentials',
+  },
   {
     key: 'homeKitchen',
     label: 'Home & Kitchen',
+    shortLabel: 'Home & Kitchen',
+    segmentLabel: 'Home & kitchen',
     icon: 'sofa-outline',
+    tagline: 'Cookware, décor & home care',
   },
 ];
 
@@ -55,10 +79,20 @@ const HomeScreen = () => {
   const [currentLocationText, setCurrentLocationText] = useState('Fetching location...');
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('All');
-  const [activeBrand, setActiveBrand] = useState<string>('All');
   const [activeCompany, setActiveCompany] = useState<string>('All');
   const [isListening, setIsListening] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
+  const [heroDealIndex, setHeroDealIndex] = useState(0);
+  const [stripDealIndex, setStripDealIndex] = useState(0);
+
+  const { width: windowWidth } = useWindowDimensions();
+  const contentPad = 14;
+  /** One carousel page = full screen width so paging aligns (narrow slides were drifting left). */
+  const heroPageWidth = Math.max(320, windowWidth);
+  const heroCardWidth = Math.max(260, windowWidth - contentPad * 2);
+  const gridGap = 8;
+  const gridCellWidth = (windowWidth - contentPad * 2 - gridGap * 2) / 3;
+  const stripCardWidth = Math.min(200, windowWidth * 0.52);
 
   const isHomeKitchen = activeDivision === 'homeKitchen';
   const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
@@ -70,6 +104,42 @@ const HomeScreen = () => {
     : 'rgba(29,78,216,0.25)';
   const primaryText = isHomeKitchen ? '#14532D' : '#0B3B8F';
   const secondary = isHomeKitchen ? '#22C55E' : '#2563EB';
+
+  const selectDivision = useCallback(
+    (key: DivisionKey) => {
+      setActiveDivision(key);
+      dispatch(setHomeDivision(key));
+      setQuery('');
+      setActiveCategory('All');
+      setActiveCompany('All');
+    },
+    [dispatch],
+  );
+
+  const divisionThumbX = useRef(
+    new Animated.Value(DIVISION_TRACK_PAD),
+  ).current;
+  const [divisionThumbSegmentPx, setDivisionThumbSegmentPx] = useState(0);
+
+  const onDivisionTrackLayout = useCallback((e: LayoutChangeEvent) => {
+    const w = e.nativeEvent.layout.width;
+    const inner = w - DIVISION_TRACK_PAD * 2;
+    setDivisionThumbSegmentPx(Math.max(0, inner / 2));
+  }, []);
+
+  useEffect(() => {
+    if (divisionThumbSegmentPx <= 0) return;
+    const to =
+      activeDivision === 'fmcg'
+        ? DIVISION_TRACK_PAD
+        : DIVISION_TRACK_PAD + divisionThumbSegmentPx;
+    Animated.spring(divisionThumbX, {
+      toValue: to,
+      useNativeDriver: true,
+      friction: 9,
+      tension: 95,
+    }).start();
+  }, [activeDivision, divisionThumbSegmentPx, divisionThumbX]);
 
   const filteredProducts = useMemo(() => {
     const base =
@@ -88,15 +158,10 @@ const HomeScreen = () => {
         ? byQuery
         : byQuery.filter(p => p.subCategory === activeCategory);
 
-    const byBrand =
-      activeBrand === 'All'
-        ? byCategory
-        : byCategory.filter(p => p.brand === activeBrand);
-
     const byCompany =
       activeCompany === 'All'
-        ? byBrand
-        : byBrand.filter(p => p.companyName === activeCompany);
+        ? byCategory
+        : byCategory.filter(p => p.companyName === activeCompany);
 
     return byCompany;
   }, [
@@ -104,7 +169,6 @@ const HomeScreen = () => {
     allProducts,
     query,
     activeCategory,
-    activeBrand,
     activeCompany,
   ]);
 
@@ -118,14 +182,6 @@ const HomeScreen = () => {
     const set = new Set<string>();
     divisionProducts.forEach(p => {
       if (p.subCategory) set.add(p.subCategory);
-    });
-    return ['All', ...Array.from(set)];
-  }, [divisionProducts]);
-
-  const brands = useMemo(() => {
-    const set = new Set<string>();
-    divisionProducts.forEach(p => {
-      if (p.brand) set.add(p.brand);
     });
     return ['All', ...Array.from(set)];
   }, [divisionProducts]);
@@ -144,35 +200,6 @@ const HomeScreen = () => {
     divisionProducts.forEach(p => {
       const key = p.subCategory || 'Other';
       map[key] = (map[key] || 0) + 1;
-    });
-    return map;
-  }, [divisionProducts]);
-
-  /** Use API category images as boxed tiles when the catalog exposes at least one image. */
-  const showCategoryImageBoxes = useMemo(
-    () =>
-      categoryTreeRoots.length > 0 &&
-      categoryTreeRoots.some(n => Boolean(String(n.image_url ?? '').trim())),
-    [categoryTreeRoots],
-  );
-
-  const brandCountMap = useMemo(() => {
-    const map: Record<string, number> = {};
-    divisionProducts.forEach(p => {
-      const key = p.brand || 'Other';
-      map[key] = (map[key] || 0) + 1;
-    });
-    return map;
-  }, [divisionProducts]);
-
-  const brandLogoByName = useMemo(() => {
-    const map: Record<string, string> = {};
-    divisionProducts.forEach(p => {
-      const name = p.brand?.trim();
-      const url = p.brandLogoUrl?.trim();
-      if (name && url && map[name] === undefined) {
-        map[name] = url;
-      }
     });
     return map;
   }, [divisionProducts]);
@@ -199,18 +226,6 @@ const HomeScreen = () => {
     return map;
   }, [divisionProducts]);
 
-  const showBrandImageBoxes = useMemo(
-    () =>
-      divisionProducts.some(p => Boolean(String(p.brandLogoUrl ?? '').trim())),
-    [divisionProducts],
-  );
-
-  const showCompanyImageBoxes = useMemo(
-    () =>
-      divisionProducts.some(p => Boolean(String(p.companyLogoUrl ?? '').trim())),
-    [divisionProducts],
-  );
-
   const dealsForDivision = useMemo(() => {
     const color = isHomeKitchen ? '#16A34A' : '#1D4ED8';
     return offers.map(d => ({
@@ -220,7 +235,65 @@ const HomeScreen = () => {
     }));
   }, [isHomeKitchen, offers]);
 
-  const visibleProducts = filteredProducts.slice(0, 2);
+  const heroDeals = useMemo((): Deal[] => {
+    if (dealsForDivision.length > 0) return dealsForDivision;
+    return [
+      {
+        id: 'placeholder-hero',
+        title: isHomeKitchen ? 'Home & Kitchen' : 'FMCG & Groceries',
+        subtitle: 'Offers will appear here soon',
+        color: primary,
+      },
+    ];
+  }, [dealsForDivision, isHomeKitchen, primary]);
+
+  const companyGridItems = useMemo(
+    () => companies.filter((c): c is string => c !== 'All').slice(0, 9),
+    [companies],
+  );
+
+  const categoryGridItems = useMemo(() => {
+    if (categoryTreeRoots.length > 0) {
+      return categoryTreeRoots.slice(0, 9).map(n => ({
+        key: String(n.id),
+        name: n.name,
+        imageUrl: String(n.image_url ?? '').trim() || undefined,
+        icon: n.icon ?? undefined,
+        count:
+          typeof n.product_count === 'number'
+            ? n.product_count
+            : categoryCountMap[n.name] ?? 0,
+      }));
+    }
+    return categories
+      .filter((c): c is string => c !== 'All')
+      .slice(0, 9)
+      .map(c => ({
+        key: c,
+        name: c,
+        imageUrl: undefined as string | undefined,
+        icon: undefined as string | undefined,
+        count: categoryCountMap[c] ?? 0,
+      }));
+  }, [categoryTreeRoots, categories, categoryCountMap]);
+
+  const visibleProducts = filteredProducts.slice(0, 4);
+
+  const onHeroMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const x = e.nativeEvent.contentOffset.x;
+    const idx = Math.round(x / heroPageWidth);
+    setHeroDealIndex(
+      Math.max(0, Math.min(heroDeals.length - 1, idx)),
+    );
+  };
+
+  const onStripMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const x = e.nativeEvent.contentOffset.x;
+    const idx = Math.round(x / (stripCardWidth + 10));
+    setStripDealIndex(
+      Math.max(0, Math.min(heroDeals.length - 1, idx)),
+    );
+  };
   React.useEffect(() => {
     Voice.onSpeechResults = e => {
       const value = e.value?.[0] ?? '';
@@ -356,6 +429,13 @@ const HomeScreen = () => {
     fetchCurrentLocation();
   }, [fetchCurrentLocation]);
 
+  React.useEffect(() => {
+    setHeroDealIndex(0);
+    setStripDealIndex(0);
+  }, [activeDivision, heroDeals.length]);
+
+  const activeDivisionMeta = divisions.find(d => d.key === activeDivision);
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       {/* Gradient-like backdrop (simulated with translucent layers) */}
@@ -380,120 +460,66 @@ const HomeScreen = () => {
             // keep content above floating bottom tab bar
             paddingBottom: 96,
           },
-        ]}>
-      <View style={styles.topBar}>
-        <View>
-          <Text style={[styles.addressTitle, { color: primaryText }]}>
-            {isHomeKitchen ? 'Home & Kitchen' : 'FMCG'}
-          </Text>
-          <View style={styles.locationRow}>
-            <Text
-              style={[styles.addressText, { color: primary }]}
-              numberOfLines={1}
-            >
-              {currentLocationText}
-            </Text>
-            <TouchableOpacity
-              onPress={fetchCurrentLocation}
-              disabled={isLocating}
-              style={[styles.retryLocationBtn, { borderColor: primaryBorder }]}
-              activeOpacity={0.9}>
-              <Icon
-                name={isLocating ? 'loading' : 'refresh'}
-                size={12}
-                color={primary}
-              />
-              <Text style={[styles.retryLocationText, { color: primary }]}>
-                {isLocating ? 'Locating' : 'Retry'}
+        ]}
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={false}>
+      <View style={styles.paperHeader}>
+        <View style={styles.paperHeaderTop}>
+          <View style={styles.paperBrandBlock}>
+            <View style={[styles.paperLogoMark, { backgroundColor: primarySoft }]}>
+              <Icon name="shopping-outline" size={22} color={primary} />
+            </View>
+            <View style={styles.paperShopFor}>
+              <Text style={[styles.paperShopForLabel, { color: '#64748B' }]}>
+                Shop for
               </Text>
+              <Text
+                style={[styles.paperShopForValue, { color: primaryText }]}
+                numberOfLines={2}>
+                {activeDivisionMeta?.label ?? 'FMCG & Groceries'}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.paperHeaderActions}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Notifications')}
+              style={[styles.paperIconBtn, { borderColor: primaryBorder }]}
+              activeOpacity={0.9}>
+              <Icon name="bell-outline" size={22} color={primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => navigation.getParent?.()?.navigate('Cart')}
+              style={[styles.paperIconBtn, { borderColor: primaryBorder }]}
+              activeOpacity={0.9}>
+              <Icon name="cart-outline" size={22} color={primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.paperIconBtn, { borderColor: primaryBorder }]}
+              onPress={() => navigation.getParent?.()?.navigate('Profile')}
+              activeOpacity={0.9}>
+              <Icon name="account-outline" size={22} color={primary} />
             </TouchableOpacity>
           </View>
         </View>
-        <TouchableOpacity
-          style={[styles.profileButton, { backgroundColor: primarySoft }]}
-          onPress={() => navigation.getParent?.()?.navigate('Profile')}
-          activeOpacity={0.9}
-        >
-          <Icon name="account-outline" size={20} color={primary} />
-        </TouchableOpacity>
-      </View>
-
-      <View
-        style={[
-          styles.divisionSegment,
-          { borderColor: primaryBorder, backgroundColor: 'rgba(255,255,255,0.52)' },
-        ]}>
-        {divisions.map((item, index) => {
-          const isActive = item.key === activeDivision;
-          return (
-            <React.Fragment key={item.key}>
-              <TouchableOpacity
-                style={[
-                  styles.divisionOption,
-                  {
-                    borderColor: primaryBorder,
-                    backgroundColor: isActive
-                      ? primary
-                      : 'rgba(255,255,255,0.25)',
-                  },
-                ]}
-                onPress={() => {
-                  setActiveDivision(item.key);
-                  dispatch(setHomeDivision(item.key));
-                  setQuery('');
-                  setActiveCategory('All');
-                  setActiveBrand('All');
-                  setActiveCompany('All');
-                }}
-                activeOpacity={0.95}>
-                {isActive ? <View style={styles.divisionSheen} /> : null}
-                <View style={styles.divisionContent}>
-                  <Icon
-                    name={item.icon}
-                    size={16}
-                    color={isActive ? '#FFFFFF' : primary}
-                  />
-                  <Text
-                    style={[
-                      styles.divisionOptionText,
-                      { color: isActive ? '#FFFFFF' : primary },
-                      { marginLeft: 6 },
-                    ]}>
-                    {item.label}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-              {index === 0 ? (
-                <View
-                  style={[
-                    styles.divisionDivider,
-                    { backgroundColor: primaryBorder },
-                  ]}
-                />
-              ) : null}
-            </React.Fragment>
-          );
-        })}
       </View>
 
       <View
         style={[
           styles.searchWrap,
           {
-            backgroundColor: 'rgba(255,255,255,0.65)',
+            backgroundColor: '#FFFFFF',
             borderColor: primaryBorder,
           },
-        ]}
-      >
+        ]}>
         <Icon name="magnify" size={20} color={primary} />
         <TextInput
           style={[styles.search, { color: primaryText }]}
           placeholder={
             isHomeKitchen
               ? 'Search kitchen & home essentials...'
-              : 'Search FMCG essentials...'
+              : 'Search groceries & daily needs...'
           }
-          placeholderTextColor={primary}
+          placeholderTextColor="#94A3B8"
           value={query}
           onChangeText={setQuery}
         />
@@ -549,43 +575,144 @@ const HomeScreen = () => {
         </TouchableOpacity>
       </View>
 
+      <Text style={[styles.divisionSectionLabel, { color: primaryText }]}>
+        What are you shopping for?
+      </Text>
       <View
         style={[
-          styles.banner,
-          {
-            backgroundColor: primary,
-          },
+          styles.divisionTrackOuter,
+          { borderColor: primaryBorder, backgroundColor: '#E8EEF4' },
         ]}
-      >
-        <View
+        onLayout={onDivisionTrackLayout}>
+        <Animated.View
+          pointerEvents="none"
           style={[
-            styles.bannerOverlayLeft,
-            { backgroundColor: secondary, opacity: 0.28 },
+            styles.divisionPillThumb,
+            {
+              width: Math.max(divisionThumbSegmentPx, 1),
+              opacity: divisionThumbSegmentPx > 0 ? 1 : 0,
+              backgroundColor: primary,
+              transform: [{ translateX: divisionThumbX }],
+            },
           ]}
         />
-        <View
-          style={[
-            styles.bannerOverlayRight,
-            { backgroundColor: '#FFFFFF', opacity: 0.12 },
-          ]}
-        />
-        <Text style={styles.bannerTitle}>
-          {isHomeKitchen ? 'Home & Kitchen Deals' : 'FMCG Deals'}
-        </Text>
-        <Text style={styles.bannerSubtitle}>
-          {isHomeKitchen
-            ? 'Premium kitchen essentials & offers'
-            : 'Min Rs 150 Off + Rs 100 Cashback'}
-        </Text>
+        <View style={styles.divisionTrackRow}>
+          {divisions.map(item => {
+            const isActive = item.key === activeDivision;
+            return (
+              <TouchableOpacity
+                key={item.key}
+                style={styles.divisionTrackHit}
+                onPress={() => selectDivision(item.key)}
+                activeOpacity={0.88}>
+                <Icon
+                  name={item.icon}
+                  size={22}
+                  color={isActive ? '#FFFFFF' : '#64748B'}
+                />
+                <Text
+                  style={[
+                    styles.divisionTrackLabel,
+                    { color: isActive ? '#FFFFFF' : '#475569' },
+                  ]}
+                  numberOfLines={1}>
+                  {item.segmentLabel}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
+      <Text
+        style={[styles.divisionTaglineCaption, { color: '#64748B' }]}
+        numberOfLines={2}>
+        {divisions.find(d => d.key === activeDivision)?.tagline}
+      </Text>
 
+      <TouchableOpacity
+        style={[
+          styles.locationPill,
+          { borderColor: primaryBorder, backgroundColor: '#FFFFFF' },
+        ]}
+        onPress={fetchCurrentLocation}
+        disabled={isLocating}
+        activeOpacity={0.9}>
+        <Icon name="map-marker-outline" size={20} color={primary} />
+        <View style={styles.locationPillTextWrap}>
+          <Text style={[styles.locationPillTitle, { color: primaryText }]}>
+            Delivery location
+          </Text>
+          <Text
+            style={[styles.locationPillSub, { color: '#64748B' }]}
+            numberOfLines={1}>
+            {isLocating ? 'Locating…' : currentLocationText}
+          </Text>
+        </View>
+        <Icon name="chevron-right" size={22} color="#94A3B8" />
+      </TouchableOpacity>
+
+      <Text style={[styles.paperSectionTitle, { color: primaryText }]}>
+        Featured offers
+      </Text>
       <FlatList
-        data={dealsForDivision}
+        data={heroDeals}
         keyExtractor={item => item.id}
         horizontal
+        pagingEnabled
         showsHorizontalScrollIndicator={false}
-        renderItem={({ item }) => <DealCard deal={item} />}
+        getItemLayout={(_, index) => ({
+          length: heroPageWidth,
+          offset: heroPageWidth * index,
+          index,
+        })}
+        onMomentumScrollEnd={onHeroMomentumEnd}
+        style={[styles.heroCarouselList, { width: heroPageWidth }]}
+        renderItem={({ item }) => (
+          <View
+            style={{
+              width: heroPageWidth,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+            <View
+              style={[
+                styles.heroSlideCard,
+                {
+                  width: heroCardWidth,
+                  backgroundColor: item.color,
+                },
+              ]}>
+              {item.image ? (
+                <Image
+                  source={{ uri: item.image }}
+                  style={StyleSheet.absoluteFillObject}
+                  resizeMode="cover"
+                />
+              ) : null}
+              <View style={styles.heroSlideOverlay} />
+              <View style={styles.heroSlideTextBlock}>
+                <Text style={styles.heroSlideTitle}>{item.title}</Text>
+                <Text style={styles.heroSlideSubtitle}>{item.subtitle}</Text>
+              </View>
+            </View>
+          </View>
+        )}
       />
+      <View style={styles.carouselDots}>
+        {heroDeals.map((d, i) => (
+          <View
+            key={`hero-dot-${d.id}`}
+            style={[
+              styles.carouselDot,
+              i === heroDealIndex && {
+                backgroundColor: primary,
+                width: 20,
+              },
+            ]}
+          />
+        ))}
+      </View>
+
       {isProductsLoading ? (
         <Text style={[styles.stateText, { color: primary }]}>Loading products...</Text>
       ) : null}
@@ -595,510 +722,322 @@ const HomeScreen = () => {
         </Text>
       ) : null}
 
-      <View style={styles.filterBlock}>
-        <View style={styles.filterTitleRow}>
-          <Text style={[styles.filterTitle, { color: primaryText }]}>
-            Shop by Category
-          </Text>
-          <View style={styles.filterTitleRight}>
+      <View style={styles.paperSection}>
+        <Text style={[styles.paperSectionTitle, { color: primaryText }]}>
+          Quick links
+        </Text>
+        <View style={[styles.quickGrid, { gap: gridGap }]}>
+          {(
+            [
+              {
+                label: 'Top offers',
+                icon: 'fire' as const,
+                onPress: () =>
+                  navigation.navigate('ProductOverview', {
+                    division: activeDivision,
+                  }),
+              },
+              {
+                label: 'Brands',
+                icon: 'storefront-outline' as const,
+                onPress: () =>
+                  navigation.navigate('CategoryBrowse', {
+                    division: activeDivision,
+                    mode: 'brands',
+                  }),
+              },
+              {
+                label: 'Categories',
+                icon: 'view-grid-outline' as const,
+                onPress: () =>
+                  navigation.navigate('CategoryBrowse', {
+                    division: activeDivision,
+                  }),
+              },
+              {
+                label: 'Orders',
+                icon: 'truck-outline' as const,
+                onPress: () => navigation.getParent?.()?.navigate('Orders'),
+              },
+              {
+                label: 'Wishlist',
+                icon: 'heart-outline' as const,
+                onPress: () => navigation.getParent?.()?.navigate('Wishlist'),
+              },
+              {
+                label: 'Browse all',
+                icon: 'text-search' as const,
+                onPress: () =>
+                  navigation.navigate('ProductOverview', {
+                    division: activeDivision,
+                  }),
+              },
+            ] as const
+          ).map(cell => (
             <TouchableOpacity
-              onPress={() =>
-                navigation.navigate('CategoryBrowse', {
-                  division: activeDivision,
-                })
-              }
-              activeOpacity={0.9}>
-              <Text style={[styles.seeAll, { color: primary }]}>See all</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-        {showCategoryImageBoxes ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryBoxesRow}>
-            <TouchableOpacity
-              style={styles.categoryBoxTile}
-              onPress={() => setActiveCategory('All')}
-              activeOpacity={0.95}>
+              key={cell.label}
+              style={[
+                styles.quickCell,
+                {
+                  width: gridCellWidth,
+                  borderColor: primaryBorder,
+                  backgroundColor: '#FFFFFF',
+                },
+              ]}
+              onPress={cell.onPress}
+              activeOpacity={0.92}>
               <View
                 style={[
-                  styles.categoryBoxImageWrap,
-                  { borderColor: primaryBorder },
-                  activeCategory === 'All' && {
-                    borderColor: primary,
-                    borderWidth: 2,
-                  },
+                  styles.quickCellIconWrap,
+                  { backgroundColor: primarySoft },
                 ]}>
-                <Icon name="shape-outline" size={28} color={primary} />
+                <Icon name={cell.icon} size={22} color={primary} />
               </View>
               <Text
-                numberOfLines={2}
-                style={[styles.categoryBoxName, { color: primaryText }]}>
-                All
-              </Text>
-              <Text style={styles.categoryBoxCount}>
-                {divisionProducts.length} products
+                style={[styles.quickCellLabel, { color: primaryText }]}
+                numberOfLines={2}>
+                {cell.label}
               </Text>
             </TouchableOpacity>
-            {categoryTreeRoots.map(node => {
-              const img = String(node.image_url ?? '').trim();
-              const count =
-                typeof node.product_count === 'number'
-                  ? node.product_count
-                  : categoryCountMap[node.name] ?? 0;
-              return (
-                <TouchableOpacity
-                  key={node.id}
-                  style={styles.categoryBoxTile}
-                  onPress={() => {
-                    setActiveCategory(node.name);
-                    navigation.navigate('ProductOverview', {
-                      division: activeDivision,
-                      subCategory: node.name,
-                    });
-                  }}
-                  activeOpacity={0.95}>
-                  <View
-                    style={[
-                      styles.categoryBoxImageWrap,
-                      { borderColor: primaryBorder },
-                      activeCategory === node.name && {
-                        borderColor: primary,
-                        borderWidth: 2,
-                      },
-                    ]}>
-                    {img ? (
-                      <Image
-                        source={{ uri: img }}
-                        style={styles.categoryBoxImage}
-                        resizeMode="cover"
-                      />
-                    ) : node.icon ? (
-                      <Text style={styles.categoryBoxEmoji}>{node.icon}</Text>
-                    ) : (
-                      <Icon
-                        name="view-grid-plus-outline"
-                        size={26}
-                        color={primary}
-                      />
-                    )}
-                  </View>
-                  <Text
-                    numberOfLines={2}
-                    style={[styles.categoryBoxName, { color: primaryText }]}>
-                    {node.name}
-                  </Text>
-                  <Text style={styles.categoryBoxCount}>{count} products</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipsRow}>
-            {categories.map(cat => {
-              const active = cat === activeCategory;
-              const count =
-                cat === 'All' ? divisionProducts.length : categoryCountMap[cat] ?? 0;
-              return (
-                <TouchableOpacity
-                  key={cat}
-                  onPress={() => {
-                    if (cat === 'All') {
-                      setActiveCategory('All');
-                      return;
-                    }
-                    navigation.navigate('ProductOverview', {
-                      division: activeDivision,
-                      subCategory: cat,
-                    });
-                  }}
-                  style={[
-                    styles.filterCard,
-                    active && {
-                      backgroundColor: primary,
-                      borderColor: primary,
-                    },
-                  ]}
-                  activeOpacity={0.95}>
-                  <View
-                    style={[
-                      styles.filterCardIconWrap,
-                      active && { backgroundColor: 'rgba(255,255,255,0.22)' },
-                    ]}>
-                    <Icon
-                      name={
-                        cat === 'All' ? 'shape-outline' : 'view-grid-plus-outline'
-                      }
-                      size={14}
-                      color={active ? '#FFFFFF' : primary}
-                    />
-                  </View>
-                  <View>
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.filterCardTitle,
-                        active ? { color: '#FFFFFF' } : { color: primaryText },
-                      ]}>
-                      {cat}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.filterCardSub,
-                        active
-                          ? { color: 'rgba(255,255,255,0.9)' }
-                          : { color: '#64748B' },
-                      ]}>
-                      {count} products
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        )}
+          ))}
+        </View>
+      </View>
 
-        <View style={[styles.filterTitleRow, { marginTop: 10 }]}>
-          <Text style={[styles.filterTitle, { color: primaryText }]}>
-            Shop by Brand
+      <View style={styles.paperSection}>
+        <View style={styles.paperSectionHeaderRow}>
+          <Text style={[styles.paperSectionTitle, { color: primaryText, marginBottom: 0 }]}>
+            Shop by company
           </Text>
-          <View style={styles.filterTitleRight}>
-            <TouchableOpacity
-              onPress={() =>
-                navigation.navigate('CategoryBrowse', {
-                  division: activeDivision,
-                  mode: 'brands',
-                })
-              }
-              activeOpacity={0.9}>
-              <Text style={[styles.seeAll, { color: primary }]}>See all</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            onPress={() =>
+              navigation.navigate('CategoryBrowse', {
+                division: activeDivision,
+                mode: 'companies',
+              })
+            }
+            activeOpacity={0.9}>
+            <Text style={[styles.viewAllLink, { color: primary }]}>View all</Text>
+          </TouchableOpacity>
         </View>
-        {showBrandImageBoxes ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryBoxesRow}>
-            <TouchableOpacity
-              style={styles.categoryBoxTile}
-              onPress={() => setActiveBrand('All')}
-              activeOpacity={0.95}>
-              <View
-                style={[
-                  styles.categoryBoxImageWrap,
-                  { borderColor: primaryBorder },
-                  activeBrand === 'All' && {
-                    borderColor: primary,
-                    borderWidth: 2,
-                  },
-                ]}>
-                <Icon name="storefront-outline" size={28} color={primary} />
-              </View>
-              <Text
-                numberOfLines={2}
-                style={[styles.categoryBoxName, { color: primaryText }]}>
-                All
-              </Text>
-              <Text style={styles.categoryBoxCount}>
-                {divisionProducts.length} products
-              </Text>
-            </TouchableOpacity>
-            {brands
-              .filter((b): b is string => b !== 'All')
-              .map(b => {
-                const logo = brandLogoByName[b];
-                const count = brandCountMap[b] ?? 0;
-                const active = activeBrand === b;
-                return (
-                  <TouchableOpacity
-                    key={b}
-                    style={styles.categoryBoxTile}
-                    onPress={() => setActiveBrand(b)}
-                    activeOpacity={0.95}>
-                    <View
-                      style={[
-                        styles.categoryBoxImageWrap,
-                        { borderColor: primaryBorder },
-                        active && {
-                          borderColor: primary,
-                          borderWidth: 2,
-                        },
-                      ]}>
-                      {logo ? (
-                        <Image
-                          source={{ uri: logo }}
-                          style={styles.categoryBoxImage}
-                          resizeMode="contain"
-                        />
-                      ) : (
-                        <Icon name="tag-outline" size={26} color={primary} />
-                      )}
-                    </View>
-                    <Text
-                      numberOfLines={2}
-                      style={[styles.categoryBoxName, { color: primaryText }]}>
-                      {b}
-                    </Text>
-                    <Text style={styles.categoryBoxCount}>{count} products</Text>
-                  </TouchableOpacity>
-                );
-              })}
-          </ScrollView>
-        ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipsRow}>
-            {brands.map(b => {
-              const active = b === activeBrand;
-              const count = b === 'All' ? divisionProducts.length : brandCountMap[b] ?? 0;
-              const logo = b !== 'All' ? brandLogoByName[b] : undefined;
-              return (
-                <TouchableOpacity
-                  key={b}
-                  onPress={() => {
-                    if (b === 'All') {
-                      setActiveBrand('All');
-                      return;
-                    }
-                    navigation.navigate('ProductOverview', {
-                      division: activeDivision,
-                      brand: b,
-                    });
-                  }}
-                  style={[
-                    styles.filterCard,
-                    active && {
-                      backgroundColor: primary,
-                      borderColor: primary,
-                    },
-                  ]}
-                  activeOpacity={0.95}>
-                  <View
-                    style={[
-                      styles.filterCardIconWrap,
-                      active && { backgroundColor: 'rgba(255,255,255,0.22)' },
-                      logo ? { overflow: 'hidden', padding: 2 } : null,
-                    ]}>
-                    {b === 'All' ? (
-                      <Icon
-                        name="storefront-outline"
-                        size={14}
-                        color={active ? '#FFFFFF' : primary}
-                      />
-                    ) : logo ? (
-                      <Image
-                        source={{ uri: logo }}
-                        style={{ width: 24, height: 24 }}
-                        resizeMode="contain"
-                      />
-                    ) : (
-                      <Icon
-                        name="tag-outline"
-                        size={14}
-                        color={active ? '#FFFFFF' : primary}
-                      />
-                    )}
-                  </View>
-                  <View>
-                    <Text
-                      numberOfLines={1}
-                      style={[
-                        styles.filterCardTitle,
-                        active ? { color: '#FFFFFF' } : { color: primaryText },
-                      ]}>
-                      {b}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.filterCardSub,
-                        active ? { color: 'rgba(255,255,255,0.9)' } : { color: '#64748B' },
-                      ]}>
-                      {count} products
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        )}
-
-        <View style={[styles.filterTitleRow, { marginTop: 10 }]}>
-          <Text style={[styles.filterTitle, { color: primaryText }]}>
-            Shop by Company
+        {activeCompany !== 'All' ? (
+          <TouchableOpacity
+            onPress={() => setActiveCompany('All')}
+            style={styles.clearFilterLink}
+            activeOpacity={0.85}>
+            <Text style={[styles.clearFilterLinkText, { color: primary }]}>
+              Show all companies
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+        {companyGridItems.length === 0 ? (
+          <Text style={styles.gridEmptyHint}>
+            Companies appear when products are linked to sellers.
           </Text>
-          <View style={styles.filterTitleRight}>
-            <TouchableOpacity
-              onPress={() =>
-                navigation.navigate('CategoryBrowse', {
-                  division: activeDivision,
-                  mode: 'companies',
-                })
-              }
-              activeOpacity={0.9}>
-              <Text style={[styles.seeAll, { color: primary }]}>See all</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-        {showCompanyImageBoxes ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryBoxesRow}>
-            <TouchableOpacity
-              style={styles.categoryBoxTile}
-              onPress={() => setActiveCompany('All')}
-              activeOpacity={0.95}>
-              <View
-                style={[
-                  styles.categoryBoxImageWrap,
-                  { borderColor: primaryBorder },
-                  activeCompany === 'All' && {
-                    borderColor: primary,
-                    borderWidth: 2,
-                  },
-                ]}>
-                <Icon name="office-building-outline" size={28} color={primary} />
-              </View>
-              <Text
-                numberOfLines={2}
-                style={[styles.categoryBoxName, { color: primaryText }]}>
-                All
-              </Text>
-              <Text style={styles.categoryBoxCount}>
-                {divisionProducts.length} products
-              </Text>
-            </TouchableOpacity>
-            {companies
-              .filter((c): c is string => c !== 'All')
-              .map(c => {
-                const logo = companyLogoByName[c];
-                const count = companyCountMap[c] ?? 0;
-                const active = activeCompany === c;
-                return (
-                  <TouchableOpacity
-                    key={c}
-                    style={styles.categoryBoxTile}
-                    onPress={() => setActiveCompany(c)}
-                    activeOpacity={0.95}>
-                    <View
-                      style={[
-                        styles.categoryBoxImageWrap,
-                        { borderColor: primaryBorder },
-                        active && {
-                          borderColor: primary,
-                          borderWidth: 2,
-                        },
-                      ]}>
-                      {logo ? (
-                        <Image
-                          source={{ uri: logo }}
-                          style={styles.categoryBoxImage}
-                          resizeMode="contain"
-                        />
-                      ) : (
-                        <Icon name="domain" size={26} color={primary} />
-                      )}
-                    </View>
-                    <Text
-                      numberOfLines={2}
-                      style={[styles.categoryBoxName, { color: primaryText }]}>
-                      {c}
-                    </Text>
-                    <Text style={styles.categoryBoxCount}>{count} products</Text>
-                  </TouchableOpacity>
-                );
-              })}
-          </ScrollView>
         ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipsRow}>
-            {companies.map(c => {
-              const active = c === activeCompany;
-              const count =
-                c === 'All' ? divisionProducts.length : companyCountMap[c] ?? 0;
-              const logo = c !== 'All' ? companyLogoByName[c] : undefined;
-              return (
-                <TouchableOpacity
-                  key={c}
-                  onPress={() => {
-                    if (c === 'All') {
-                      setActiveCompany('All');
-                      return;
-                    }
-                    navigation.navigate('ProductOverview', {
-                      division: activeDivision,
-                      company: c,
-                    });
-                  }}
-                  style={[
-                    styles.filterCard,
-                    active && {
-                      backgroundColor: primary,
-                      borderColor: primary,
-                    },
-                  ]}
-                  activeOpacity={0.95}>
-                  <View
-                    style={[
-                      styles.filterCardIconWrap,
-                      active && { backgroundColor: 'rgba(255,255,255,0.22)' },
-                      logo ? { overflow: 'hidden', padding: 2 } : null,
-                    ]}>
-                    {c === 'All' ? (
-                      <Icon
-                        name="office-building-outline"
-                        size={14}
-                        color={active ? '#FFFFFF' : primary}
-                      />
-                    ) : logo ? (
-                      <Image
-                        source={{ uri: logo }}
-                        style={{ width: 24, height: 24 }}
-                        resizeMode="contain"
-                      />
-                    ) : (
-                      <Icon
-                        name="domain"
-                        size={14}
-                        color={active ? '#FFFFFF' : primary}
-                      />
-                    )}
-                  </View>
-                  <View>
-                    <Text
-                      numberOfLines={1}
+          Array.from(
+            { length: Math.ceil(companyGridItems.length / 3) },
+            (_, row) => (
+              <View
+                key={`co-row-${row}`}
+                style={[styles.gridRowThree, { gap: gridGap, marginBottom: gridGap }]}>
+                {companyGridItems.slice(row * 3, row * 3 + 3).map(c => {
+                  const logo = companyLogoByName[c];
+                  const count = companyCountMap[c] ?? 0;
+                  const active = activeCompany === c;
+                  return (
+                    <TouchableOpacity
+                      key={c}
                       style={[
-                        styles.filterCardTitle,
-                        active ? { color: '#FFFFFF' } : { color: primaryText },
-                      ]}>
-                      {c}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.filterCardSub,
-                        active ? { color: 'rgba(255,255,255,0.9)' } : { color: '#64748B' },
-                      ]}>
-                      {count} products
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+                        styles.gridCellTall,
+                        {
+                          width: gridCellWidth,
+                          borderColor: active ? primary : primaryBorder,
+                          backgroundColor: '#FFFFFF',
+                        },
+                      ]}
+                      onPress={() => setActiveCompany(c)}
+                      activeOpacity={0.92}>
+                      <View
+                        style={[
+                          styles.gridCellLogoBox,
+                          { borderColor: primaryBorder },
+                        ]}>
+                        {logo ? (
+                          <Image
+                            source={{ uri: logo }}
+                            style={styles.gridCellLogoImg}
+                            resizeMode="contain"
+                          />
+                        ) : (
+                          <Icon name="domain" size={26} color={primary} />
+                        )}
+                      </View>
+                      <Text
+                        style={[styles.gridCellName, { color: primaryText }]}
+                        numberOfLines={3}>
+                        {c}
+                      </Text>
+                      <Text style={styles.gridCellCount}>{count} items</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ),
+          )
         )}
       </View>
 
+      <Text style={[styles.paperSectionTitle, { color: primaryText }]}>
+        More offers
+      </Text>
+      <FlatList
+        data={heroDeals}
+        keyExtractor={item => `strip-${item.id}`}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        snapToInterval={stripCardWidth + 10}
+        decelerationRate="fast"
+        onMomentumScrollEnd={onStripMomentumEnd}
+        style={styles.stripCarouselList}
+        contentContainerStyle={styles.stripCarouselContent}
+        renderItem={({ item }) => (
+          <View
+            style={[
+              styles.stripCard,
+              {
+                width: stripCardWidth,
+                backgroundColor: item.color,
+              },
+            ]}>
+            {item.image ? (
+              <Image
+                source={{ uri: item.image }}
+                style={StyleSheet.absoluteFillObject}
+                resizeMode="cover"
+              />
+            ) : null}
+            <View style={styles.stripOverlay} />
+            <Text style={styles.stripTitle} numberOfLines={2}>
+              {item.title}
+            </Text>
+            <Text style={styles.stripSubtitle} numberOfLines={2}>
+              {item.subtitle}
+            </Text>
+          </View>
+        )}
+      />
+      <View style={styles.carouselDots}>
+        {heroDeals.map((d, i) => (
+          <View
+            key={`strip-dot-${d.id}`}
+            style={[
+              styles.carouselDot,
+              i === stripDealIndex && {
+                backgroundColor: primary,
+                width: 20,
+              },
+            ]}
+          />
+        ))}
+      </View>
+
+      <View style={styles.paperSection}>
+        <View style={styles.paperSectionHeaderRow}>
+          <Text style={[styles.paperSectionTitle, { color: primaryText, marginBottom: 0 }]}>
+            Shop by category
+          </Text>
+          <TouchableOpacity
+            onPress={() =>
+              navigation.navigate('CategoryBrowse', { division: activeDivision })
+            }
+            activeOpacity={0.9}>
+            <Text style={[styles.viewAllLink, { color: primary }]}>View all</Text>
+          </TouchableOpacity>
+        </View>
+        {activeCategory !== 'All' ? (
+          <TouchableOpacity
+            onPress={() => setActiveCategory('All')}
+            style={styles.clearFilterLink}
+            activeOpacity={0.85}>
+            <Text style={[styles.clearFilterLinkText, { color: primary }]}>
+              Show all categories
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+        {categoryGridItems.length === 0 ? (
+          <Text style={styles.gridEmptyHint}>
+            Categories will show when the catalog is loaded.
+          </Text>
+        ) : (
+          Array.from(
+            { length: Math.ceil(categoryGridItems.length / 3) },
+            (_, row) => (
+              <View
+                key={`cat-row-${row}`}
+                style={[styles.gridRowThree, { gap: gridGap, marginBottom: gridGap }]}>
+                {categoryGridItems.slice(row * 3, row * 3 + 3).map(cat => {
+                  const active = activeCategory === cat.name;
+                  return (
+                    <TouchableOpacity
+                      key={cat.key}
+                      style={[
+                        styles.gridCellTall,
+                        {
+                          width: gridCellWidth,
+                          borderColor: active ? primary : primaryBorder,
+                          backgroundColor: '#FFFFFF',
+                        },
+                      ]}
+                      onPress={() => {
+                        setActiveCategory(cat.name);
+                        navigation.navigate('ProductOverview', {
+                          division: activeDivision,
+                          subCategory: cat.name,
+                        });
+                      }}
+                      activeOpacity={0.92}>
+                      <View
+                        style={[
+                          styles.gridCellLogoBox,
+                          { borderColor: primaryBorder },
+                        ]}>
+                        {cat.imageUrl ? (
+                          <Image
+                            source={{ uri: cat.imageUrl }}
+                            style={styles.gridCellPhoto}
+                            resizeMode="cover"
+                          />
+                        ) : cat.icon ? (
+                          <Text style={styles.gridCellEmoji}>{cat.icon}</Text>
+                        ) : (
+                          <Icon
+                            name="view-grid-plus-outline"
+                            size={26}
+                            color={primary}
+                          />
+                        )}
+                      </View>
+                      <Text
+                        style={[styles.gridCellName, { color: primaryText }]}
+                        numberOfLines={3}>
+                        {cat.name}
+                      </Text>
+                      <Text style={styles.gridCellCount}>
+                        {cat.count} items
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ),
+          )
+        )}
+      </View>
+
+
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, { color: primaryText }]}>
-          {isHomeKitchen ? 'Kitchen Essentials' : 'FMCG Picks'}
+          {isHomeKitchen ? 'Recommended for your home' : 'Recommended for you'}
         </Text>
         <TouchableOpacity
           onPress={() => navigation.navigate('ProductOverview', { division: activeDivision })}
@@ -1152,112 +1091,107 @@ const styles = StyleSheet.create({
   },
   container: { flex: 1 },
   content: { paddingHorizontal: 14 },
-  topBar: {
-    marginTop: 0,
+  paperHeader: { marginBottom: 2 },
+  paperHeaderTop: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
   },
-  addressTitle: { fontSize: 24, fontWeight: '900', color: '#0B3B8F' },
-  addressText: {
-    marginTop: 2,
-    color: '#1D4ED8',
-    maxWidth: 170,
-    fontWeight: '500',
-  },
-  locationRow: {
-    marginTop: 2,
+  paperBrandBlock: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 8,
   },
-  retryLocationBtn: {
-    flexDirection: 'row',
+  paperLogoMark: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    backgroundColor: 'rgba(255,255,255,0.7)',
+    justifyContent: 'center',
+    marginRight: 10,
   },
-  retryLocationText: {
-    marginLeft: 4,
+  paperShopFor: { flex: 1, minWidth: 0 },
+  paperShopForLabel: {
     fontSize: 11,
     fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  profileButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+  paperShopForValue: { fontSize: 16, fontWeight: '900', marginTop: 2 },
+  paperHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  paperIconBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E8F1FF',
-  },
-  serviceRow: {
-    marginTop: 14,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  servicePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    borderWidth: 1,
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
   },
-  activeServicePill: {
-    backgroundColor: '#1D4ED8',
-    borderWidth: 1,
-    borderColor: '#1D4ED8',
+  divisionSectionLabel: {
+    marginTop: 12,
+    marginBottom: 8,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
-  servicePillText: { color: '#1D4ED8', fontWeight: '900', fontSize: 12 },
-  activeServicePillText: { color: '#FFFFFF' },
-  divisionSegment: {
-    marginTop: 14,
+  divisionTrackOuter: {
+    borderRadius: 999,
+    borderWidth: 1,
+    padding: DIVISION_TRACK_PAD,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  divisionPillThumb: {
+    position: 'absolute',
+    top: DIVISION_TRACK_PAD,
+    bottom: DIVISION_TRACK_PAD,
+    left: 0,
+    borderRadius: 999,
+  },
+  divisionTrackRow: {
     flexDirection: 'row',
-    borderRadius: 22,
-    padding: 6,
-    borderWidth: 1,
-    overflow: 'hidden',
+    alignItems: 'stretch',
   },
-  divisionOption: {
-    flex: 1,
-    borderRadius: 16,
-    paddingVertical: 10,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  divisionContent: {
+  divisionTrackHit: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 6,
+    zIndex: 1,
   },
-  divisionOptionText: {
-    fontWeight: '900',
+  divisionTrackLabel: {
+    fontSize: 14,
+    fontWeight: '800',
+    flexShrink: 1,
+  },
+  divisionTaglineCaption: {
+    marginTop: 8,
     fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
+    textAlign: 'center',
   },
-  divisionDivider: {
-    width: 1,
-    marginVertical: 6,
-    opacity: 0.9,
-  },
-  divisionSheen: {
-    position: 'absolute',
-    left: -20,
-    top: -18,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    transform: [{ rotate: '25deg' }],
-  },
-  searchWrap: {
+  locationPill: {
     marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 12,
+  },
+  locationPillTextWrap: { flex: 1, minWidth: 0 },
+  locationPillTitle: { fontSize: 13, fontWeight: '800' },
+  locationPillSub: { marginTop: 2, fontSize: 12, fontWeight: '600' },
+  searchWrap: {
+    marginTop: 14,
     backgroundColor: 'rgba(255,255,255,0.65)',
     borderRadius: 14,
     paddingHorizontal: 12,
@@ -1273,30 +1207,149 @@ const styles = StyleSheet.create({
     color: '#0B3B8F',
   },
   micBtn: { paddingLeft: 8, paddingVertical: 8 },
-  banner: {
-    marginVertical: 12,
-    borderRadius: 18,
-    padding: 14,
+  paperSectionTitle: {
+    marginTop: 18,
+    marginBottom: 10,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  heroCarouselList: { marginTop: 4, marginHorizontal: -14 },
+  heroSlideCard: {
+    position: 'relative',
+    height: 168,
+    borderRadius: 16,
     overflow: 'hidden',
+    justifyContent: 'flex-end',
   },
-  bannerOverlayLeft: {
-    position: 'absolute',
-    width: 220,
-    height: 220,
-    left: -110,
-    top: -120,
-    borderRadius: 110,
+  heroSlideOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
-  bannerOverlayRight: {
-    position: 'absolute',
-    width: 260,
-    height: 260,
-    right: -130,
-    bottom: -170,
-    borderRadius: 130,
+  heroSlideTextBlock: {
+    padding: 16,
+    zIndex: 2,
   },
-  bannerTitle: { color: '#FFFFFF', fontWeight: '900', fontSize: 18 },
-  bannerSubtitle: { color: '#FFFFFF', marginTop: 4, fontWeight: '700' },
+  heroSlideTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '900' },
+  heroSlideSubtitle: {
+    color: 'rgba(255,255,255,0.92)',
+    marginTop: 6,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  carouselDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  carouselDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#CBD5E1',
+  },
+  paperSection: { marginTop: 4 },
+  paperSectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 18,
+    marginBottom: 10,
+  },
+  viewAllLink: { fontSize: 13, fontWeight: '900' },
+  clearFilterLink: { marginTop: -4, marginBottom: 8 },
+  clearFilterLinkText: { fontSize: 12, fontWeight: '800' },
+  quickGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  quickCell: {
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  quickCellIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickCellLabel: {
+    marginTop: 8,
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  gridEmptyHint: {
+    color: '#64748B',
+    fontWeight: '600',
+    fontSize: 13,
+    marginTop: 4,
+  },
+  gridRowThree: { flexDirection: 'row', justifyContent: 'flex-start' },
+  gridCellTall: {
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+  },
+  gridCellLogoBox: {
+    width: '100%',
+    height: 88,
+    borderRadius: 12,
+    borderWidth: 1,
+    backgroundColor: '#F8FAFC',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gridCellLogoImg: { width: '80%', height: '80%' },
+  gridCellPhoto: { width: '100%', height: '100%' },
+  gridCellEmoji: { fontSize: 28 },
+  gridCellName: {
+    marginTop: 8,
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'center',
+    minHeight: 36,
+  },
+  gridCellCount: {
+    marginTop: 2,
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  stripCarouselList: { marginTop: 4, marginHorizontal: -14 },
+  stripCarouselContent: { paddingHorizontal: 14, paddingVertical: 4 },
+  stripCard: {
+    position: 'relative',
+    height: 100,
+    borderRadius: 14,
+    padding: 12,
+    marginRight: 10,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+  },
+  stripOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.28)',
+  },
+  stripTitle: { color: '#FFFFFF', fontWeight: '900', fontSize: 14, zIndex: 2 },
+  stripSubtitle: {
+    color: 'rgba(255,255,255,0.9)',
+    fontWeight: '600',
+    fontSize: 11,
+    marginTop: 4,
+    zIndex: 2,
+  },
   sectionHeader: {
     marginTop: 14,
     marginBottom: 8,
@@ -1306,99 +1359,6 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 18, fontWeight: '900', color: '#0B3B8F' },
   seeAll: { color: '#1D4ED8', fontWeight: '900' },
-  filterBlock: {
-    marginTop: 12,
-    paddingHorizontal: 2,
-  },
-  filterTitleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  filterTitleRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flexShrink: 1,
-    justifyContent: 'flex-end',
-  },
-  filterTitle: {
-    fontWeight: '900',
-    fontSize: 14,
-  },
-  chipsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingBottom: 4,
-    gap: 10,
-  },
-  categoryBoxesRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingBottom: 8,
-    gap: 4,
-    paddingRight: 8,
-  },
-  categoryBoxTile: {
-    width: 96,
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  categoryBoxImageWrap: {
-    width: 88,
-    height: 88,
-    borderRadius: 14,
-    borderWidth: 1,
-    backgroundColor: 'rgba(248,250,252,0.95)',
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  categoryBoxImage: {
-    width: '100%',
-    height: '100%',
-  },
-  categoryBoxEmoji: {
-    fontSize: 32,
-    lineHeight: 40,
-  },
-  categoryBoxName: {
-    marginTop: 8,
-    fontWeight: '800',
-    fontSize: 11,
-    textAlign: 'center',
-    maxWidth: 96,
-  },
-  categoryBoxCount: {
-    marginTop: 2,
-    fontWeight: '600',
-    fontSize: 10,
-    color: '#64748B',
-    textAlign: 'center',
-  },
-  filterCard: {
-    width: 146,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    backgroundColor: 'rgba(255,255,255,0.6)',
-    paddingVertical: 10,
-    paddingHorizontal: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  filterCardIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(37,99,235,0.14)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  filterCardTitle: { fontWeight: '900', fontSize: 12, maxWidth: 94 },
-  filterCardSub: { fontWeight: '700', fontSize: 11, marginTop: 1 },
   stateText: {
     marginTop: 8,
     fontSize: 12,
