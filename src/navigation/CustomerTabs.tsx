@@ -12,6 +12,7 @@ import HomeScreen from '../features/customer/screens/HomeScreen';
 import OrdersScreen from '../features/customer/screens/OrdersScreen';
 import OrderSuccessScreen from '../features/customer/screens/OrderSuccessScreen';
 import CategoryBrandGridScreen from '../features/customer/screens/CategoryBrandGridScreen';
+import CategoryBrowseScreen from '../features/customer/screens/CategoryBrowseScreen';
 import ProductOverviewScreen from '../features/customer/screens/ProductOverviewScreen';
 import ProfileScreen from '../features/customer/screens/ProfileScreen';
 import SecurityScreen from '../features/customer/screens/SecurityScreen';
@@ -32,10 +33,16 @@ type HomeStackParamList = {
     subCategory?: string;
     /** When set, browse list is limited to this brand */
     brand?: string;
+    /** Admin category subtree (from CategoryBrowse) — ids + names for filtering */
+    categoryFilter?: { ids: string[]; names: string[] };
   };
   CategoryBrandGrid: {
     division: 'fmcg' | 'homeKitchen';
     kind: 'categories' | 'brands';
+  };
+  /** Sidebar categories + product grid (Shop by category → See all). */
+  CategoryBrowse: {
+    division: 'fmcg' | 'homeKitchen';
   };
 };
 
@@ -59,6 +66,10 @@ const HomeStackNavigator = () => {
       <HomeStack.Screen
         name="CategoryBrandGrid"
         component={CategoryBrandGridScreen}
+      />
+      <HomeStack.Screen
+        name="CategoryBrowse"
+        component={CategoryBrowseScreen}
       />
     </HomeStack.Navigator>
   );

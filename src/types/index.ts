@@ -36,6 +36,8 @@ export interface Product {
   /** From API `brand.logoUrl` when brand is a linked entity; used for shop-by-brand tiles. */
   brandLogoUrl?: string;
   subCategory?: string; // e.g. "Cleaning", "Snacks", etc.
+  /** `GET /products` → `category.id` (admin Category row); use for browse filters. */
+  shopCategoryId?: string;
   /** Backend category display name (admin). */
   categoryLabel?: string;
   slug?: string;

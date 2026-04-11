@@ -23,8 +23,27 @@ export type ShopCategoryNode = {
   color?: string | null;
   image_url?: string | null;
   product_count?: number;
+  /** From admin `display_order`; tree is sorted using this when present. */
+  display_order?: number;
   children?: ShopCategoryNode[];
 };
+
+function sortCategoryTreeNodes(nodes: ShopCategoryNode[]): ShopCategoryNode[] {
+  return [...nodes]
+    .sort((a, b) => {
+      const ao = Number(a.display_order ?? 0);
+      const bo = Number(b.display_order ?? 0);
+      if (ao !== bo) return ao - bo;
+      return (a.name || '').localeCompare(b.name || '');
+    })
+    .map(n => ({
+      ...n,
+      children:
+        n.children && n.children.length > 0
+          ? sortCategoryTreeNodes(n.children.filter(Boolean) as ShopCategoryNode[])
+          : n.children,
+    }));
+}
 
 export type ShopCategoryDivision = 'fmcg' | 'homeKitchen';
 
@@ -165,8 +184,7 @@ export const productsApi = createApi({
           }
         }
 
-        merged.sort((a, b) => a.name.localeCompare(b.name));
-        return { data: merged };
+        return { data: sortCategoryTreeNodes(merged) };
       },
     }),
   }),

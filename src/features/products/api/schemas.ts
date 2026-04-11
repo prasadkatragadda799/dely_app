@@ -299,6 +299,14 @@ export const mapProductFromApi = (
     item.category_name ??
     undefined;
 
+  const shopCategoryId =
+    item.category !== null &&
+    typeof item.category === 'object' &&
+    item.category?.id != null &&
+    String(item.category.id).trim() !== ''
+      ? String(item.category.id)
+      : undefined;
+
   const categoryLabel =
     typeof item.category === 'object' && item.category?.name
       ? String(item.category.name)
@@ -355,6 +363,7 @@ export const mapProductFromApi = (
     brand: brandName ? String(brandName) : undefined,
     brandLogoUrl,
     subCategory: subCategory ? String(subCategory) : undefined,
+    shopCategoryId,
     categoryLabel,
     slug,
     description,

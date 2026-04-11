@@ -552,9 +552,8 @@ const HomeScreen = () => {
           <View style={styles.filterTitleRight}>
             <TouchableOpacity
               onPress={() =>
-                navigation.navigate('CategoryBrandGrid', {
+                navigation.navigate('CategoryBrowse', {
                   division: activeDivision,
-                  kind: 'categories',
                 })
               }
               activeOpacity={0.9}>
