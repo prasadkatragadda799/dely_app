@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -10,6 +11,7 @@ import { defaultPriceTier } from '../../../utils/productPricing';
 import { useAppSelector } from '../../../hooks/redux';
 
 const WishlistScreen = () => {
+  const navigation = useNavigation();
   const { data: products = [] } = useGetProductsQuery();
   const { productIds, toggle } = useWishlist();
   const { add } = useCart();
@@ -29,6 +31,16 @@ const WishlistScreen = () => {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 12 }]}>
+      {navigation.canGoBack() ? (
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backLink}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          activeOpacity={0.85}>
+          <Icon name="chevron-left" size={26} color={primary} />
+          <Text style={[styles.backLinkText, { color: primary }]}>Back</Text>
+        </TouchableOpacity>
+      ) : null}
       <View style={[styles.headerCard, { borderColor: `${primary}33` }]}>
         <View>
           <Text style={styles.title}>My Wishlist</Text>
@@ -101,6 +113,14 @@ const WishlistScreen = () => {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F8FAFC', paddingHorizontal: 14 },
+  backLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginBottom: 10,
+    gap: 2,
+  },
+  backLinkText: { fontSize: 16, fontWeight: '800' },
   headerCard: {
     borderWidth: 1,
     backgroundColor: '#FFFFFF',

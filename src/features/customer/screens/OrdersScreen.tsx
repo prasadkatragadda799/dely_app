@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -102,6 +103,7 @@ const formatDate = (iso?: string) => {
 };
 
 const OrdersScreen = () => {
+  const navigation = useNavigation();
   const { alert: appAlert, confirm } = useAppAlert();
   const homeDivision = useAppSelector(state => state.homeDivision.division);
   const isHomeKitchen = homeDivision === 'homeKitchen';
@@ -200,6 +202,16 @@ const OrdersScreen = () => {
         ]}
         refreshControl={<RefreshControl refreshing={isFetching && !isLoading} onRefresh={refetch} />}
         showsVerticalScrollIndicator={false}>
+        {navigation.canGoBack() ? (
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backLink}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            activeOpacity={0.85}>
+            <Icon name="chevron-left" size={26} color={primary} />
+            <Text style={[styles.backLinkText, { color: primary }]}>Back</Text>
+          </TouchableOpacity>
+        ) : null}
         <View style={styles.header}>
           <Text style={styles.title}>My Orders</Text>
           <Text style={styles.subtitle}>Track your order progress in real time</Text>
@@ -416,6 +428,14 @@ const OrdersScreen = () => {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F1F5F9' },
   content: { paddingHorizontal: 14 },
+  backLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginBottom: 10,
+    gap: 2,
+  },
+  backLinkText: { fontSize: 16, fontWeight: '800' },
   header: { marginBottom: 8 },
   title: { fontSize: 26, fontWeight: '900', color: '#0F172A' },
   subtitle: { marginTop: 4, color: '#475569', fontWeight: '600' },
