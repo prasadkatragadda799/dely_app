@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Modal,
   RefreshControl,
@@ -20,6 +19,7 @@ import {
   useGetOrderInvoiceQuery,
   useGetOrdersQuery,
 } from '../../../services/api/mobileApi';
+import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
 
 type UiOrder = {
   id: string;
@@ -102,6 +102,7 @@ const formatDate = (iso?: string) => {
 };
 
 const OrdersScreen = () => {
+  const { alert: appAlert, confirm } = useAppAlert();
   const homeDivision = useAppSelector(state => state.homeDivision.division);
   const isHomeKitchen = homeDivision === 'homeKitchen';
   const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
@@ -159,36 +160,35 @@ const OrdersScreen = () => {
     ? formatDate(invoice.invoice_date)
     : 'Date not available';
 
-  const confirmCancelOrder = (order: UiOrder) => {
-    Alert.alert(
-      'Cancel order?',
-      `Cancel order #${(order.orderNumber ?? order.id).slice(-12)}? This cannot be undone.`,
-      [
-        { text: 'Keep order', style: 'cancel' },
-        {
-          text: 'Cancel order',
-          style: 'destructive',
-          onPress: async () => {
-            setCancellingOrderId(order.id);
-            try {
-              await cancelOrder({ orderId: order.id }).unwrap();
-              Alert.alert('Order cancelled', 'Your order has been cancelled.');
-            } catch (err: unknown) {
-              const msg =
-                typeof err === 'object' &&
-                err !== null &&
-                'data' in err &&
-                typeof (err as { data?: { message?: string } }).data?.message === 'string'
-                  ? (err as { data: { message: string } }).data.message
-                  : 'Could not cancel this order. It may already be on the way.';
-              Alert.alert('Unable to cancel', msg);
-            } finally {
-              setCancellingOrderId(null);
-            }
-          },
-        },
-      ],
-    );
+  const confirmCancelOrder = async (order: UiOrder) => {
+    const ok = await confirm({
+      title: 'Cancel order?',
+      message: `Cancel order #${(order.orderNumber ?? order.id).slice(-12)}? This cannot be undone.`,
+      confirmLabel: 'Cancel order',
+      cancelLabel: 'Keep order',
+      destructive: true,
+    });
+    if (!ok) return;
+
+    setCancellingOrderId(order.id);
+    try {
+      await cancelOrder({ orderId: order.id }).unwrap();
+      await appAlert({
+        title: 'Order cancelled',
+        message: 'Your order has been cancelled.',
+      });
+    } catch (err: unknown) {
+      const msg =
+        typeof err === 'object' &&
+        err !== null &&
+        'data' in err &&
+        typeof (err as { data?: { message?: string } }).data?.message === 'string'
+          ? (err as { data: { message: string } }).data.message
+          : 'Could not cancel this order. It may already be on the way.';
+      await appAlert({ title: 'Unable to cancel', message: msg });
+    } finally {
+      setCancellingOrderId(null);
+    }
   };
 
   return (

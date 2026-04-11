@@ -63,6 +63,8 @@ type CartAddBody = {
   quantity: number;
   price_option_key?: string;
   priceOptionKey?: string;
+  /** When set, POST response matches GET /cart for that tab (fmcg vs homeKitchen). */
+  cartDivision?: 'fmcg' | 'homeKitchen';
 };
 type CartUpdateBody = CartItemIdParam & { quantity: number };
 
@@ -399,7 +401,19 @@ export const mobileApi = createApi({
       providesTags: ['Cart'],
     }),
     addToCartApi: builder.mutation<ApiEnvelope<unknown>, CartAddBody>({
-      query: body => ({ url: '/cart', method: 'POST', body }),
+      query: body => {
+        const { cartDivision, ...rest } = body;
+        const slug =
+          cartDivision === 'homeKitchen'
+            ? 'kitchen'
+            : cartDivision === 'fmcg'
+              ? 'fmcg'
+              : null;
+        const suffix = slug
+          ? `?division_slug=${encodeURIComponent(slug)}`
+          : '';
+        return { url: `/cart${suffix}`, method: 'POST', body: rest };
+      },
       invalidatesTags: ['Cart'],
     }),
     clearCartApi: builder.mutation<ApiEnvelope<unknown>, void>({

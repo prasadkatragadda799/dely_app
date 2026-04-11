@@ -1,13 +1,5 @@
 import React, { useMemo } from 'react';
-import {
-  Alert,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,6 +13,7 @@ import {
   useSubmitKycMutation,
 } from '../../../services/api/mobileApi';
 import type { BusinessProfile } from '../businessProfileSlice';
+import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
 
 function KycDocTile({ uri, label }: { uri?: string; label: string }) {
   return (
@@ -48,6 +41,7 @@ function hasAnyAddress(bp: BusinessProfile) {
 }
 
 const ProfileScreen = () => {
+  const { alert: appAlert, confirm } = useAppAlert();
   const { user, logout } = useAuth();
   const insets = useSafeAreaInsets();
   const navigation =
@@ -80,17 +74,21 @@ const ProfileScreen = () => {
 
   const handleSubmitKyc = async () => {
     if (!business) {
-      Alert.alert('Business details missing', 'Please complete your registration first.');
+      await appAlert({
+        title: 'Business details missing',
+        message: 'Please complete your registration first.',
+      });
       return;
     }
 
     // Backend expects 14 digits for FSSAI; app currently collects this as `fmcgNumber`.
     const fssaiDigits = (business.fmcgNumber ?? '').toString().replace(/\D/g, '');
     if (fssaiDigits.length !== 14) {
-      Alert.alert(
-        'Invalid FSSAI number',
-        'FSSAI must be exactly 14 digits. Please check your “FMCG number” field.',
-      );
+      await appAlert({
+        title: 'Invalid FSSAI number',
+        message:
+          'FSSAI must be exactly 14 digits. Please check your “FMCG number” field.',
+      });
       return;
     }
 
@@ -106,14 +104,17 @@ const ProfileScreen = () => {
       }).unwrap();
 
       await refetchKyc();
-      Alert.alert('KYC submitted', 'Your verification is now under review.');
+      await appAlert({
+        title: 'KYC submitted',
+        message: 'Your verification is now under review.',
+      });
     } catch (e: any) {
       const msg =
         e?.data?.message ??
         e?.error ??
         e?.data?.detail ??
         'Failed to submit KYC. Please try again.';
-      Alert.alert('KYC submit failed', msg);
+      await appAlert({ title: 'KYC submit failed', message: String(msg) });
     }
   };
 
@@ -121,24 +122,27 @@ const ProfileScreen = () => {
     try {
       await skipKycApi().unwrap();
       await refetchKyc();
-      Alert.alert('KYC skipped', 'You can complete KYC later from your profile.');
+      await appAlert({
+        title: 'KYC skipped',
+        message: 'You can complete KYC later from your profile.',
+      });
     } catch (e: any) {
       const msg = e?.data?.message ?? e?.error ?? 'Failed to skip KYC.';
-      Alert.alert('KYC skip failed', msg);
+      await appAlert({ title: 'KYC skip failed', message: String(msg) });
     }
   };
 
-  const handleLogoutPress = () => {
-    Alert.alert('Log out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Log out',
-        style: 'destructive',
-        onPress: () => {
-          void logout();
-        },
-      },
-    ]);
+  const handleLogoutPress = async () => {
+    const ok = await confirm({
+      title: 'Log out',
+      message: 'Are you sure you want to log out?',
+      confirmLabel: 'Log out',
+      cancelLabel: 'Cancel',
+      destructive: true,
+    });
+    if (ok) {
+      void logout();
+    }
   };
 
   return (

@@ -2,7 +2,6 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -25,6 +24,7 @@ import {
   launchImageLibrary,
   type Asset,
 } from 'react-native-image-picker';
+import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 
@@ -51,6 +51,7 @@ type RegisterForm = {
 };
 
 const RegisterScreen = ({ navigation }: Props) => {
+  const { alert: appAlert } = useAppAlert();
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [selectedRole, setSelectedRole] = useState<UserRole>('customer');
   const [otpVisible, setOtpVisible] = useState(false);
@@ -104,15 +105,19 @@ const RegisterScreen = ({ navigation }: Props) => {
 
   const onSubmit = async (form: RegisterForm) => {
     if (!acceptedTerms) {
-      Alert.alert('Terms required', 'Please accept terms to continue.');
+      await appAlert({
+        title: 'Terms required',
+        message: 'Please accept terms to continue.',
+      });
       return;
     }
 
     if (selectedRole === 'delivery') {
-      Alert.alert(
-        'Delivery registration unavailable',
-        'Delivery partners are created by admin. Please use “Continue as Partner” to login, or contact support.',
-      );
+      await appAlert({
+        title: 'Delivery registration unavailable',
+        message:
+          'Delivery partners are created by admin. Please use “Continue as Partner” to login, or contact support.',
+      });
       return;
     }
 
@@ -132,10 +137,11 @@ const RegisterScreen = ({ navigation }: Props) => {
         !shopImageUri ||
         !userIdUri
       ) {
-        Alert.alert(
-          'Complete your profile',
-          'Address, business name, GST number, FMCG (FSSAI) number, uploads for GST certificate, FSSAI license, Udyam registration, trade certificate, shop photo, and user ID are required.',
-        );
+        await appAlert({
+          title: 'Complete your profile',
+          message:
+            'Address, business name, GST number, FMCG (FSSAI) number, uploads for GST certificate, FSSAI license, Udyam registration, trade certificate, shop photo, and user ID are required.',
+        });
         return;
       }
     }
@@ -181,9 +187,15 @@ const RegisterScreen = ({ navigation }: Props) => {
 
       setPendingForm({ ...enrichedForm, requestId: next.requestId });
       setOtpVisible(true);
-      Alert.alert('OTP Sent', 'Check your phone for the verification code.');
+      await appAlert({
+        title: 'OTP sent',
+        message: 'Check your phone for the verification code.',
+      });
     } catch (e: unknown) {
-      Alert.alert('Registration failed', getApiErrorMessage(e));
+      await appAlert({
+        title: 'Registration failed',
+        message: getApiErrorMessage(e),
+      });
     }
   };
 
@@ -204,7 +216,10 @@ const RegisterScreen = ({ navigation }: Props) => {
         role: selectedRole,
       });
     } catch (e: unknown) {
-      Alert.alert('OTP verification failed', getApiErrorMessage(e));
+      await appAlert({
+        title: 'OTP verification failed',
+        message: getApiErrorMessage(e),
+      });
       return;
     }
     setOtpVisible(false);

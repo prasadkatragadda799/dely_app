@@ -2,6 +2,8 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   FlatList,
   Image,
+  PermissionsAndroid,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,7 +12,6 @@ import {
   View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { Alert, PermissionsAndroid, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -29,6 +30,7 @@ import Voice, {
   VOICE_NOT_AVAILABLE_MESSAGE,
 } from '../../../utils/voice';
 import { defaultPriceTier } from '../../../utils/productPricing';
+import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
 
 type DivisionKey = 'fmcg' | 'homeKitchen';
 
@@ -42,6 +44,7 @@ const divisions: Array<{ key: DivisionKey; label: string; icon: string }> = [
 ];
 
 const HomeScreen = () => {
+  const { alert: appAlert } = useAppAlert();
   const navigation = useNavigation<any>();
   const dispatch = useAppDispatch();
   const { data: allProducts = [], isLoading: isProductsLoading, isError: isProductsError } = useGetProductsQuery();
@@ -177,10 +180,10 @@ const HomeScreen = () => {
 
     Voice.onSpeechError = e => {
       setIsListening(false);
-      Alert.alert(
-        'Voice Search',
-        e.error?.message ?? 'Could not recognize speech',
-      );
+      void appAlert({
+        title: 'Voice search',
+        message: e.error?.message ?? 'Could not recognize speech',
+      });
     };
 
     Voice.onSpeechEnd = () => setIsListening(false);
@@ -192,7 +195,7 @@ const HomeScreen = () => {
         // ignore
       }
     };
-  }, []);
+  }, [appAlert]);
 
   const fetchCurrentLocation = useCallback(async () => {
     const fallbackLocationText = 'Location unavailable';
@@ -447,7 +450,10 @@ const HomeScreen = () => {
           onPress={async () => {
             try {
               if (!isVoiceSearchAvailable) {
-                Alert.alert('Voice Search', VOICE_NOT_AVAILABLE_MESSAGE);
+                await appAlert({
+                  title: 'Voice search',
+                  message: VOICE_NOT_AVAILABLE_MESSAGE,
+                });
                 return;
               }
 
@@ -456,10 +462,11 @@ const HomeScreen = () => {
                   PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
                 );
                 if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-                  Alert.alert(
-                    'Microphone permission',
-                    'Please allow microphone access to use voice search.',
-                  );
+                  await appAlert({
+                    title: 'Microphone permission',
+                    message:
+                      'Please allow microphone access to use voice search.',
+                  });
                   return;
                 }
               }
@@ -475,10 +482,10 @@ const HomeScreen = () => {
               await Voice.start('en-US');
             } catch (err: any) {
               setIsListening(false);
-              Alert.alert(
-                'Voice Search',
-                err?.message ?? 'Could not start voice search',
-              );
+              await appAlert({
+                title: 'Voice search',
+                message: err?.message ?? 'Could not start voice search',
+              });
             }
           }}
           style={styles.micBtn}

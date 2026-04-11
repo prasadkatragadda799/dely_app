@@ -34,13 +34,18 @@ export const useCart = () => {
       const normDiv = divisionSlug.replace(/-/g, '');
       const normCat = categorySlug.replace(/-/g, '');
       const grocerySlugs = new Set(['', 'default', 'grocery', 'fmcg']);
+      const categoryImpliesHomeKitchen =
+        normCat === 'homecare' ||
+        normCat.includes('kitchen') ||
+        categorySlug.startsWith('home-');
       const explicitHomeKitchen =
         normDiv === 'kitchen' ||
         normDiv === 'home' ||
         normDiv === 'homekitchen' ||
         normCat === 'kitchen' ||
         normCat === 'home' ||
-        normCat === 'homekitchen';
+        normCat === 'homekitchen' ||
+        categoryImpliesHomeKitchen;
       const nonGroceryDivision =
         Boolean(divisionSlug) && !grocerySlugs.has(divisionSlug);
       return explicitHomeKitchen || nonGroceryDivision;
@@ -72,6 +77,10 @@ export const useCart = () => {
       const normDiv = divisionSlug.replace(/-/g, '');
       const normCat = categorySlug.replace(/-/g, '');
       const grocerySlugs = new Set(['', 'default', 'grocery', 'fmcg']);
+      const categoryImpliesHomeKitchen =
+        normCat === 'homecare' ||
+        normCat.includes('kitchen') ||
+        categorySlug.startsWith('home-');
       const isHk =
         normCat === 'home' ||
         normDiv === 'home' ||
@@ -79,9 +88,13 @@ export const useCart = () => {
         normDiv === 'kitchen' ||
         normDiv === 'homekitchen' ||
         normCat === 'homekitchen' ||
+        categoryImpliesHomeKitchen ||
         (Boolean(divisionSlug) && !grocerySlugs.has(divisionSlug));
       const productCategory: Product['category'] = isHk
-        ? normCat === 'home' || normDiv === 'home'
+        ? normCat === 'home' ||
+            normDiv === 'home' ||
+            normCat === 'homecare' ||
+            categorySlug.startsWith('home-')
           ? 'home'
           : 'kitchen'
         : 'fmcg';
@@ -150,6 +163,7 @@ export const useCart = () => {
           product_id: product.id,
           quantity: safeQuantity,
           price_option_key: tier,
+          cartDivision: homeDivision,
         })
           .unwrap()
           .catch((e: any) => {
@@ -215,6 +229,14 @@ export const useCart = () => {
         });
       },
     }),
-    [addToCartApi, clearCartApi, deleteCartItemApi, items, total, updateCartItemApi],
+    [
+      addToCartApi,
+      clearCartApi,
+      deleteCartItemApi,
+      homeDivision,
+      items,
+      total,
+      updateCartItemApi,
+    ],
   );
 };

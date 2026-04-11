@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Toast from 'react-native-toast-message';
@@ -9,8 +9,10 @@ import {
   useGetDeliveryMeQuery,
   useUpdateDeliveryMeMutation,
 } from '../../../services/api/mobileApi';
+import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
 
 const DeliveryProfileScreen = () => {
+  const { alert: appAlert, confirm } = useAppAlert();
   const { user, logout } = useAuth();
   const tabBarHeight = useBottomTabBarHeight();
   const { data: meRes } = useGetDeliveryMeQuery();
@@ -58,14 +60,17 @@ const DeliveryProfileScreen = () => {
         vehicleNumber: vehicleNumber.trim() || undefined,
         vehicleType: vehicleType.trim() || undefined,
       }).unwrap();
-      Alert.alert('Success', 'Profile updated successfully');
+      await appAlert({
+        title: 'Success',
+        message: 'Profile updated successfully',
+      });
       setIsEditing(false);
     } catch (error) {
       const message =
         (error as { data?: { detail?: string; message?: string } })?.data?.detail ||
         (error as { data?: { detail?: string; message?: string } })?.data?.message ||
         'Failed to update profile';
-      Alert.alert('Update failed', message);
+      await appAlert({ title: 'Update failed', message });
     }
   };
 
@@ -78,24 +83,17 @@ const DeliveryProfileScreen = () => {
     setIsEditing(false);
   };
 
-  const handleLogoutPress = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
-      {
-        text: 'Cancel',
-        style: 'cancel',
-        onPress: () => {
-          Toast.show({ type: 'info', text1: 'Logout cancelled' });
-        },
-      },
-      {
-        text: 'Logout',
-        style: 'destructive',
-        onPress: async () => {
-          await logout();
-          Toast.show({ type: 'success', text1: 'Logged out successfully' });
-        },
-      },
-    ]);
+  const handleLogoutPress = async () => {
+    const ok = await confirm({
+      title: 'Log out',
+      message: 'Are you sure you want to log out?',
+      confirmLabel: 'Log out',
+      cancelLabel: 'Cancel',
+      destructive: true,
+    });
+    if (!ok) return;
+    await logout();
+    Toast.show({ type: 'success', text1: 'Logged out successfully' });
   };
 
   return (

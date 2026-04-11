@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   Image,
   ScrollView,
   StyleSheet,
@@ -14,6 +13,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useAppDispatch, useAppSelector } from '../../../hooks/redux';
 import { setBusinessProfile } from '../businessProfileSlice';
 import { launchImageLibrary, type Asset } from 'react-native-image-picker';
+import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
 
 function KycDocPickCard({
   uri,
@@ -43,6 +43,7 @@ function KycDocPickCard({
 }
 
 const EditInfoScreen = () => {
+  const { alert: appAlert } = useAppAlert();
   const { user } = useAuth();
   const dispatch = useAppDispatch();
   const business = useAppSelector(state => state.businessProfile.profile);
@@ -146,14 +147,14 @@ const EditInfoScreen = () => {
     );
   };
 
-  const onSave = () => {
+  const onSave = async () => {
     if (!canSave) {
-      Alert.alert(
-        'Complete your profile',
-        validationIssues.length
+      await appAlert({
+        title: 'Complete your profile',
+        message: validationIssues.length
           ? validationIssues.map(s => `• ${s}`).join('\n')
           : 'Please fill all required fields.',
-      );
+      });
       return;
     }
 
@@ -181,7 +182,10 @@ const EditInfoScreen = () => {
       }),
     );
 
-    Alert.alert('Saved', 'KYC details updated. Resubmit KYC from your Profile screen.');
+    await appAlert({
+      title: 'Saved',
+      message: 'KYC details updated. Resubmit KYC from your Profile screen.',
+    });
   };
 
   return (
