@@ -56,6 +56,7 @@ const HomeScreen = () => {
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [activeBrand, setActiveBrand] = useState<string>('All');
+  const [activeCompany, setActiveCompany] = useState<string>('All');
   const [isListening, setIsListening] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
 
@@ -92,8 +93,20 @@ const HomeScreen = () => {
         ? byCategory
         : byCategory.filter(p => p.brand === activeBrand);
 
-    return byBrand;
-  }, [activeDivision, allProducts, query, activeCategory, activeBrand]);
+    const byCompany =
+      activeCompany === 'All'
+        ? byBrand
+        : byBrand.filter(p => p.companyName === activeCompany);
+
+    return byCompany;
+  }, [
+    activeDivision,
+    allProducts,
+    query,
+    activeCategory,
+    activeBrand,
+    activeCompany,
+  ]);
 
   const divisionProducts = useMemo(() => {
     return activeDivision === 'homeKitchen'
@@ -115,6 +128,15 @@ const HomeScreen = () => {
       if (p.brand) set.add(p.brand);
     });
     return ['All', ...Array.from(set)];
+  }, [divisionProducts]);
+
+  const companies = useMemo(() => {
+    const set = new Set<string>();
+    divisionProducts.forEach(p => {
+      const n = p.companyName?.trim();
+      if (n) set.add(n);
+    });
+    return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))];
   }, [divisionProducts]);
 
   const categoryCountMap = useMemo(() => {
@@ -155,9 +177,37 @@ const HomeScreen = () => {
     return map;
   }, [divisionProducts]);
 
+  const companyCountMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    divisionProducts.forEach(p => {
+      const key = p.companyName?.trim();
+      if (!key) return;
+      map[key] = (map[key] || 0) + 1;
+    });
+    return map;
+  }, [divisionProducts]);
+
+  const companyLogoByName = useMemo(() => {
+    const map: Record<string, string> = {};
+    divisionProducts.forEach(p => {
+      const name = p.companyName?.trim();
+      const url = p.companyLogoUrl?.trim();
+      if (name && url && map[name] === undefined) {
+        map[name] = url;
+      }
+    });
+    return map;
+  }, [divisionProducts]);
+
   const showBrandImageBoxes = useMemo(
     () =>
       divisionProducts.some(p => Boolean(String(p.brandLogoUrl ?? '').trim())),
+    [divisionProducts],
+  );
+
+  const showCompanyImageBoxes = useMemo(
+    () =>
+      divisionProducts.some(p => Boolean(String(p.companyLogoUrl ?? '').trim())),
     [divisionProducts],
   );
 
@@ -393,6 +443,7 @@ const HomeScreen = () => {
                   setQuery('');
                   setActiveCategory('All');
                   setActiveBrand('All');
+                  setActiveCompany('All');
                 }}
                 activeOpacity={0.95}>
                 {isActive ? <View style={styles.divisionSheen} /> : null}
@@ -718,9 +769,9 @@ const HomeScreen = () => {
           <View style={styles.filterTitleRight}>
             <TouchableOpacity
               onPress={() =>
-                navigation.navigate('CategoryBrandGrid', {
+                navigation.navigate('CategoryBrowse', {
                   division: activeDivision,
-                  kind: 'brands',
+                  mode: 'brands',
                 })
               }
               activeOpacity={0.9}>
@@ -862,6 +913,173 @@ const HomeScreen = () => {
                         active ? { color: '#FFFFFF' } : { color: primaryText },
                       ]}>
                       {b}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.filterCardSub,
+                        active ? { color: 'rgba(255,255,255,0.9)' } : { color: '#64748B' },
+                      ]}>
+                      {count} products
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
+
+        <View style={[styles.filterTitleRow, { marginTop: 10 }]}>
+          <Text style={[styles.filterTitle, { color: primaryText }]}>
+            Shop by Company
+          </Text>
+          <View style={styles.filterTitleRight}>
+            <TouchableOpacity
+              onPress={() =>
+                navigation.navigate('CategoryBrowse', {
+                  division: activeDivision,
+                  mode: 'companies',
+                })
+              }
+              activeOpacity={0.9}>
+              <Text style={[styles.seeAll, { color: primary }]}>See all</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        {showCompanyImageBoxes ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryBoxesRow}>
+            <TouchableOpacity
+              style={styles.categoryBoxTile}
+              onPress={() => setActiveCompany('All')}
+              activeOpacity={0.95}>
+              <View
+                style={[
+                  styles.categoryBoxImageWrap,
+                  { borderColor: primaryBorder },
+                  activeCompany === 'All' && {
+                    borderColor: primary,
+                    borderWidth: 2,
+                  },
+                ]}>
+                <Icon name="office-building-outline" size={28} color={primary} />
+              </View>
+              <Text
+                numberOfLines={2}
+                style={[styles.categoryBoxName, { color: primaryText }]}>
+                All
+              </Text>
+              <Text style={styles.categoryBoxCount}>
+                {divisionProducts.length} products
+              </Text>
+            </TouchableOpacity>
+            {companies
+              .filter((c): c is string => c !== 'All')
+              .map(c => {
+                const logo = companyLogoByName[c];
+                const count = companyCountMap[c] ?? 0;
+                const active = activeCompany === c;
+                return (
+                  <TouchableOpacity
+                    key={c}
+                    style={styles.categoryBoxTile}
+                    onPress={() => setActiveCompany(c)}
+                    activeOpacity={0.95}>
+                    <View
+                      style={[
+                        styles.categoryBoxImageWrap,
+                        { borderColor: primaryBorder },
+                        active && {
+                          borderColor: primary,
+                          borderWidth: 2,
+                        },
+                      ]}>
+                      {logo ? (
+                        <Image
+                          source={{ uri: logo }}
+                          style={styles.categoryBoxImage}
+                          resizeMode="contain"
+                        />
+                      ) : (
+                        <Icon name="domain" size={26} color={primary} />
+                      )}
+                    </View>
+                    <Text
+                      numberOfLines={2}
+                      style={[styles.categoryBoxName, { color: primaryText }]}>
+                      {c}
+                    </Text>
+                    <Text style={styles.categoryBoxCount}>{count} products</Text>
+                  </TouchableOpacity>
+                );
+              })}
+          </ScrollView>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipsRow}>
+            {companies.map(c => {
+              const active = c === activeCompany;
+              const count =
+                c === 'All' ? divisionProducts.length : companyCountMap[c] ?? 0;
+              const logo = c !== 'All' ? companyLogoByName[c] : undefined;
+              return (
+                <TouchableOpacity
+                  key={c}
+                  onPress={() => {
+                    if (c === 'All') {
+                      setActiveCompany('All');
+                      return;
+                    }
+                    navigation.navigate('ProductOverview', {
+                      division: activeDivision,
+                      company: c,
+                    });
+                  }}
+                  style={[
+                    styles.filterCard,
+                    active && {
+                      backgroundColor: primary,
+                      borderColor: primary,
+                    },
+                  ]}
+                  activeOpacity={0.95}>
+                  <View
+                    style={[
+                      styles.filterCardIconWrap,
+                      active && { backgroundColor: 'rgba(255,255,255,0.22)' },
+                      logo ? { overflow: 'hidden', padding: 2 } : null,
+                    ]}>
+                    {c === 'All' ? (
+                      <Icon
+                        name="office-building-outline"
+                        size={14}
+                        color={active ? '#FFFFFF' : primary}
+                      />
+                    ) : logo ? (
+                      <Image
+                        source={{ uri: logo }}
+                        style={{ width: 24, height: 24 }}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <Icon
+                        name="domain"
+                        size={14}
+                        color={active ? '#FFFFFF' : primary}
+                      />
+                    )}
+                  </View>
+                  <View>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.filterCardTitle,
+                        active ? { color: '#FFFFFF' } : { color: primaryText },
+                      ]}>
+                      {c}
                     </Text>
                     <Text
                       style={[

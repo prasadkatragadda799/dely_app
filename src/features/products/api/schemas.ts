@@ -32,7 +32,10 @@ type ProductApiEntity = {
     | { id?: string; name?: string; logoUrl?: string; logo_url?: string }
     | string
     | null;
-  company?: { id?: string; name?: string; logoUrl?: string } | string | null;
+  company?:
+    | { id?: string; name?: string; logoUrl?: string; logo_url?: string }
+    | string
+    | null;
   category?: { id?: string; name?: string; slug?: string } | null;
   rating?: number | string | null;
   reviewCount?: number | string | null;
@@ -43,7 +46,9 @@ type ProductApiEntity = {
   image?: string;
   image_url?: string;
   thumbnail?: string;
+  /** Store division slug from API when present (preferred for shelf bucket). */
   division?: string;
+  divisionSlug?: string;
   sub_category?: string;
   subCategory?: string;
   category_name?: string;
@@ -304,7 +309,15 @@ export const mapProductFromApi = (
     typeof item.category === 'object' &&
     item.category?.id != null &&
     String(item.category.id).trim() !== ''
-      ? String(item.category.id)
+      ? String(item.category.id).trim()
+      : undefined;
+
+  const shopCategorySlug =
+    item.category !== null &&
+    typeof item.category === 'object' &&
+    item.category?.slug != null &&
+    String(item.category.slug).trim() !== ''
+      ? String(item.category.slug).trim()
       : undefined;
 
   const categoryLabel =
@@ -318,6 +331,12 @@ export const mapProductFromApi = (
       : item.company?.name
         ? String(item.company.name)
         : undefined;
+
+  const companyLogoUrl =
+    typeof item.company === 'object' && item.company !== null
+      ? String(item.company.logoUrl ?? item.company.logo_url ?? '').trim() ||
+        undefined
+      : undefined;
 
   const description =
     item.description != null && String(item.description).trim()
@@ -354,21 +373,29 @@ export const mapProductFromApi = (
     }
   }
 
+  const divisionShelfHintRaw =
+    (typeof item.divisionSlug === 'string' && item.divisionSlug.trim()) ||
+    (typeof item.division === 'string' && item.division.trim())
+      ? String(item.divisionSlug ?? item.division).trim()
+      : undefined;
+
   return {
     id: String(item.id ?? item._id ?? `product-${index}`),
     name: String(item.name ?? item.title ?? 'Unnamed product'),
     image: String(primaryImage ?? ''),
     images: gallery,
-    category: requestedCategory ?? normalizeCategory((item.category as any)?.slug ?? item.division),
+    category: requestedCategory ?? normalizeCategory(divisionShelfHintRaw),
     brand: brandName ? String(brandName) : undefined,
     brandLogoUrl,
     subCategory: subCategory ? String(subCategory) : undefined,
     shopCategoryId,
+    shopCategorySlug,
     categoryLabel,
     slug,
     description,
     specifications,
     companyName,
+    companyLogoUrl,
     stockQuantity,
     isAvailable,
     price,

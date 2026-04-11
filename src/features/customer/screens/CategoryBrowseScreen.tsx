@@ -26,53 +26,123 @@ type DivisionKey = 'fmcg' | 'homeKitchen';
 
 type RouteParams = {
   division: DivisionKey;
+  /** Rail + product grid: `brands` / `companies` match Shop by brand / Shop by company → See all. */
+  mode?: 'categories' | 'brands' | 'companies';
 };
 
 type SortKey = 'relevance' | 'priceAsc' | 'priceDesc';
 
+type CategoryLeaf = {
+  key: string;
+  kind: 'leaf';
+  label: string;
+  /** Every admin Category id in this row’s subtree (node + descendants). */
+  matchCategoryIds: string[];
+  /** Subtree category names — fallback when `shopCategoryId` is missing on a product. */
+  matchNames: string[];
+  /** Subtree category slugs from API — stable vs stray spaces in names. */
+  matchSlugs: string[];
+  imageUrl?: string;
+  icon?: string;
+  count: number;
+};
+
+type BrandLeaf = {
+  key: string;
+  kind: 'leaf';
+  label: string;
+  brandName: string;
+  imageUrl?: string;
+  count: number;
+};
+
+type CompanyLeaf = {
+  key: string;
+  kind: 'leaf';
+  label: string;
+  companyName: string;
+  imageUrl?: string;
+  count: number;
+};
+
 type SidebarItem =
   | { key: string; kind: 'all' }
-  | {
-      key: string;
-      kind: 'leaf';
-      label: string;
-      /** Every admin Category id in this row’s subtree (node + descendants). */
-      matchCategoryIds: string[];
-      /** Subtree category names — fallback when `shopCategoryId` is missing on a product. */
-      matchNames: string[];
-      imageUrl?: string;
-      icon?: string;
-      count: number;
-    };
+  | CategoryLeaf
+  | BrandLeaf
+  | CompanyLeaf;
 
-/** All category ids and display names under `node` (matches admin tree / product.category). */
-function collectSubtreeIdsAndNames(node: ShopCategoryNode): {
+function isCategoryLeaf(item: SidebarItem): item is CategoryLeaf {
+  return item.kind === 'leaf' && 'matchCategoryIds' in item;
+}
+
+function isBrandLeaf(item: SidebarItem): item is BrandLeaf {
+  return item.kind === 'leaf' && 'brandName' in item;
+}
+
+function isCompanyLeaf(item: SidebarItem): item is CompanyLeaf {
+  return item.kind === 'leaf' && 'companyName' in item;
+}
+
+type SubtreeMatchScope = {
   ids: string[];
   names: string[];
-} {
+  slugs: string[];
+};
+
+function normalizeCategoryId(s: string): string {
+  return String(s).trim().toLowerCase();
+}
+
+/** Ids, display names, and slugs under `node` (admin tree / product.category). */
+function collectSubtreeMatchMeta(node: ShopCategoryNode): SubtreeMatchScope {
   const ids: string[] = [];
   const names: string[] = [];
+  const slugs: string[] = [];
   const walk = (n: ShopCategoryNode) => {
     ids.push(String(n.id));
     names.push(n.name);
+    const slug = String(n.slug ?? '').trim();
+    if (slug) {
+      slugs.push(slug);
+    }
     for (const c of (n.children ?? []).filter(Boolean) as ShopCategoryNode[]) {
       walk(c);
     }
   };
   walk(node);
-  return { ids, names };
+  return { ids, names, slugs };
+}
+
+function productMatchesSubtree(p: Product, scope: SubtreeMatchScope): boolean {
+  const idSet = new Set(scope.ids.map(normalizeCategoryId));
+  const pid = p.shopCategoryId ? normalizeCategoryId(p.shopCategoryId) : '';
+  if (pid && idSet.has(pid)) {
+    return true;
+  }
+  const pslug = p.shopCategorySlug?.trim().toLowerCase();
+  if (pslug) {
+    for (const s of scope.slugs) {
+      if (String(s).trim().toLowerCase() === pslug) {
+        return true;
+      }
+    }
+  }
+  const sub = p.subCategory?.trim();
+  if (sub) {
+    for (const n of scope.names) {
+      if (n.trim() === sub) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function countProductsForSubtree(
   products: Product[],
-  ids: Set<string>,
-  names: Set<string>,
+  scope: SubtreeMatchScope,
 ): number {
-  return products.filter(
-    p =>
-      (p.shopCategoryId != null && ids.has(p.shopCategoryId)) ||
-      (p.subCategory != null && names.has(p.subCategory)),
-  ).length;
+  return products.filter(p => productMatchesSubtree(p, scope)).length;
 }
 
 /**
@@ -83,23 +153,22 @@ function buildSidebarFromAdminTree(
   roots: ShopCategoryNode[],
   products: Product[],
   showImages: boolean,
-): SidebarItem[] {
-  const rows: SidebarItem[] = [];
+): CategoryLeaf[] {
+  const rows: CategoryLeaf[] = [];
   const walk = (node: ShopCategoryNode) => {
-    const { ids, names } = collectSubtreeIdsAndNames(node);
-    const idSet = new Set(ids);
-    const nameSet = new Set(names);
+    const meta = collectSubtreeMatchMeta(node);
     rows.push({
       key: `cat-${node.id}`,
       kind: 'leaf',
       label: node.name,
-      matchCategoryIds: ids,
-      matchNames: names,
+      matchCategoryIds: meta.ids,
+      matchNames: meta.names,
+      matchSlugs: meta.slugs,
       imageUrl: showImages
         ? String(node.image_url ?? '').trim() || undefined
         : undefined,
       icon: node.icon ?? undefined,
-      count: countProductsForSubtree(products, idSet, nameSet),
+      count: countProductsForSubtree(products, meta),
     });
     const children = (node.children ?? []).filter(Boolean) as ShopCategoryNode[];
     for (const ch of children) {
@@ -112,15 +181,12 @@ function buildSidebarFromAdminTree(
   return rows;
 }
 
-function productMatchesSidebarLeaf(p: Product, leaf: SidebarItem): boolean {
-  if (leaf.kind !== 'leaf') return false;
-  if (p.shopCategoryId && leaf.matchCategoryIds.includes(p.shopCategoryId)) {
-    return true;
-  }
-  if (p.subCategory && leaf.matchNames.includes(p.subCategory)) {
-    return true;
-  }
-  return false;
+function productMatchesCategoryLeaf(p: Product, leaf: CategoryLeaf): boolean {
+  return productMatchesSubtree(p, {
+    ids: leaf.matchCategoryIds,
+    names: leaf.matchNames,
+    slugs: leaf.matchSlugs,
+  });
 }
 
 function effectivePrice(p: Product): number {
@@ -157,6 +223,28 @@ const sideThumbStyles = StyleSheet.create({
   image: { width: '100%', height: '100%' },
 });
 
+/** Brand logos in the rail use contain so wide marks stay readable. */
+function SidebarBrandLogo({
+  uri,
+  accent,
+}: {
+  uri: string;
+  accent: string;
+}) {
+  const [failed, setFailed] = React.useState(false);
+  if (failed || !uri.trim()) {
+    return <Icon name="tag-outline" size={18} color={accent} />;
+  }
+  return (
+    <Image
+      source={{ uri }}
+      style={sideThumbStyles.image}
+      resizeMode="contain"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 const CategoryBrowseScreen = () => {
   const navigation = useNavigation<any>();
   const { add } = useCart();
@@ -165,14 +253,26 @@ const CategoryBrowseScreen = () => {
   const p = route.params as Partial<RouteParams> | undefined;
   const division: DivisionKey =
     p?.division === 'homeKitchen' ? 'homeKitchen' : 'fmcg';
+  const browseMode: 'categories' | 'brands' | 'companies' =
+    p?.mode === 'companies'
+      ? 'companies'
+      : p?.mode === 'brands'
+        ? 'brands'
+        : 'categories';
 
   const { data: allProducts = [] } = useGetProductsQuery();
-  const { data: categoryTreeRoots = [] } = useGetCategoryTreeQuery(division);
+  const { data: categoryTreeRoots = [] } = useGetCategoryTreeQuery(division, {
+    skip: browseMode !== 'categories',
+  });
 
   const [selectedKey, setSelectedKey] = useState<string>('all');
   const [sortKey, setSortKey] = useState<SortKey>('relevance');
   const [priceDropOnly, setPriceDropOnly] = useState(false);
   const [popularOnly, setPopularOnly] = useState(false);
+
+  React.useEffect(() => {
+    setSelectedKey('all');
+  }, [browseMode, division]);
 
   const isHomeKitchen = division === 'homeKitchen';
   const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
@@ -193,6 +293,49 @@ const CategoryBrowseScreen = () => {
       : allProducts.filter(p => p.category === 'fmcg');
   }, [division, allProducts]);
 
+  const brandCountMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    divisionProducts.forEach(pr => {
+      const key = pr.brand || 'Other';
+      map[key] = (map[key] || 0) + 1;
+    });
+    return map;
+  }, [divisionProducts]);
+
+  const brandLogoByName = useMemo(() => {
+    const map: Record<string, string> = {};
+    divisionProducts.forEach(pr => {
+      const name = pr.brand?.trim();
+      const url = pr.brandLogoUrl?.trim();
+      if (name && url && map[name] === undefined) {
+        map[name] = url;
+      }
+    });
+    return map;
+  }, [divisionProducts]);
+
+  const companyCountMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    divisionProducts.forEach(pr => {
+      const key = pr.companyName?.trim();
+      if (!key) return;
+      map[key] = (map[key] || 0) + 1;
+    });
+    return map;
+  }, [divisionProducts]);
+
+  const companyLogoByName = useMemo(() => {
+    const map: Record<string, string> = {};
+    divisionProducts.forEach(pr => {
+      const name = pr.companyName?.trim();
+      const url = pr.companyLogoUrl?.trim();
+      if (name && url && map[name] === undefined) {
+        map[name] = url;
+      }
+    });
+    return map;
+  }, [divisionProducts]);
+
   const categoryCountMap = useMemo(() => {
     const map: Record<string, number> = {};
     divisionProducts.forEach(p => {
@@ -211,6 +354,45 @@ const CategoryBrowseScreen = () => {
 
   const sidebarItems: SidebarItem[] = useMemo(() => {
     const allItem: SidebarItem = { key: 'all', kind: 'all' };
+    if (browseMode === 'brands') {
+      const names = new Set<string>();
+      divisionProducts.forEach(pr => {
+        if (pr.brand) names.add(pr.brand);
+      });
+      return [
+        allItem,
+        ...Array.from(names)
+          .sort((a, b) => a.localeCompare(b))
+          .map(name => ({
+            key: `brand-${name}`,
+            kind: 'leaf' as const,
+            label: name,
+            brandName: name,
+            count: brandCountMap[name] ?? 0,
+            imageUrl: brandLogoByName[name],
+          })),
+      ];
+    }
+    if (browseMode === 'companies') {
+      const names = new Set<string>();
+      divisionProducts.forEach(pr => {
+        const n = pr.companyName?.trim();
+        if (n) names.add(n);
+      });
+      return [
+        allItem,
+        ...Array.from(names)
+          .sort((a, b) => a.localeCompare(b))
+          .map(name => ({
+            key: `company-${name}`,
+            kind: 'leaf' as const,
+            label: name,
+            companyName: name,
+            count: companyCountMap[name] ?? 0,
+            imageUrl: companyLogoByName[name],
+          })),
+      ];
+    }
     if (categoryTreeRoots.length > 0) {
       return [
         allItem,
@@ -222,8 +404,8 @@ const CategoryBrowseScreen = () => {
       ];
     }
     const names = new Set<string>();
-    divisionProducts.forEach(p => {
-      if (p.subCategory) names.add(p.subCategory);
+    divisionProducts.forEach(pr => {
+      if (pr.subCategory) names.add(pr.subCategory);
     });
     return [
       allItem,
@@ -235,27 +417,69 @@ const CategoryBrowseScreen = () => {
           label: name,
           matchCategoryIds: [] as string[],
           matchNames: [name],
+          matchSlugs: [] as string[],
           count: categoryCountMap[name] ?? 0,
         })),
     ];
-  }, [categoryTreeRoots, categoryCountMap, divisionProducts, showCategoryImages]);
+  }, [
+    browseMode,
+    brandCountMap,
+    brandLogoByName,
+    companyCountMap,
+    companyLogoByName,
+    categoryTreeRoots,
+    categoryCountMap,
+    divisionProducts,
+    showCategoryImages,
+  ]);
 
-  const selectedLeaf = useMemo(() => {
+  const selectedLeaf = useMemo((): CategoryLeaf | BrandLeaf | CompanyLeaf | null => {
     if (selectedKey === 'all') return null;
     const item = sidebarItems.find(
       i => i.key === selectedKey && i.kind === 'leaf',
     );
-    return item && item.kind === 'leaf' ? item : null;
+    if (!item) return null;
+    return isCategoryLeaf(item) ||
+      isBrandLeaf(item) ||
+      isCompanyLeaf(item)
+      ? item
+      : null;
   }, [selectedKey, sidebarItems]);
 
   const headerTitle =
     selectedLeaf?.label ??
-    (isHomeKitchen ? 'Home & Kitchen' : 'Categories');
+    (browseMode === 'brands'
+      ? 'Brands'
+      : browseMode === 'companies'
+        ? 'Companies'
+        : isHomeKitchen
+          ? 'Home & Kitchen'
+          : 'Categories');
 
   const baseFiltered = useMemo(() => {
-    if (!selectedLeaf) return divisionProducts;
-    return divisionProducts.filter(p => productMatchesSidebarLeaf(p, selectedLeaf));
-  }, [divisionProducts, selectedLeaf]);
+    if (browseMode === 'brands') {
+      if (!selectedLeaf || !isBrandLeaf(selectedLeaf)) {
+        return divisionProducts;
+      }
+      return divisionProducts.filter(
+        pr => pr.brand === selectedLeaf.brandName,
+      );
+    }
+    if (browseMode === 'companies') {
+      if (!selectedLeaf || !isCompanyLeaf(selectedLeaf)) {
+        return divisionProducts;
+      }
+      return divisionProducts.filter(
+        pr => pr.companyName === selectedLeaf.companyName,
+      );
+    }
+    if (!selectedLeaf || !isCategoryLeaf(selectedLeaf)) {
+      return divisionProducts;
+    }
+    return divisionProducts.filter(p =>
+      productMatchesCategoryLeaf(p, selectedLeaf),
+    );
+  }, [browseMode, divisionProducts, selectedLeaf]);
 
   const filteredProducts = useMemo(() => {
     let list = baseFiltered;
@@ -554,8 +778,12 @@ const CategoryBrowseScreen = () => {
                     !active && { borderColor: '#E2E8F0' },
                   ]}>
                   {item.imageUrl ? (
-                    <SidebarCategoryImage uri={item.imageUrl} accent={primary} />
-                  ) : item.icon ? (
+                    isBrandLeaf(item) || isCompanyLeaf(item) ? (
+                      <SidebarBrandLogo uri={item.imageUrl} accent={primary} />
+                    ) : (
+                      <SidebarCategoryImage uri={item.imageUrl} accent={primary} />
+                    )
+                  ) : isCategoryLeaf(item) && item.icon ? (
                     <Text style={styles.sideEmoji}>{item.icon}</Text>
                   ) : (
                     <Icon name="tag-outline" size={18} color={primary} />
@@ -591,20 +819,42 @@ const CategoryBrowseScreen = () => {
                 product={item}
                 onAdd={p => add(p, 1, defaultPriceTier(p))}
                 accentColor={primary}
-                onCardPress={() =>
+                onCardPress={() => {
+                  if (browseMode === 'brands') {
+                    navigation.navigate('ProductOverview', {
+                      division,
+                      productId: item.id,
+                      ...(selectedLeaf && isBrandLeaf(selectedLeaf)
+                        ? { brand: selectedLeaf.brandName }
+                        : {}),
+                    });
+                    return;
+                  }
+                  if (browseMode === 'companies') {
+                    navigation.navigate('ProductOverview', {
+                      division,
+                      productId: item.id,
+                      ...(selectedLeaf && isCompanyLeaf(selectedLeaf)
+                        ? { company: selectedLeaf.companyName }
+                        : {}),
+                    });
+                    return;
+                  }
                   navigation.navigate('ProductOverview', {
                     division,
                     productId: item.id,
-                    subCategory: selectedLeaf?.label,
-                    categoryFilter:
-                      selectedLeaf && selectedLeaf.kind === 'leaf'
-                        ? {
+                    ...(selectedLeaf && isCategoryLeaf(selectedLeaf)
+                      ? {
+                          subCategory: selectedLeaf.label,
+                          categoryFilter: {
                             ids: selectedLeaf.matchCategoryIds,
                             names: selectedLeaf.matchNames,
-                          }
-                        : undefined,
-                  })
-                }
+                            slugs: selectedLeaf.matchSlugs,
+                          },
+                        }
+                      : {}),
+                  });
+                }}
               />
             )}
             ListEmptyComponent={
@@ -614,7 +864,11 @@ const CategoryBrowseScreen = () => {
                   { width: Math.max(200, windowWidth - sidebarWidth) },
                 ]}>
                 <Text style={styles.emptyText}>
-                  No products in this category yet.
+                  {browseMode === 'brands'
+                    ? 'No products for this brand yet.'
+                    : browseMode === 'companies'
+                      ? 'No products for this company yet.'
+                      : 'No products in this category yet.'}
                 </Text>
               </View>
             }

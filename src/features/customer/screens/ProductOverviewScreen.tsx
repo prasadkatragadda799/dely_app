@@ -262,10 +262,12 @@ const ProductOverviewScreen = () => {
   const selectedProductId: string | undefined = route.params?.productId;
   const subCategoryFilter: string | undefined = route.params?.subCategory;
   const brandFilter: string | undefined = route.params?.brand;
-  const categoryFilter: { ids?: string[]; names?: string[] } | undefined =
-    route.params?.categoryFilter;
+  const companyFilter: string | undefined = route.params?.company;
+  const categoryFilter:
+    | { ids?: string[]; names?: string[]; slugs?: string[] }
+    | undefined = route.params?.categoryFilter;
   const categoryFilterKey = categoryFilter
-    ? `${(categoryFilter.ids ?? []).join(',')}|${(categoryFilter.names ?? []).join(',')}`
+    ? `${(categoryFilter.ids ?? []).join(',')}|${(categoryFilter.names ?? []).join(',')}|${(categoryFilter.slugs ?? []).join(',')}`
     : '';
 
   const { width: windowWidth } = useWindowDimensions();
@@ -365,24 +367,52 @@ const ProductOverviewScreen = () => {
     let list = divisionProducts;
     const cfIds = categoryFilter?.ids?.filter(Boolean) ?? [];
     const cfNames = categoryFilter?.names?.filter(Boolean) ?? [];
-    if (cfIds.length > 0 || cfNames.length > 0) {
-      const idSet = new Set(cfIds);
-      const nameSet = new Set(cfNames);
-      list = list.filter(
-        p =>
-          (p.shopCategoryId != null && idSet.has(p.shopCategoryId)) ||
-          (p.subCategory != null && nameSet.has(p.subCategory)),
-      );
+    const cfSlugs = categoryFilter?.slugs?.filter(Boolean) ?? [];
+    if (cfIds.length > 0 || cfNames.length > 0 || cfSlugs.length > 0) {
+      const idSet = new Set(cfIds.map(s => String(s).trim().toLowerCase()));
+      list = list.filter(p => {
+        const pid = p.shopCategoryId ? String(p.shopCategoryId).trim().toLowerCase() : '';
+        if (pid && idSet.has(pid)) {
+          return true;
+        }
+        const pslug = p.shopCategorySlug?.trim().toLowerCase();
+        if (pslug) {
+          for (const s of cfSlugs) {
+            if (String(s).trim().toLowerCase() === pslug) {
+              return true;
+            }
+          }
+        }
+        const sub = p.subCategory?.trim();
+        if (sub) {
+          for (const n of cfNames) {
+            if (n.trim() === sub) {
+              return true;
+            }
+          }
+        }
+        return false;
+      });
     } else if (subCategoryFilter) {
       list = list.filter(p => p.subCategory === subCategoryFilter);
     }
     if (brandFilter) {
       list = list.filter(p => p.brand === brandFilter);
     }
+    if (companyFilter) {
+      list = list.filter(p => p.companyName === companyFilter);
+    }
     const q = query.trim().toLowerCase();
     if (!q) return list;
     return list.filter(p => p.name.toLowerCase().includes(q));
-  }, [divisionProducts, subCategoryFilter, brandFilter, query, categoryFilterKey]);
+  }, [
+    divisionProducts,
+    subCategoryFilter,
+    brandFilter,
+    companyFilter,
+    query,
+    categoryFilterKey,
+  ]);
 
   const listProduct = useMemo(
     () =>
@@ -568,7 +598,9 @@ const ProductOverviewScreen = () => {
                   ? `Category: ${subCategoryFilter}`
                   : brandFilter
                     ? `Brand: ${brandFilter}`
-                    : 'Browse products curated for you'}
+                    : companyFilter
+                      ? `Company: ${companyFilter}`
+                      : 'Browse products curated for you'}
             </Text>
           </View>
         </View>
@@ -1056,9 +1088,11 @@ const ProductOverviewScreen = () => {
                   ? subCategoryFilter
                   : brandFilter
                     ? brandFilter
-                    : isHomeKitchen
-                      ? 'Kitchen & Home Picks'
-                      : 'FMCG Bestsellers'}
+                    : companyFilter
+                      ? companyFilter
+                      : isHomeKitchen
+                        ? 'Kitchen & Home Picks'
+                        : 'FMCG Bestsellers'}
               </Text>
             </View>
 
@@ -1072,6 +1106,7 @@ const ProductOverviewScreen = () => {
                       productId: item.id,
                       subCategory: subCategoryFilter,
                       brand: brandFilter,
+                      company: companyFilter,
                       categoryFilter,
                     })
                   }>

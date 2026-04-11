@@ -38,6 +38,8 @@ export interface Product {
   subCategory?: string; // e.g. "Cleaning", "Snacks", etc.
   /** `GET /products` → `category.id` (admin Category row); use for browse filters. */
   shopCategoryId?: string;
+  /** `GET /products` → `category.slug` (taxonomy); stable match with category tree. */
+  shopCategorySlug?: string;
   /** Backend category display name (admin). */
   categoryLabel?: string;
   slug?: string;
@@ -45,6 +47,8 @@ export interface Product {
   specifications?: ProductSpecifications;
   /** Seller / manufacturer from API `company`. */
   companyName?: string;
+  /** From API `company.logoUrl` when company is a linked entity; shop-by-company tiles. */
+  companyLogoUrl?: string;
   stockQuantity?: number;
   isAvailable?: boolean;
   price: number;

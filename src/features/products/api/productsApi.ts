@@ -94,10 +94,12 @@ export const productsApi = createApi({
 
           const envelope = result.data as ApiResponseEnvelope<ProductsListData>;
           const productsRaw = envelope?.data?.products ?? [];
-          // Let `mapProductFromApi` derive `product.category` from the backend payload.
-          // This avoids overwriting `category.slug` with the requested fetch division
-          // (e.g. default division fetch returning a "home" category product).
-          const mapped = productsRaw.map((item, index) => mapProductFromApi(item as any, index));
+          // Shelf bucket (fmcg / kitchen / home) must come from **which division fetch**
+          // returned the row — not from the product's *taxonomy* category slug (e.g.
+          // "kitchen-cleaners" or "home-care" would wrongly map to home/kitchen).
+          const mapped = productsRaw.map((item, index) =>
+            mapProductFromApi(item as any, index, cat),
+          );
           merged.push(...mapped);
         }
 

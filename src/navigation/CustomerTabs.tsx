@@ -11,7 +11,6 @@ import HelpSupportScreen from '../features/customer/screens/HelpSupportScreen';
 import HomeScreen from '../features/customer/screens/HomeScreen';
 import OrdersScreen from '../features/customer/screens/OrdersScreen';
 import OrderSuccessScreen from '../features/customer/screens/OrderSuccessScreen';
-import CategoryBrandGridScreen from '../features/customer/screens/CategoryBrandGridScreen';
 import CategoryBrowseScreen from '../features/customer/screens/CategoryBrowseScreen';
 import ProductOverviewScreen from '../features/customer/screens/ProductOverviewScreen';
 import ProfileScreen from '../features/customer/screens/ProfileScreen';
@@ -33,16 +32,15 @@ type HomeStackParamList = {
     subCategory?: string;
     /** When set, browse list is limited to this brand */
     brand?: string;
+    /** When set, browse list is limited to this seller / company name */
+    company?: string;
     /** Admin category subtree (from CategoryBrowse) — ids + names for filtering */
-    categoryFilter?: { ids: string[]; names: string[] };
+    categoryFilter?: { ids: string[]; names: string[]; slugs?: string[] };
   };
-  CategoryBrandGrid: {
-    division: 'fmcg' | 'homeKitchen';
-    kind: 'categories' | 'brands';
-  };
-  /** Sidebar categories + product grid (Shop by category → See all). */
+  /** Sidebar rail + product grid (Shop by category / brand / company → See all). */
   CategoryBrowse: {
     division: 'fmcg' | 'homeKitchen';
+    mode?: 'categories' | 'brands' | 'companies';
   };
 };
 
@@ -62,10 +60,6 @@ const HomeStackNavigator = () => {
       <HomeStack.Screen
         name="ProductOverview"
         component={ProductOverviewScreen}
-      />
-      <HomeStack.Screen
-        name="CategoryBrandGrid"
-        component={CategoryBrandGridScreen}
       />
       <HomeStack.Screen
         name="CategoryBrowse"
