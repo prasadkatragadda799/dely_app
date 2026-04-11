@@ -31,13 +31,19 @@ export const useCart = () => {
       const categorySlug = String(p.categorySlug ?? p.category_slug ?? '')
         .trim()
         .toLowerCase();
-      return (
-        divisionSlug === 'kitchen' ||
-        divisionSlug === 'home' ||
-        divisionSlug === 'homekitchen' ||
-        categorySlug === 'kitchen' ||
-        categorySlug === 'home'
-      );
+      const normDiv = divisionSlug.replace(/-/g, '');
+      const normCat = categorySlug.replace(/-/g, '');
+      const grocerySlugs = new Set(['', 'default', 'grocery', 'fmcg']);
+      const explicitHomeKitchen =
+        normDiv === 'kitchen' ||
+        normDiv === 'home' ||
+        normDiv === 'homekitchen' ||
+        normCat === 'kitchen' ||
+        normCat === 'home' ||
+        normCat === 'homekitchen';
+      const nonGroceryDivision =
+        Boolean(divisionSlug) && !grocerySlugs.has(divisionSlug);
+      return explicitHomeKitchen || nonGroceryDivision;
     };
     const filteredRaw = rawItems.filter(it =>
       isHomeKitchen ? isHomeKitchenItem(it) : !isHomeKitchenItem(it),
@@ -63,15 +69,22 @@ export const useCart = () => {
       const divisionSlug = String(p.divisionSlug ?? p.division_slug ?? '')
         .trim()
         .toLowerCase();
-      const productCategory: Product['category'] =
-        categorySlug === 'home' ||
-        divisionSlug === 'home'
+      const normDiv = divisionSlug.replace(/-/g, '');
+      const normCat = categorySlug.replace(/-/g, '');
+      const grocerySlugs = new Set(['', 'default', 'grocery', 'fmcg']);
+      const isHk =
+        normCat === 'home' ||
+        normDiv === 'home' ||
+        normCat === 'kitchen' ||
+        normDiv === 'kitchen' ||
+        normDiv === 'homekitchen' ||
+        normCat === 'homekitchen' ||
+        (Boolean(divisionSlug) && !grocerySlugs.has(divisionSlug));
+      const productCategory: Product['category'] = isHk
+        ? normCat === 'home' || normDiv === 'home'
           ? 'home'
-          : categorySlug === 'kitchen' ||
-              divisionSlug === 'kitchen' ||
-              divisionSlug === 'homekitchen'
-            ? 'kitchen'
-            : 'fmcg';
+          : 'kitchen'
+        : 'fmcg';
 
       // Minimal mapping for cart/checkout UI.
       const mappedProduct: Product = {

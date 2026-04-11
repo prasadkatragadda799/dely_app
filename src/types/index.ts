@@ -22,6 +22,9 @@ export interface ProductPriceOption {
   discount?: number;
 }
 
+/** Flat specs from admin / backend `specifications` JSON. */
+export type ProductSpecifications = Record<string, string | number | boolean | null>;
+
 export interface Product {
   id: string;
   name: string;
@@ -30,7 +33,18 @@ export interface Product {
   images?: string[];
   category: ProductCategory;
   brand?: string; // e.g. "Domino", "Ariel", etc.
+  /** From API `brand.logoUrl` when brand is a linked entity; used for shop-by-brand tiles. */
+  brandLogoUrl?: string;
   subCategory?: string; // e.g. "Cleaning", "Snacks", etc.
+  /** Backend category display name (admin). */
+  categoryLabel?: string;
+  slug?: string;
+  description?: string;
+  specifications?: ProductSpecifications;
+  /** Seller / manufacturer from API `company`. */
+  companyName?: string;
+  stockQuantity?: number;
+  isAvailable?: boolean;
   price: number;
   discountPercent: number;
   /** When the API exposes multiple tiers (unit / set / remaining), customer picks one. */

@@ -140,6 +140,24 @@ const HomeScreen = () => {
     return map;
   }, [divisionProducts]);
 
+  const brandLogoByName = useMemo(() => {
+    const map: Record<string, string> = {};
+    divisionProducts.forEach(p => {
+      const name = p.brand?.trim();
+      const url = p.brandLogoUrl?.trim();
+      if (name && url && map[name] === undefined) {
+        map[name] = url;
+      }
+    });
+    return map;
+  }, [divisionProducts]);
+
+  const showBrandImageBoxes = useMemo(
+    () =>
+      divisionProducts.some(p => Boolean(String(p.brandLogoUrl ?? '').trim())),
+    [divisionProducts],
+  );
+
   const dealsForDivision = useMemo(() => {
     const color = isHomeKitchen ? '#16A34A' : '#1D4ED8';
     return offers.map(d => ({
@@ -525,12 +543,6 @@ const HomeScreen = () => {
             Shop by Category
           </Text>
           <View style={styles.filterTitleRight}>
-            <Text style={[styles.filterMeta, { color: primary }]}>
-              {showCategoryImageBoxes
-                ? categoryTreeRoots.length
-                : categories.length - 1}{' '}
-              options
-            </Text>
             <TouchableOpacity
               onPress={() =>
                 navigation.navigate('CategoryBrandGrid', {
@@ -698,9 +710,6 @@ const HomeScreen = () => {
             Shop by Brand
           </Text>
           <View style={styles.filterTitleRight}>
-            <Text style={[styles.filterMeta, { color: primary }]}>
-              {brands.length - 1} brands
-            </Text>
             <TouchableOpacity
               onPress={() =>
                 navigation.navigate('CategoryBrandGrid', {
@@ -713,62 +722,154 @@ const HomeScreen = () => {
             </TouchableOpacity>
           </View>
         </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipsRow}>
-          {brands.map(b => {
-            const active = b === activeBrand;
-            const count = b === 'All' ? divisionProducts.length : brandCountMap[b] ?? 0;
-            return (
-              <TouchableOpacity
-                key={b}
-                onPress={() => {
-                  if (b === 'All') {
-                    setActiveBrand('All');
-                    return;
-                  }
-                  navigation.navigate('ProductOverview', {
-                    division: activeDivision,
-                    brand: b,
-                  });
-                }}
+        {showBrandImageBoxes ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryBoxesRow}>
+            <TouchableOpacity
+              style={styles.categoryBoxTile}
+              onPress={() => setActiveBrand('All')}
+              activeOpacity={0.95}>
+              <View
                 style={[
-                  styles.filterCard,
-                  active && {
-                    backgroundColor: primary,
+                  styles.categoryBoxImageWrap,
+                  { borderColor: primaryBorder },
+                  activeBrand === 'All' && {
                     borderColor: primary,
+                    borderWidth: 2,
                   },
-                ]}
-                activeOpacity={0.95}>
-                <View style={[styles.filterCardIconWrap, active && { backgroundColor: 'rgba(255,255,255,0.22)' }]}>
-                  <Icon
-                    name={b === 'All' ? 'storefront-outline' : 'tag-outline'}
-                    size={14}
-                    color={active ? '#FFFFFF' : primary}
-                  />
-                </View>
-                <View>
-                  <Text
-                    numberOfLines={1}
+                ]}>
+                <Icon name="storefront-outline" size={28} color={primary} />
+              </View>
+              <Text
+                numberOfLines={2}
+                style={[styles.categoryBoxName, { color: primaryText }]}>
+                All
+              </Text>
+              <Text style={styles.categoryBoxCount}>
+                {divisionProducts.length} products
+              </Text>
+            </TouchableOpacity>
+            {brands
+              .filter((b): b is string => b !== 'All')
+              .map(b => {
+                const logo = brandLogoByName[b];
+                const count = brandCountMap[b] ?? 0;
+                const active = activeBrand === b;
+                return (
+                  <TouchableOpacity
+                    key={b}
+                    style={styles.categoryBoxTile}
+                    onPress={() => setActiveBrand(b)}
+                    activeOpacity={0.95}>
+                    <View
+                      style={[
+                        styles.categoryBoxImageWrap,
+                        { borderColor: primaryBorder },
+                        active && {
+                          borderColor: primary,
+                          borderWidth: 2,
+                        },
+                      ]}>
+                      {logo ? (
+                        <Image
+                          source={{ uri: logo }}
+                          style={styles.categoryBoxImage}
+                          resizeMode="contain"
+                        />
+                      ) : (
+                        <Icon name="tag-outline" size={26} color={primary} />
+                      )}
+                    </View>
+                    <Text
+                      numberOfLines={2}
+                      style={[styles.categoryBoxName, { color: primaryText }]}>
+                      {b}
+                    </Text>
+                    <Text style={styles.categoryBoxCount}>{count} products</Text>
+                  </TouchableOpacity>
+                );
+              })}
+          </ScrollView>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipsRow}>
+            {brands.map(b => {
+              const active = b === activeBrand;
+              const count = b === 'All' ? divisionProducts.length : brandCountMap[b] ?? 0;
+              const logo = b !== 'All' ? brandLogoByName[b] : undefined;
+              return (
+                <TouchableOpacity
+                  key={b}
+                  onPress={() => {
+                    if (b === 'All') {
+                      setActiveBrand('All');
+                      return;
+                    }
+                    navigation.navigate('ProductOverview', {
+                      division: activeDivision,
+                      brand: b,
+                    });
+                  }}
+                  style={[
+                    styles.filterCard,
+                    active && {
+                      backgroundColor: primary,
+                      borderColor: primary,
+                    },
+                  ]}
+                  activeOpacity={0.95}>
+                  <View
                     style={[
-                      styles.filterCardTitle,
-                      active ? { color: '#FFFFFF' } : { color: primaryText },
+                      styles.filterCardIconWrap,
+                      active && { backgroundColor: 'rgba(255,255,255,0.22)' },
+                      logo ? { overflow: 'hidden', padding: 2 } : null,
                     ]}>
-                    {b}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.filterCardSub,
-                      active ? { color: 'rgba(255,255,255,0.9)' } : { color: '#64748B' },
-                    ]}>
-                    {count} products
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+                    {b === 'All' ? (
+                      <Icon
+                        name="storefront-outline"
+                        size={14}
+                        color={active ? '#FFFFFF' : primary}
+                      />
+                    ) : logo ? (
+                      <Image
+                        source={{ uri: logo }}
+                        style={{ width: 24, height: 24 }}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <Icon
+                        name="tag-outline"
+                        size={14}
+                        color={active ? '#FFFFFF' : primary}
+                      />
+                    )}
+                  </View>
+                  <View>
+                    <Text
+                      numberOfLines={1}
+                      style={[
+                        styles.filterCardTitle,
+                        active ? { color: '#FFFFFF' } : { color: primaryText },
+                      ]}>
+                      {b}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.filterCardSub,
+                        active ? { color: 'rgba(255,255,255,0.9)' } : { color: '#64748B' },
+                      ]}>
+                      {count} products
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
       </View>
 
       <View style={styles.sectionHeader}>
@@ -1002,7 +1103,6 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     fontSize: 14,
   },
-  filterMeta: { fontWeight: '800', fontSize: 12 },
   chipsRow: {
     flexDirection: 'row',
     alignItems: 'center',

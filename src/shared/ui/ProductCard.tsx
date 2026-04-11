@@ -4,6 +4,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { Product } from '../../types';
 import { useCart } from '../../hooks/useCart';
 import { packagingShortLine } from '../../utils/productPackaging';
+import { formatRs } from '../../utils/formatMoney';
 import { useWishlist } from '../../hooks/useWishlist';
 
 const hexToRgba = (hex: string, alpha: number) => {
@@ -54,8 +55,8 @@ const ProductCard = ({
     discountPct = cheapest.discount ?? product.discountPercent;
   }
   const originalPrice = Math.round(
-    displayPrice / Math.max(1 - discountPct / 100, 0.01),
-  );
+    (displayPrice / Math.max(1 - discountPct / 100, 0.01)) * 100,
+  ) / 100;
   const packHint = packagingShortLine(product);
 
   return (
@@ -132,8 +133,8 @@ const ProductCard = ({
         {opts && opts.length > 1 ? (
           <Text style={styles.fromHint}>From</Text>
         ) : null}
-        <Text style={styles.price}>Rs {displayPrice}</Text>
-        <Text style={styles.mrp}>Rs {originalPrice}</Text>
+        <Text style={styles.price}>Rs {formatRs(displayPrice)}</Text>
+        <Text style={styles.mrp}>Rs {formatRs(originalPrice)}</Text>
       </View>
       {packHint ? (
         <Text style={[styles.packHint, { color: accentColor }]} numberOfLines={2}>

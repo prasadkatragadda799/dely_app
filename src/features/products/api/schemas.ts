@@ -1,4 +1,10 @@
-import { Deal, PriceOptionKey, Product, ProductPriceOption } from '../../../types';
+import {
+  Deal,
+  PriceOptionKey,
+  Product,
+  ProductPriceOption,
+  ProductSpecifications,
+} from '../../../types';
 
 export interface ApiResponseEnvelope<T> {
   success: boolean;
@@ -11,7 +17,7 @@ type ProductApiEntity = {
   // Backend fields (from `GET /products`)
   id?: string;
   name?: string;
-  slug?: string;
+  slug?: string | null;
   sellingPrice?: number | string | null;
   mrp?: number | string | null;
   discount?: number | string | null; // percentage
@@ -22,7 +28,10 @@ type ProductApiEntity = {
     isPrimary?: boolean;
     is_primary?: boolean;
   }> | null;
-  brand?: { id?: string; name?: string; logoUrl?: string } | string | null;
+  brand?:
+    | { id?: string; name?: string; logoUrl?: string; logo_url?: string }
+    | string
+    | null;
   company?: { id?: string; name?: string; logoUrl?: string } | string | null;
   category?: { id?: string; name?: string; slug?: string } | null;
   rating?: number | string | null;
@@ -76,7 +85,38 @@ type ProductApiEntity = {
     mrp?: number | string | null;
     discount?: number | string | null;
   }> | null;
+  description?: string | null;
+  specifications?: Record<string, unknown> | null;
+  stockQuantity?: number | string | null;
+  stock_quantity?: number | string | null;
+  isAvailable?: boolean | null;
+  is_available?: boolean | null;
 };
+
+function normalizeSpecifications(raw: unknown): ProductSpecifications | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const out: ProductSpecifications = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (v === null || v === undefined) {
+      out[k] = null;
+    } else if (
+      typeof v === 'string' ||
+      typeof v === 'number' ||
+      typeof v === 'boolean'
+    ) {
+      out[k] = v;
+    } else if (typeof v === 'object') {
+      try {
+        out[k] = JSON.stringify(v);
+      } catch {
+        out[k] = String(v);
+      }
+    } else {
+      out[k] = String(v);
+    }
+  }
+  return Object.keys(out).length ? out : undefined;
+}
 
 type OfferApiEntity = {
   // Backend fields (from `GET /offers`)
@@ -247,12 +287,54 @@ export const mapProductFromApi = (
       ? item.brand
       : item.brand?.name ?? (typeof item.company === 'string' ? item.company : item.company?.name) ?? undefined;
 
+  const brandLogoUrl =
+    typeof item.brand === 'object' && item.brand !== null
+      ? String(item.brand.logoUrl ?? item.brand.logo_url ?? '').trim() || undefined
+      : undefined;
+
   const subCategory =
     item.subCategory ??
     item.sub_category ??
     item.category?.name ??
     item.category_name ??
     undefined;
+
+  const categoryLabel =
+    typeof item.category === 'object' && item.category?.name
+      ? String(item.category.name)
+      : undefined;
+
+  const companyName =
+    typeof item.company === 'string'
+      ? item.company
+      : item.company?.name
+        ? String(item.company.name)
+        : undefined;
+
+  const description =
+    item.description != null && String(item.description).trim()
+      ? String(item.description).trim()
+      : undefined;
+
+  const slug =
+    item.slug != null && String(item.slug).trim()
+      ? String(item.slug).trim()
+      : undefined;
+
+  const specifications = normalizeSpecifications(item.specifications);
+
+  const stockQtyRaw = item.stockQuantity ?? item.stock_quantity;
+  const stockQuantity =
+    stockQtyRaw !== undefined && stockQtyRaw !== null
+      ? Math.max(0, asNumber(stockQtyRaw, 0))
+      : undefined;
+
+  const isAvailable =
+    item.isAvailable !== undefined
+      ? Boolean(item.isAvailable)
+      : item.is_available !== undefined
+        ? Boolean(item.is_available)
+        : undefined;
 
   const variants = Array.isArray(item.variants) ? item.variants : [];
   let variantSetPieces: string | undefined;
@@ -271,7 +353,15 @@ export const mapProductFromApi = (
     images: gallery,
     category: requestedCategory ?? normalizeCategory((item.category as any)?.slug ?? item.division),
     brand: brandName ? String(brandName) : undefined,
+    brandLogoUrl,
     subCategory: subCategory ? String(subCategory) : undefined,
+    categoryLabel,
+    slug,
+    description,
+    specifications,
+    companyName,
+    stockQuantity,
+    isAvailable,
     price,
     discountPercent: asNumber(discountPercent, 0),
     priceOptions,

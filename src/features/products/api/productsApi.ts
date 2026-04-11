@@ -94,6 +94,26 @@ export const productsApi = createApi({
         return { data: Array.from(uniqueById.values()) };
       },
     }),
+    /** Single product — `GET /products/{id}` (description, specifications, full gallery). */
+    getProduct: builder.query<Product, string>({
+      async queryFn(id, _api, _extraOptions, baseQuery) {
+        const result = await baseQuery(`/products/${encodeURIComponent(id)}`);
+        if ('error' in result) {
+          return { error: result.error as { status: number; data?: unknown } };
+        }
+        const envelope = result.data as ApiResponseEnvelope<unknown>;
+        const raw = envelope?.data;
+        if (!raw || typeof raw !== 'object') {
+          return {
+            error: { status: 404, data: 'Product not found' } as {
+              status: number;
+              data?: unknown;
+            },
+          };
+        }
+        return { data: mapProductFromApi(raw as any, 0) };
+      },
+    }),
     getOffers: builder.query<Deal[], void>({
       async queryFn(_args, _api, _extraOptions, baseQuery) {
         const result = await baseQuery('/offers');
@@ -152,4 +172,9 @@ export const productsApi = createApi({
   }),
 });
 
-export const { useGetProductsQuery, useGetOffersQuery, useGetCategoryTreeQuery } = productsApi;
+export const {
+  useGetProductsQuery,
+  useGetProductQuery,
+  useGetOffersQuery,
+  useGetCategoryTreeQuery,
+} = productsApi;

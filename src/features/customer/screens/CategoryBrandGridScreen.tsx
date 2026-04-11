@@ -38,7 +38,13 @@ type CategoryItem =
 
 type BrandItem =
   | { key: string; kind: 'all' }
-  | { key: string; kind: 'brand'; name: string; count: number };
+  | {
+      key: string;
+      kind: 'brand';
+      name: string;
+      count: number;
+      imageUrl?: string;
+    };
 
 type GridListItem = CategoryItem | BrandItem;
 
@@ -81,6 +87,19 @@ const CategoryBrandGridScreen = () => {
     divisionProducts.forEach(p => {
       const key = p.brand || 'Other';
       map[key] = (map[key] || 0) + 1;
+    });
+    return map;
+  }, [divisionProducts]);
+
+  /** First non-empty logo URL per brand name from catalog (matches API `brand.logoUrl`). */
+  const brandLogoByName = useMemo(() => {
+    const map: Record<string, string> = {};
+    divisionProducts.forEach(p => {
+      const name = p.brand?.trim();
+      const url = p.brandLogoUrl?.trim();
+      if (name && url && map[name] === undefined) {
+        map[name] = url;
+      }
     });
     return map;
   }, [divisionProducts]);
@@ -145,9 +164,10 @@ const CategoryBrandGridScreen = () => {
         kind: 'brand' as const,
         name,
         count: brandCountMap[name] ?? 0,
+        imageUrl: brandLogoByName[name],
       })),
     ];
-  }, [divisionProducts, brandCountMap]);
+  }, [divisionProducts, brandCountMap, brandLogoByName]);
 
   const title =
     kind === 'categories'
@@ -270,11 +290,17 @@ const CategoryBrandGridScreen = () => {
                 activeOpacity={0.92}>
                 <View
                   style={[styles.gridImageWrap, { borderColor: primaryBorder }]}>
-                  <Icon
-                    name={b.kind === 'all' ? 'storefront-outline' : 'tag-outline'}
-                    size={26}
-                    color={primary}
-                  />
+                  {b.kind === 'all' ? (
+                    <Icon name="storefront-outline" size={26} color={primary} />
+                  ) : b.imageUrl ? (
+                    <Image
+                      source={{ uri: b.imageUrl }}
+                      style={styles.gridImage}
+                      resizeMode="contain"
+                    />
+                  ) : (
+                    <Icon name="tag-outline" size={26} color={primary} />
+                  )}
                 </View>
                 <Text
                   numberOfLines={2}
