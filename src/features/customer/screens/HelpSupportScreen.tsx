@@ -9,12 +9,14 @@ import {
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import TermsAndConditionsModal from '../../../shared/ui/TermsAndConditionsModal';
 
+const SUPPORT_EMAIL = 'delycart.in@gmail.com';
+
 const HelpSupportScreen = () => {
   const [termsVisible, setTermsVisible] = useState(false);
   const privacyPolicyUrl = 'https://delycart.in/privacy-policy';
 
   const openSupportMail = async () => {
-    const url = 'mailto:support@delycart.app';
+    const url = `mailto:${SUPPORT_EMAIL}`;
     const canOpen = await Linking.canOpenURL(url);
     if (canOpen) {
       await Linking.openURL(url);
@@ -38,11 +40,7 @@ const HelpSupportScreen = () => {
       <View style={styles.card}>
         <View style={styles.item}>
           <Icon name="email-outline" size={18} color="#1D4ED8" />
-          <Text style={styles.text}>support@delycart.app</Text>
-        </View>
-        <View style={styles.item}>
-          <Icon name="phone-outline" size={18} color="#1D4ED8" />
-          <Text style={styles.text}>+91 90000 00000</Text>
+          <Text style={styles.text}>{SUPPORT_EMAIL}</Text>
         </View>
       </View>
 
