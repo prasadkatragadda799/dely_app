@@ -1,4 +1,4 @@
-package com.myfmcgapp
+package com.delycartapp
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

@@ -1,4 +1,4 @@
-package com.myfmcgapp
+package com.delycartapp
 
 import android.app.Application
 import com.facebook.react.PackageList

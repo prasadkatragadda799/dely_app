@@ -87,9 +87,9 @@ android {
         prefab true
     }
 
-    namespace "com.myfmcgapp"
+    namespace "com.delycartapp"
     defaultConfig {
-        applicationId "com.myfmcgapp"
+        applicationId "com.delycartapp"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode appVersionCode

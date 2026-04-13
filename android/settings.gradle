@@ -1,6 +1,19 @@
 pluginManagement { includeBuild("../node_modules/@react-native/gradle-plugin") }
 plugins { id("com.facebook.react.settings") }
-extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autolinkLibrariesFromCommand() }
+// Include app/build.gradle so autolinking.json refreshes when applicationId / namespace change.
+extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
+    ex.autolinkLibrariesFromCommand(
+        ["npx", "@react-native-community/cli", "config"],
+        layout.rootDirectory.dir("..").asFile,
+        layout.rootDirectory.files(
+            "../yarn.lock",
+            "../package-lock.json",
+            "../package.json",
+            "../react-native.config.js",
+            "app/build.gradle",
+        )
+    )
+}
 rootProject.name = 'MyFMCGApp'
 include ':app'
 includeBuild('../node_modules/@react-native/gradle-plugin')
