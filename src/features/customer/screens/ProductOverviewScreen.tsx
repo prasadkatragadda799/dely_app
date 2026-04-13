@@ -19,7 +19,11 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { useGetProductQuery, useGetProductsQuery } from '../../products/api/productsApi';
+import {
+  useGetProductQuery,
+  useGetProductsQuery,
+} from '../../products/api/productsApi';
+import { composeVariantPackagingFromApi } from '../../products/api/schemas';
 import { useCart } from '../../../hooks/useCart';
 import { useAppDispatch } from '../../../hooks/redux';
 import { setHomeDivision } from '../homeDivisionSlice';
@@ -28,15 +32,26 @@ import Voice, {
   VOICE_NOT_AVAILABLE_MESSAGE,
 } from '../../../utils/voice';
 import { PriceOptionKey, Product } from '../../../types';
-import { defaultPriceTier, selectedPriceOption } from '../../../utils/productPricing';
+import {
+  defaultPriceTier,
+  selectedPriceOption,
+  uiTierForQuantityCopy,
+} from '../../../utils/productPricing';
 import { useWishlist } from '../../../hooks/useWishlist';
 import {
-  orderQuantityPlural,
+  cartLineQuantityCaption,
+  cartQuantityCaption,
+  displayTierAndQtyForLine,
+  minOrderCaption,
   packagingDetailLine,
   packagingShortLine,
-  quantityStepperTitle,
+  quantityLabelForTier,
+  quantityStepperTitleForTier,
+  stepperQuantityCaption,
 } from '../../../utils/productPackaging';
 import { formatRs } from '../../../utils/formatMoney';
+import AddPriceTierModal from '../../../shared/ui/AddPriceTierModal';
+import ProductCard from '../../../shared/ui/ProductCard';
 
 type DivisionKey = 'fmcg' | 'homeKitchen';
 const MAX_SETS_PER_ADD = 5;
@@ -103,12 +118,24 @@ const ProductDetailCard = ({
   accentColor: string;
   textColor: string;
 }) => {
+  const { items } = useCart();
   const [tierKey, setTierKey] = React.useState<PriceOptionKey>(() =>
     defaultPriceTier(item),
   );
+  const [tierModalVisible, setTierModalVisible] = React.useState(false);
   React.useEffect(() => {
     setTierKey(defaultPriceTier(item));
   }, [item.id]);
+
+  const totalQtyAllTiers = React.useMemo(
+    () =>
+      items
+        .filter(i => i.product.id === item.id)
+        .reduce((sum, i) => sum + i.quantity, 0),
+    [items, item.id],
+  );
+  const multiTier = (item.priceOptions?.length ?? 0) > 1;
+  const showTierChips = multiTier && totalQtyAllTiers > 0;
 
   const active = selectedPriceOption(item, tierKey);
   const sellRaw = active?.sellingPrice ?? item.price;
@@ -118,7 +145,6 @@ const ProductDetailCard = ({
   const sell = Math.round(sellRaw * 100) / 100;
   const strikeMrp = Math.round(strikeMrpRaw * 100) / 100;
   const savings = Math.max(0, Math.round((strikeMrp - sell) * 100) / 100);
-  const showTierPicker = (item.priceOptions?.length ?? 0) > 1;
   const packLine = packagingShortLine(item);
 
   return (
@@ -190,7 +216,7 @@ const ProductDetailCard = ({
             ) : null}
           </View>
 
-          {showTierPicker ? (
+          {showTierChips ? (
             <View style={styles.tierChipRowBrowse}>
               {item.priceOptions!.map(opt => {
                 const selected = opt.key === tierKey;
@@ -243,7 +269,13 @@ const ProductDetailCard = ({
             </View>
             <TouchableOpacity
               style={[styles.addBtnCompact, { backgroundColor: accentColor }]}
-              onPress={() => onAdd(item, tierKey)}
+              onPress={() => {
+                if (multiTier && totalQtyAllTiers === 0) {
+                  setTierModalVisible(true);
+                } else {
+                  onAdd(item, tierKey);
+                }
+              }}
               activeOpacity={0.9}>
               <Icon name="cart-plus" size={15} color="#FFFFFF" />
               <Text style={styles.addBtnCompactText}>Add</Text>
@@ -251,6 +283,16 @@ const ProductDetailCard = ({
           </View>
         </View>
       </View>
+      <AddPriceTierModal
+        visible={tierModalVisible}
+        onClose={() => setTierModalVisible(false)}
+        product={item}
+        accentColor={accentColor}
+        onSelectTier={tier => {
+          setTierKey(tier);
+          onAdd(item, tier);
+        }}
+      />
     </View>
   );
 };
@@ -272,7 +314,7 @@ const ProductOverviewScreen = () => {
 
   const { width: windowWidth } = useWindowDimensions();
   const { data: allProducts = [] } = useGetProductsQuery();
-  const { add } = useCart();
+  const { add, decrement, items: cartItems } = useCart();
   const { toggle, isWishlisted } = useWishlist();
   const dispatch = useAppDispatch();
 
@@ -280,6 +322,8 @@ const ProductOverviewScreen = () => {
   const [isListening, setIsListening] = useState(false);
   const [selectedSets, setSelectedSets] = useState(1);
   const [detailTierKey, setDetailTierKey] = useState<PriceOptionKey>('unit');
+  const [addTierModalVisible, setAddTierModalVisible] = useState(false);
+  const buyNowAfterAddRef = useRef(false);
   const [selectedDetailImageIndex, setSelectedDetailImageIndex] = useState(0);
   const [zoomImageUri, setZoomImageUri] = useState<string | null>(null);
   const galleryRef = useRef<FlatList<string>>(null);
@@ -451,16 +495,24 @@ const ProductOverviewScreen = () => {
   );
   const isDetailMode = Boolean(selectedProductId);
 
+  const priceOptionsKeySig = useMemo(
+    () =>
+      (selectedProduct?.priceOptions ?? [])
+        .map(o => o.key)
+        .join(','),
+    [selectedProduct?.priceOptions],
+  );
+
   React.useEffect(() => {
     setSelectedSets(1);
+    setSelectedDetailImageIndex(0);
   }, [selectedProductId]);
 
   React.useEffect(() => {
-    if (selectedProduct) {
-      setDetailTierKey(defaultPriceTier(selectedProduct));
-      setSelectedDetailImageIndex(0);
-    }
-  }, [selectedProduct?.id]);
+    if (!selectedProduct) return;
+    setDetailTierKey(defaultPriceTier(selectedProduct));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-default when id or tier list changes, not when other merged fields refresh (would reset pack-size choice).
+  }, [selectedProduct?.id, priceOptionsKeySig]);
 
   const detailPrice = useMemo(() => {
     if (!selectedProduct) {
@@ -489,6 +541,126 @@ const ProductOverviewScreen = () => {
   );
 
   const canPurchase = selectedProduct ? isProductPurchasable(selectedProduct) : false;
+
+  const detailProductCartTotal = useMemo(() => {
+    if (!selectedProduct) return 0;
+    return cartItems
+      .filter(i => i.product.id === selectedProduct.id)
+      .reduce((s, i) => s + i.quantity, 0);
+  }, [cartItems, selectedProduct?.id]);
+
+  const detailMultiTier = (selectedProduct?.priceOptions?.length ?? 0) > 1;
+  const detailShowPackChips =
+    Boolean(selectedProduct) && detailMultiTier && detailProductCartTotal > 0;
+
+  const detailUiTier = useMemo(
+    () =>
+      selectedProduct
+        ? uiTierForQuantityCopy(selectedProduct, detailTierKey)
+        : ('unit' as PriceOptionKey),
+    [selectedProduct, detailTierKey],
+  );
+
+  /**
+   * Cart line for the selected pack tier. When the API stored a set as `unit` with qty = n×pcs,
+   * still treat it as sets in the footer for minus / "Add more".
+   */
+  const detailTierCartBinding = useMemo(() => {
+    if (!selectedProduct) {
+      return { displayQty: 0, decrementTier: null as PriceOptionKey | null };
+    }
+    const ui = uiTierForQuantityCopy(selectedProduct, detailTierKey);
+    const exact = cartItems.find(
+      i =>
+        i.product.id === selectedProduct.id &&
+        i.priceOptionKey === detailTierKey,
+    );
+    if (exact) {
+      if (ui === 'set') {
+        const { qty } = displayTierAndQtyForLine(
+          selectedProduct,
+          exact.quantity,
+          exact.priceOptionKey,
+        );
+        return { displayQty: qty, decrementTier: exact.priceOptionKey };
+      }
+      return {
+        displayQty: exact.quantity,
+        decrementTier: exact.priceOptionKey,
+      };
+    }
+    if (ui === 'set') {
+      const unitLine = cartItems.find(
+        i =>
+          i.product.id === selectedProduct.id &&
+          i.priceOptionKey === 'unit',
+      );
+      const pcs = Math.max(1, selectedProduct.piecesPerSet ?? 1);
+      if (
+        unitLine &&
+        unitLine.quantity >= pcs &&
+        unitLine.quantity % pcs === 0
+      ) {
+        return {
+          displayQty: unitLine.quantity / pcs,
+          decrementTier: 'unit' as const,
+        };
+      }
+    }
+    return { displayQty: 0, decrementTier: null };
+  }, [cartItems, selectedProduct, detailTierKey]);
+
+  const detailCartSummaryText = useMemo(() => {
+    if (!selectedProduct || detailProductCartTotal === 0) return '';
+    const lines = cartItems.filter(i => i.product.id === selectedProduct.id);
+    if (lines.length === 0) return '';
+    if (lines.length === 1) {
+      const L = lines[0];
+      return cartLineQuantityCaption(
+        selectedProduct,
+        L.quantity,
+        L.priceOptionKey,
+      );
+    }
+    return lines
+      .map(L =>
+        cartLineQuantityCaption(
+          selectedProduct,
+          L.quantity,
+          L.priceOptionKey,
+        ),
+      )
+      .join(' · ');
+  }, [cartItems, selectedProduct, detailProductCartTotal]);
+
+  const similarProducts = useMemo(() => {
+    if (!selectedProduct) return [];
+    const id = selectedProduct.id;
+    const shopId = selectedProduct.shopCategoryId?.trim();
+    const shopSlug = selectedProduct.shopCategorySlug?.trim().toLowerCase();
+    const sub = selectedProduct.subCategory?.trim();
+    const cat = selectedProduct.category;
+
+    let pool = divisionProducts.filter(p => p.id !== id);
+    if (shopId) {
+      const narrowed = pool.filter(
+        p => p.shopCategoryId && String(p.shopCategoryId).trim() === shopId,
+      );
+      if (narrowed.length > 0) pool = narrowed;
+    } else if (shopSlug) {
+      const narrowed = pool.filter(
+        p => (p.shopCategorySlug || '').trim().toLowerCase() === shopSlug,
+      );
+      if (narrowed.length > 0) pool = narrowed;
+    } else if (sub) {
+      const narrowed = pool.filter(p => p.subCategory?.trim() === sub);
+      if (narrowed.length > 0) pool = narrowed;
+    } else {
+      pool = pool.filter(p => p.category === cat);
+    }
+
+    return pool.slice(0, 14);
+  }, [selectedProduct, divisionProducts]);
 
   const stockHint = useMemo(() => {
     if (!selectedProduct) return null;
@@ -524,18 +696,44 @@ const ProductOverviewScreen = () => {
     }
   }, [detailImages.length, selectedDetailImageIndex]);
 
-  const addSelectedProductToCart = (item: Product) => {
-    add(item, selectedSets, detailTierKey);
+  const addSelectedProductToCartWithTier = (item: Product, tier: PriceOptionKey) => {
+    add(item, selectedSets, tier);
+    const uiTier = uiTierForQuantityCopy(item, tier);
+    const summary = cartQuantityCaption(item, selectedSets, uiTier);
     showUiAlert(
       'Added to cart',
-      `${selectedSets} ${orderQuantityPlural(item.unit)} of ${item.name} added.`,
+      `${summary} of ${item.name} added.`,
       'success',
     );
+  };
+
+  const addSelectedProductToCart = (item: Product) => {
+    addSelectedProductToCartWithTier(item, detailTierKey);
   };
 
   const buyNow = (item: Product) => {
     addSelectedProductToCart(item);
     navigation.navigate('Cart');
+  };
+
+  const onPressDetailAddToCart = () => {
+    if (!selectedProduct || !canPurchase) return;
+    if (detailMultiTier && detailProductCartTotal === 0) {
+      buyNowAfterAddRef.current = false;
+      setAddTierModalVisible(true);
+      return;
+    }
+    addSelectedProductToCart(selectedProduct);
+  };
+
+  const onPressDetailBuyNow = () => {
+    if (!selectedProduct || !canPurchase) return;
+    if (detailMultiTier && detailProductCartTotal === 0) {
+      buyNowAfterAddRef.current = true;
+      setAddTierModalVisible(true);
+      return;
+    }
+    buyNow(selectedProduct);
   };
 
   const productDescription = (item: Product) => {
@@ -959,12 +1157,14 @@ const ProductOverviewScreen = () => {
                 <View style={styles.detailSectionRule} />
 
                 <View style={styles.detailBodyStack}>
-                  {(selectedProduct.priceOptions?.length ?? 0) > 1 ? (
+                  {detailShowPackChips ? (
                     <View style={styles.detailSubsection}>
                       <Text style={[styles.detailSectionHeading, { color: primaryText }]}>
                         Pack size
                       </Text>
-                      <Text style={styles.detailSectionSub}>Choose one — price updates above</Text>
+                      <Text style={styles.detailSectionSub}>
+                        Switch tier for items already in your cart
+                      </Text>
                       <View style={styles.detailTierRow}>
                         {selectedProduct.priceOptions!.map(opt => {
                           const selected = opt.key === detailTierKey;
@@ -1014,6 +1214,32 @@ const ProductOverviewScreen = () => {
                     </Text>
                   </View>
 
+                  {selectedProduct.variants && selectedProduct.variants.length > 0 ? (
+                    <View style={styles.detailSubsection}>
+                      <Text style={[styles.detailSectionHeading, { color: primaryText }]}>
+                        Variants
+                      </Text>
+                      <Text style={styles.detailSectionSub}>
+                        Packaging options from catalog
+                      </Text>
+                      <View style={styles.variantList}>
+                        {selectedProduct.variants.map((v, idx) => {
+                          const line = composeVariantPackagingFromApi(v);
+                          return (
+                            <View key={`v-${idx}`} style={styles.variantRow}>
+                              <Text style={[styles.variantBullet, { color: primary }]}>
+                                •
+                              </Text>
+                              <Text style={[styles.variantLine, { color: primaryText }]}>
+                                {line?.trim() || `Option ${idx + 1}`}
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  ) : null}
+
                   {specEntries.length > 0 ? (
                     <View style={styles.detailSubsection}>
                       <Text style={[styles.detailSectionHeading, { color: primaryText }]}>
@@ -1038,11 +1264,13 @@ const ProductOverviewScreen = () => {
                     <View style={styles.qtyBlockHeader}>
                       <View style={styles.qtyBlockTitles}>
                         <Text style={[styles.qtyTitle, { color: primaryText }]}>
-                          {quantityStepperTitle(selectedProduct.unit)}
+                          {quantityStepperTitleForTier(
+                            detailUiTier,
+                            selectedProduct.unit,
+                          )}
                         </Text>
                         <Text style={styles.detailMinOrderText}>
-                          Min. order {selectedProduct.minOrderQuantity ?? 1}{' '}
-                          {orderQuantityPlural(selectedProduct.unit)}
+                          Min. order {minOrderCaption(selectedProduct, detailUiTier)}
                         </Text>
                       </View>
                       <View style={styles.qtyRow}>
@@ -1053,7 +1281,13 @@ const ProductOverviewScreen = () => {
                           activeOpacity={0.9}>
                           <Icon name="minus" size={18} color={primaryText} />
                         </TouchableOpacity>
-                        <Text style={[styles.qtyValue, { color: primaryText }]}>{selectedSets}</Text>
+                        <Text style={[styles.qtyValue, { color: primaryText }]}>
+                          {stepperQuantityCaption(
+                            selectedProduct,
+                            selectedSets,
+                            detailUiTier,
+                          )}
+                        </Text>
                         <TouchableOpacity
                           style={styles.qtyBtn}
                           disabled={!canPurchase}
@@ -1066,7 +1300,12 @@ const ProductOverviewScreen = () => {
                       </View>
                     </View>
                     <Text style={[styles.maxInfo, { color: primary }]}>
-                      Up to {MAX_SETS_PER_ADD} {orderQuantityPlural(selectedProduct.unit)} per add.
+                      Up to {MAX_SETS_PER_ADD}{' '}
+                      {quantityLabelForTier(
+                        detailUiTier,
+                        selectedProduct.unit,
+                      )}{' '}
+                      per add.
                     </Text>
                   </View>
 
@@ -1076,6 +1315,42 @@ const ProductOverviewScreen = () => {
                       Genuine products · Quality checked · Easy returns if something goes wrong
                     </Text>
                   </View>
+
+                  {similarProducts.length > 0 ? (
+                    <View style={styles.similarSection}>
+                      <Text style={[styles.similarTitle, { color: primaryText }]}>
+                        Similar in this category
+                      </Text>
+                      <Text style={styles.similarSubtitle}>
+                        More picks like this one
+                      </Text>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.similarListContent}
+                        nestedScrollEnabled>
+                        {similarProducts.map(sp => (
+                          <View key={sp.id} style={styles.similarCardWrap}>
+                            <ProductCard
+                              product={sp}
+                              accentColor={primary}
+                              onAdd={(p, tier) => add(p, 1, tier)}
+                              onCardPress={p =>
+                                navigation.navigate('ProductOverview', {
+                                  division,
+                                  productId: p.id,
+                                  subCategory: subCategoryFilter,
+                                  brand: brandFilter,
+                                  company: companyFilter,
+                                  categoryFilter,
+                                })
+                              }
+                            />
+                          </View>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  ) : null}
                 </View>
               </View>
             </View>
@@ -1128,36 +1403,99 @@ const ProductOverviewScreen = () => {
       {selectedProduct && isDetailMode ? (
         <View
           style={[styles.detailFooterBar, !canPurchase && styles.detailFooterDisabled]}>
-          <TouchableOpacity
-            style={[
-              styles.detailAddBtn,
-              { borderColor: primary },
-              !canPurchase && styles.detailFooterBtnDisabled,
-            ]}
-            disabled={!canPurchase}
-            onPress={() => addSelectedProductToCart(selectedProduct)}
-            activeOpacity={0.9}>
-            <Icon name="cart-plus" size={17} color={canPurchase ? primary : '#94A3B8'} />
-            <Text
+          <View style={styles.detailFooterAddCol}>
+            {detailTierCartBinding.displayQty > 0 &&
+            canPurchase &&
+            detailTierCartBinding.decrementTier ? (
+              <TouchableOpacity
+                style={[styles.detailFooterMinus, { borderColor: primary }]}
+                onPress={() =>
+                  decrement(
+                    selectedProduct.id,
+                    detailTierCartBinding.decrementTier!,
+                  )
+                }
+                activeOpacity={0.9}
+                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+                <Text style={[styles.detailFooterMinusText, { color: primary }]}>−</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity
               style={[
-                styles.detailAddText,
-                { color: canPurchase ? primary : '#94A3B8' },
-              ]}>
-              Add to Cart
-            </Text>
-          </TouchableOpacity>
+                styles.detailAddBtn,
+                { borderColor: primary },
+                !canPurchase && styles.detailFooterBtnDisabled,
+              ]}
+              disabled={!canPurchase}
+              onPress={onPressDetailAddToCart}
+              activeOpacity={0.9}>
+              <Icon name="cart-plus" size={17} color={canPurchase ? primary : '#94A3B8'} />
+              <View style={styles.detailAddTextCol}>
+                <Text
+                  style={[
+                    styles.detailAddText,
+                    { color: canPurchase ? primary : '#94A3B8' },
+                  ]}>
+                  {detailTierCartBinding.displayQty > 0 ? 'Add more' : 'Add to Cart'}
+                </Text>
+                {detailProductCartTotal > 0 ? (
+                  <Text
+                    style={[
+                      styles.detailAddSub,
+                      { color: canPurchase ? primaryText : '#94A3B8' },
+                    ]}
+                    numberOfLines={2}>
+                    In cart: {detailCartSummaryText}
+                  </Text>
+                ) : null}
+              </View>
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
             style={[
               styles.buyNowBtn,
               { backgroundColor: canPurchase ? primary : '#CBD5E1' },
             ]}
             disabled={!canPurchase}
-            onPress={() => buyNow(selectedProduct)}
+            onPress={onPressDetailBuyNow}
             activeOpacity={0.9}>
             <Icon name="flash" size={17} color="#FFFFFF" />
             <Text style={styles.buyNowText}>Buy Now</Text>
           </TouchableOpacity>
         </View>
+      ) : null}
+
+      {selectedProduct ? (
+        <AddPriceTierModal
+          visible={addTierModalVisible}
+          onClose={() => {
+            setAddTierModalVisible(false);
+            buyNowAfterAddRef.current = false;
+          }}
+          product={selectedProduct}
+          accentColor={primary}
+          onSelectTier={tier => {
+            const goCart = buyNowAfterAddRef.current;
+            buyNowAfterAddRef.current = false;
+            setDetailTierKey(tier);
+            add(selectedProduct, selectedSets, tier);
+            const uiTier = uiTierForQuantityCopy(selectedProduct, tier);
+            const summary = cartQuantityCaption(
+              selectedProduct,
+              selectedSets,
+              uiTier,
+            );
+            showUiAlert(
+              'Added to cart',
+              `${summary} of ${selectedProduct.name} added.`,
+              'success',
+            );
+            setAddTierModalVisible(false);
+            if (goCart) {
+              navigation.navigate('Cart');
+            }
+          }}
+        />
       ) : null}
 
       <Modal
@@ -1443,6 +1781,27 @@ const styles = StyleSheet.create({
     marginTop: -4,
     marginBottom: 4,
   },
+  variantList: {
+    marginTop: 4,
+    gap: 8,
+  },
+  variantRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  variantBullet: {
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 22,
+    marginTop: 1,
+  },
+  variantLine: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    lineHeight: 22,
+  },
   detailMeta: {
     marginTop: 4,
     color: '#64748B',
@@ -1640,12 +1999,32 @@ const styles = StyleSheet.create({
     bottom: 0,
     flexDirection: 'row',
     gap: 10,
+    alignItems: 'stretch',
     backgroundColor: '#FFFFFF',
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#E2E8F0',
     paddingHorizontal: 14,
     paddingTop: 10,
     paddingBottom: 12,
+  },
+  detailFooterAddCol: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 8,
+  },
+  detailFooterMinus: {
+    width: 44,
+    borderRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  detailFooterMinusText: {
+    fontSize: 22,
+    fontWeight: '700',
+    marginTop: -2,
   },
   detailFooterDisabled: {
     opacity: 0.95,
@@ -1701,15 +2080,57 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 4,
-    paddingVertical: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     backgroundColor: 'transparent',
   },
-  detailAddText: { marginLeft: 6, fontWeight: '900' },
+  detailAddTextCol: {
+    marginLeft: 6,
+    flex: 1,
+    minWidth: 0,
+  },
+  detailAddText: { fontWeight: '900', fontSize: 14 },
+  detailAddSub: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 14,
+    opacity: 0.92,
+  },
+  similarSection: {
+    marginTop: 8,
+    marginHorizontal: -14,
+    paddingTop: 8,
+  },
+  similarTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    paddingHorizontal: 14,
+    letterSpacing: -0.2,
+  },
+  similarSubtitle: {
+    marginTop: 4,
+    marginBottom: 12,
+    paddingHorizontal: 14,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  similarListContent: {
+    paddingHorizontal: 10,
+    paddingBottom: 4,
+    gap: 0,
+  },
+  similarCardWrap: {
+    width: 168,
+    marginHorizontal: 4,
+  },
   buyNowBtn: {
     flex: 1,
+    alignSelf: 'stretch',
     borderRadius: 4,
     paddingVertical: 14,
     alignItems: 'center',

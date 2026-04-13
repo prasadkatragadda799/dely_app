@@ -64,7 +64,16 @@ export const useCart = () => {
             ? images[0].url
             : '';
 
-      const tierRaw = String(it.price_option_key ?? it.priceOptionKey ?? 'unit').toLowerCase();
+      const tierRaw = String(
+        it.price_option_key ??
+          it.priceOptionKey ??
+          (typeof it.price_option === 'object' && it.price_option
+            ? (it.price_option as { key?: string }).key
+            : undefined) ??
+          'unit',
+      )
+        .trim()
+        .toLowerCase();
       const priceOptionKey: PriceOptionKey =
         tierRaw === 'set' || tierRaw === 'remaining' ? tierRaw : 'unit';
 
@@ -99,6 +108,37 @@ export const useCart = () => {
           : 'kitchen'
         : 'fmcg';
 
+      const rawVariants = Array.isArray(p.variants) ? p.variants : [];
+      const mappedVariants =
+        rawVariants.length > 0
+          ? rawVariants
+              .map((v: any) => ({
+                packagingLabel:
+                  v.packagingLabel ?? v.packaging_label
+                    ? String(v.packagingLabel ?? v.packaging_label).trim()
+                    : undefined,
+                packagingLabelType:
+                  v.packagingLabelType ?? v.packaging_label_type
+                    ? String(v.packagingLabelType ?? v.packaging_label_type).trim()
+                    : undefined,
+                setPieces:
+                  v.setPieces ?? v.set_pcs
+                    ? String(v.setPieces ?? v.set_pcs).trim()
+                    : undefined,
+                weight:
+                  v.weight != null && String(v.weight).trim()
+                    ? String(v.weight).trim()
+                    : undefined,
+              }))
+              .filter(
+                (r: any) =>
+                  r.packagingLabel ||
+                  r.packagingLabelType ||
+                  r.setPieces ||
+                  r.weight,
+              )
+          : undefined;
+
       // Minimal mapping for cart/checkout UI.
       const mappedProduct: Product = {
         id: String(p.id ?? it.product_id),
@@ -124,6 +164,7 @@ export const useCart = () => {
           typeof p.variantSetPieces === 'string' && p.variantSetPieces.trim()
             ? p.variantSetPieces.trim()
             : undefined,
+        variants: mappedVariants && mappedVariants.length > 0 ? mappedVariants : undefined,
       };
 
       return {
@@ -156,9 +197,14 @@ export const useCart = () => {
         const alreadyInCart = items.some(
           i => i.product.id === product.id && i.priceOptionKey === tier,
         );
+        const pcs = Math.max(1, product.piecesPerSet ?? 1);
+        const minLineQty =
+          tier === 'set' && pcs > 1 && minOrder > 1 && minOrder % pcs === 0
+            ? Math.max(1, Math.floor(minOrder / pcs))
+            : minOrder;
         const safeQuantity = alreadyInCart
           ? requested
-          : Math.max(minOrder, requested);
+          : Math.max(minLineQty, requested);
         addToCartApi({
           product_id: product.id,
           quantity: safeQuantity,
@@ -207,17 +253,27 @@ export const useCart = () => {
             // Silent; checkout already handles errors.
           });
       },
-      decrement: (productId: string) => {
-        const target = items.find(i => i.product.id === productId);
+      decrement: (productId: string, priceOptionKey?: PriceOptionKey) => {
+        const target = items.find(
+          i =>
+            i.product.id === productId &&
+            (priceOptionKey === undefined ||
+              i.priceOptionKey === priceOptionKey),
+        );
         if (!target?.cartItemId) return;
         const nextQty = Math.max(0, target.quantity - 1);
         const minOrder = Math.max(
           1,
           Math.trunc(Number(target.product.minOrderQuantity) || 1),
         );
+        const pcs = Math.max(1, target.product.piecesPerSet ?? 1);
+        const tier = target.priceOptionKey;
+        const minLineQty =
+          tier === 'set' && pcs > 1 && minOrder > 1 && minOrder % pcs === 0
+            ? Math.max(1, Math.floor(minOrder / pcs))
+            : minOrder;
         const op =
-          // If decrement would violate backend minimum quantity, treat it as remove.
-          nextQty <= 0 || nextQty < minOrder
+          nextQty <= 0 || nextQty < minLineQty
             ? deleteCartItemApi({ cartItemId: target.cartItemId })
             : updateCartItemApi({ cartItemId: target.cartItemId, quantity: nextQty });
         op.unwrap().catch((e: any) => {

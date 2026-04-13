@@ -14,6 +14,14 @@ export type ProductCategory = 'fmcg' | 'kitchen' | 'home';
 
 export type PriceOptionKey = 'unit' | 'set' | 'remaining';
 
+/** Admin-defined SKU variants (packaging / set composition). */
+export interface ProductVariant {
+  packagingLabel?: string;
+  packagingLabelType?: string;
+  setPieces?: string;
+  weight?: string;
+}
+
 export interface ProductPriceOption {
   key: PriceOptionKey;
   label: string;
@@ -69,6 +77,8 @@ export interface Product {
   piecesPerSet?: number;
   /** First variant "set/pcs" label from admin (e.g. "6x100g"). */
   variantSetPieces?: string;
+  /** Full variant rows from admin when present. */
+  variants?: ProductVariant[];
 }
 
 export interface Deal {

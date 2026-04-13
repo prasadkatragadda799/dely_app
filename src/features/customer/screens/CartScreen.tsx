@@ -13,7 +13,10 @@ import { useNavigation } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCart } from '../../../hooks/useCart';
-import { cartQuantityCaption } from '../../../utils/productPackaging';
+import {
+  cartLineQuantityCaption,
+  stepperQuantityCaptionForCartLine,
+} from '../../../utils/productPackaging';
 import { priceTierLabel } from '../../../utils/productPricing';
 import { useAppDispatch, useAppSelector } from '../../../hooks/redux';
 import { setHomeDivision } from '../homeDivisionSlice';
@@ -24,10 +27,21 @@ const formatInrAmount = (value: number) => {
   return (Math.round((n + Number.EPSILON) * 100) / 100).toFixed(2);
 };
 
+const hexToRgba = (hex: string, alpha: number) => {
+  const normalized = hex.replace('#', '');
+  if (normalized.length !== 6) {
+    return `rgba(29,78,216,${alpha})`;
+  }
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+};
+
 const CartScreen = () => {
   const navigation = useNavigation<any>();
   const dispatch = useAppDispatch();
-  const { items, remove } = useCart();
+  const { items, add, decrement } = useCart();
   const homeDivision = useAppSelector(state => state.homeDivision.division);
   const tabBarHeight = useBottomTabBarHeight();
   const insets = useSafeAreaInsets();
@@ -108,18 +122,59 @@ const CartScreen = () => {
                 <Text style={styles.brand}>{item.product.brand}</Text>
                 <Text style={styles.meta}>
                   {priceTierLabel(item.priceOptionKey)} · Rs {formatInrAmount(item.product.price)} ×{' '}
-                  {cartQuantityCaption(item.product, item.quantity)}
+                  {cartLineQuantityCaption(
+                    item.product,
+                    item.quantity,
+                    item.priceOptionKey,
+                  )}
                 </Text>
               </View>
             </View>
-            <Text style={styles.rowTotal}>
-              Rs {formatInrAmount(item.product.price * item.quantity)}
-            </Text>
-            <TouchableOpacity
-              onPress={() => remove(item.cartItemId)}
-              style={styles.removeBtn}>
-              <Icon name="trash-can-outline" size={18} color="#DC2626" />
-            </TouchableOpacity>
+            <View style={styles.rowRight}>
+              <Text style={styles.rowTotal}>
+                Rs {formatInrAmount(item.product.price * item.quantity)}
+              </Text>
+              <View
+                style={[
+                  styles.cartStepperShell,
+                  {
+                    borderColor: hexToRgba(primary, 0.35),
+                    backgroundColor: hexToRgba(primary, 0.06),
+                  },
+                ]}>
+                <View style={styles.cartStepSideCol}>
+                  <TouchableOpacity
+                    style={styles.cartStepSideHit}
+                    onPress={() => decrement(item.product.id, item.priceOptionKey)}
+                    activeOpacity={0.85}
+                    hitSlop={{ top: 6, bottom: 6, left: 8, right: 4 }}>
+                    <Icon name="minus" size={16} color={primary} />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.cartStepQtySlot}>
+                  <Text
+                    style={styles.cartStepQty}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.72}>
+                    {stepperQuantityCaptionForCartLine(
+                      item.product,
+                      item.quantity,
+                      item.priceOptionKey,
+                    )}
+                  </Text>
+                </View>
+                <View style={styles.cartStepSideCol}>
+                  <TouchableOpacity
+                    style={styles.cartStepSideHit}
+                    onPress={() => add(item.product, 1, item.priceOptionKey)}
+                    activeOpacity={0.85}
+                    hitSlop={{ top: 6, bottom: 6, left: 4, right: 8 }}>
+                    <Text style={[styles.cartStepPlusGlyph, { color: primary }]}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
           </View>
         )}
         ListEmptyComponent={
@@ -233,14 +288,56 @@ const styles = StyleSheet.create({
   name: { color: '#0F172A', fontWeight: '800', fontSize: 14 },
   brand: { color: '#475569', marginTop: 2, fontWeight: '700', fontSize: 12 },
   meta: { color: '#64748B', marginTop: 4, fontWeight: '700' },
-  rowTotal: { color: '#0F172A', fontWeight: '900', fontSize: 14, marginRight: 4 },
-  removeBtn: {
-    alignItems: 'center',
+  rowRight: { alignItems: 'flex-end', gap: 8, flexShrink: 0 },
+  rowTotal: { color: '#0F172A', fontWeight: '900', fontSize: 14 },
+  cartStepperShell: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    minHeight: 36,
+    minWidth: 112,
+    borderRadius: 10,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  cartStepSideCol: {
+    width: 30,
+    flexShrink: 0,
+    flexGrow: 0,
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+  },
+  cartStepSideHit: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cartStepPlusGlyph: {
+    fontSize: 17,
+    fontWeight: '400',
+    marginTop: -1,
+    lineHeight: 20,
+  },
+  cartStepQtySlot: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(148,163,184,0.35)',
+  },
+  cartStepQty: {
+    textAlign: 'center',
+    fontWeight: '800',
+    fontSize: 11,
+    letterSpacing: 0,
+    maxWidth: '100%',
+    color: '#0F172A',
+    includeFontPadding: false,
   },
   emptyWrap: { paddingTop: 36, alignItems: 'center', gap: 10 },
   empty: { color: '#64748B', fontWeight: '800' },

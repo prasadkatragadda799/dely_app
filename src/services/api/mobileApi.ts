@@ -414,7 +414,44 @@ export const mobileApi = createApi({
           : '';
         return { url: `/cart${suffix}`, method: 'POST', body: rest };
       },
-      invalidatesTags: ['Cart'],
+      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+        const div: 'fmcg' | 'homeKitchen' =
+          arg.cartDivision === 'homeKitchen' ? 'homeKitchen' : 'fmcg';
+        try {
+          const { data } = await queryFulfilled;
+          const envelope = data as ApiEnvelope<{
+            items?: unknown[];
+            summary?: unknown;
+          }>;
+          const cartPayload = envelope?.data;
+          if (
+            cartPayload &&
+            typeof cartPayload === 'object' &&
+            Array.isArray((cartPayload as { items?: unknown[] }).items)
+          ) {
+            dispatch(
+              mobileApi.util.updateQueryData('getCart', div, draft => {
+                const d = draft as {
+                  data?: { items?: unknown[]; summary?: unknown };
+                };
+                if (!d.data) {
+                  d.data = {
+                    items: (cartPayload as { items: unknown[] }).items,
+                    summary: (cartPayload as { summary?: unknown }).summary,
+                  };
+                } else {
+                  d.data.items = (cartPayload as { items: unknown[] }).items;
+                  if ('summary' in cartPayload) {
+                    d.data.summary = (cartPayload as { summary: unknown }).summary;
+                  }
+                }
+              }),
+            );
+          }
+        } catch {
+          /* mutation error surfaced via unwrap() in callers */
+        }
+      },
     }),
     clearCartApi: builder.mutation<ApiEnvelope<unknown>, void>({
       query: () => ({ url: '/cart', method: 'DELETE' }),

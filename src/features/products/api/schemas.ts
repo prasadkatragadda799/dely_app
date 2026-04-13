@@ -4,6 +4,7 @@ import {
   Product,
   ProductPriceOption,
   ProductSpecifications,
+  ProductVariant,
 } from '../../../types';
 
 export interface ApiResponseEnvelope<T> {
@@ -373,6 +374,38 @@ export const mapProductFromApi = (
     }
   }
 
+  const mappedVariants: ProductVariant[] | undefined =
+    variants.length > 0
+      ? variants
+          .map((v: Record<string, unknown>) => {
+            const pl = v.packagingLabel ?? v.packaging_label;
+            const plt = v.packagingLabelType ?? v.packaging_label_type;
+            const sp = v.setPieces ?? v.set_pcs;
+            const w = v.weight;
+            const row: ProductVariant = {};
+            if (pl != null && String(pl).trim()) {
+              row.packagingLabel = String(pl).trim();
+            }
+            if (plt != null && String(plt).trim()) {
+              row.packagingLabelType = String(plt).trim();
+            }
+            if (sp != null && String(sp).trim()) {
+              row.setPieces = String(sp).trim();
+            }
+            if (w != null && String(w).trim()) {
+              row.weight = String(w).trim();
+            }
+            return row;
+          })
+          .filter(
+            r =>
+              r.packagingLabel ||
+              r.packagingLabelType ||
+              r.setPieces ||
+              r.weight,
+          )
+      : undefined;
+
   const divisionShelfHintRaw =
     (typeof item.divisionSlug === 'string' && item.divisionSlug.trim()) ||
     (typeof item.division === 'string' && item.division.trim())
@@ -424,6 +457,8 @@ export const mapProductFromApi = (
     variantSetPieces: item.variantSetPieces?.trim()
       ? String(item.variantSetPieces).trim()
       : variantSetPieces,
+    variants:
+      mappedVariants && mappedVariants.length > 0 ? mappedVariants : undefined,
   };
 };
 

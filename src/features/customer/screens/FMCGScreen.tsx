@@ -3,7 +3,6 @@ import { FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useGetProductsQuery } from '../../products/api/productsApi';
 import { useCart } from '../../../hooks/useCart';
 import ProductCard from '../../../shared/ui/ProductCard';
-import { defaultPriceTier } from '../../../utils/productPricing';
 import { themes } from '../../../utils/theme';
 
 const FMCGScreen = () => {
@@ -19,7 +18,10 @@ const FMCGScreen = () => {
         keyExtractor={item => item.id}
         numColumns={3}
         renderItem={({ item }) => (
-          <ProductCard product={item} onAdd={p => add(p, 1, defaultPriceTier(p))} />
+          <ProductCard
+            product={item}
+            onAdd={(p, tier) => add(p, 1, tier)}
+          />
         )}
         contentContainerStyle={styles.list}
       />

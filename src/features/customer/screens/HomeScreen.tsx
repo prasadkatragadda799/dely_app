@@ -1,7 +1,9 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   FlatList,
   Image,
+  LayoutChangeEvent,
   NativeScrollEvent,
   NativeSyntheticEvent,
   PermissionsAndroid,
@@ -32,11 +34,12 @@ import Voice, {
   isVoiceSearchAvailable,
   VOICE_NOT_AVAILABLE_MESSAGE,
 } from '../../../utils/voice';
-import { defaultPriceTier } from '../../../utils/productPricing';
 import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
 import type { Deal } from '../../../types';
 
 type DivisionKey = 'fmcg' | 'homeKitchen';
+
+const DIVISION_TRACK_PAD = 4;
 
 const divisions: Array<{
   key: DivisionKey;
@@ -113,6 +116,31 @@ const HomeScreen = () => {
     },
     [dispatch],
   );
+
+  const divisionThumbX = useRef(
+    new Animated.Value(DIVISION_TRACK_PAD),
+  ).current;
+  const [divisionThumbSegmentPx, setDivisionThumbSegmentPx] = useState(0);
+
+  const onDivisionTrackLayout = useCallback((e: LayoutChangeEvent) => {
+    const w = e.nativeEvent.layout.width;
+    const inner = w - DIVISION_TRACK_PAD * 2;
+    setDivisionThumbSegmentPx(Math.max(0, inner / 2));
+  }, []);
+
+  useEffect(() => {
+    if (divisionThumbSegmentPx <= 0) return;
+    const to =
+      activeDivision === 'fmcg'
+        ? DIVISION_TRACK_PAD
+        : DIVISION_TRACK_PAD + divisionThumbSegmentPx;
+    Animated.spring(divisionThumbX, {
+      toValue: to,
+      useNativeDriver: true,
+      friction: 9,
+      tension: 95,
+    }).start();
+  }, [activeDivision, divisionThumbSegmentPx, divisionThumbX]);
 
   const filteredProducts = useMemo(() => {
     const base =
@@ -439,7 +467,12 @@ const HomeScreen = () => {
         <View style={styles.paperHeaderTop}>
           <View style={styles.paperBrandBlock}>
             <View style={[styles.paperLogoMark, { backgroundColor: primarySoft }]}>
-              <Icon name="shopping-outline" size={22} color={primary} />
+              <Image
+                source={require('../../../../assets/logo.png')}
+                style={styles.paperLogoImage}
+                resizeMode="contain"
+                accessibilityLabel="Dely"
+              />
             </View>
             <View style={styles.paperShopFor}>
               <Text style={[styles.paperShopForLabel, { color: '#64748B' }]}>
@@ -550,64 +583,56 @@ const HomeScreen = () => {
       <Text style={[styles.divisionSectionLabel, { color: primaryText }]}>
         What are you shopping for?
       </Text>
-      <View style={styles.divisionCardRow}>
-        {divisions.map(item => {
-          const isActive = item.key === activeDivision;
-          return (
-            <TouchableOpacity
-              key={item.key}
-              style={[
-                styles.divisionCard,
-                {
-                  borderColor: isActive ? primary : '#E2E8F0',
-                  backgroundColor: isActive ? primary : '#FFFFFF',
-                },
-              ]}
-              onPress={() => selectDivision(item.key)}
-              activeOpacity={0.9}>
-              <View
-                style={[
-                  styles.divisionCardIcon,
-                  {
-                    backgroundColor: isActive
-                      ? 'rgba(255,255,255,0.22)'
-                      : primarySoft,
-                  },
-                ]}>
+      <View
+        style={[
+          styles.divisionTrackOuter,
+          { borderColor: primaryBorder, backgroundColor: '#E8EEF4' },
+        ]}
+        onLayout={onDivisionTrackLayout}>
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.divisionPillThumb,
+            {
+              width: Math.max(divisionThumbSegmentPx, 1),
+              opacity: divisionThumbSegmentPx > 0 ? 1 : 0,
+              backgroundColor: primary,
+              transform: [{ translateX: divisionThumbX }],
+            },
+          ]}
+        />
+        <View style={styles.divisionTrackRow}>
+          {divisions.map(item => {
+            const isActive = item.key === activeDivision;
+            return (
+              <TouchableOpacity
+                key={item.key}
+                style={styles.divisionTrackHit}
+                onPress={() => selectDivision(item.key)}
+                activeOpacity={0.88}>
                 <Icon
                   name={item.icon}
-                  size={18}
-                  color={isActive ? '#FFFFFF' : primary}
+                  size={22}
+                  color={isActive ? '#FFFFFF' : '#64748B'}
                 />
-              </View>
-              <View style={styles.divisionCardText}>
                 <Text
                   style={[
-                    styles.divisionCardTitle,
-                    { color: isActive ? '#FFFFFF' : primaryText },
+                    styles.divisionTrackLabel,
+                    { color: isActive ? '#FFFFFF' : '#475569' },
                   ]}
-                  numberOfLines={2}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.85}>
+                  numberOfLines={1}>
                   {item.segmentLabel}
                 </Text>
-                <Text
-                  style={[
-                    styles.divisionCardSub,
-                    {
-                      color: isActive
-                        ? 'rgba(255,255,255,0.88)'
-                        : '#64748B',
-                    },
-                  ]}
-                  numberOfLines={2}>
-                  {item.tagline}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
+      <Text
+        style={[styles.divisionTaglineCaption, { color: '#64748B' }]}
+        numberOfLines={2}>
+        {divisions.find(d => d.key === activeDivision)?.tagline}
+      </Text>
 
       <TouchableOpacity
         style={[
@@ -1035,7 +1060,7 @@ const HomeScreen = () => {
         renderItem={({ item }) => (
           <ProductCard
             product={item}
-            onAdd={p => add(p, 1, defaultPriceTier(p))}
+            onAdd={(p, tier) => add(p, 1, tier)}
             accentColor={primary}
             onCardPress={() =>
               navigation.navigate('ProductOverview', {
@@ -1091,6 +1116,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
+    overflow: 'hidden',
+  },
+  paperLogoImage: {
+    width: 34,
+    height: 34,
   },
   paperShopFor: { flex: 1, minWidth: 0 },
   paperShopForLabel: {
@@ -1112,52 +1142,50 @@ const styles = StyleSheet.create({
   },
   divisionSectionLabel: {
     marginTop: 12,
-    marginBottom: 6,
+    marginBottom: 8,
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0.2,
   },
-  divisionCardRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  divisionCard: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: 'column',
-    alignItems: 'center',
-    borderRadius: 12,
+  divisionTrackOuter: {
+    borderRadius: 999,
     borderWidth: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 6,
-    gap: 5,
+    padding: DIVISION_TRACK_PAD,
+    position: 'relative',
+    overflow: 'hidden',
   },
-  divisionCardIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+  divisionPillThumb: {
+    position: 'absolute',
+    top: DIVISION_TRACK_PAD,
+    bottom: DIVISION_TRACK_PAD,
+    left: 0,
+    borderRadius: 999,
+  },
+  divisionTrackRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  divisionTrackHit: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 6,
+    zIndex: 1,
   },
-  divisionCardText: {
-    width: '100%',
-    alignSelf: 'stretch',
-    alignItems: 'center',
+  divisionTrackLabel: {
+    fontSize: 14,
+    fontWeight: '800',
+    flexShrink: 1,
   },
-  divisionCardTitle: {
-    fontSize: 11,
-    fontWeight: '900',
-    lineHeight: 14,
-    textAlign: 'center',
-    width: '100%',
-  },
-  divisionCardSub: {
-    marginTop: 2,
-    fontSize: 8,
+  divisionTaglineCaption: {
+    marginTop: 8,
+    fontSize: 12,
     fontWeight: '600',
-    lineHeight: 11,
+    lineHeight: 16,
     textAlign: 'center',
-    width: '100%',
   },
   locationPill: {
     marginTop: 12,

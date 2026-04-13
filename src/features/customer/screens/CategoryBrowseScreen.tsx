@@ -15,7 +15,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useCart } from '../../../hooks/useCart';
 import ProductCard from '../../../shared/ui/ProductCard';
 import { Product } from '../../../types';
-import { defaultPriceTier } from '../../../utils/productPricing';
 import {
   ShopCategoryNode,
   useGetCategoryTreeQuery,
@@ -233,7 +232,7 @@ function SidebarBrandLogo({
 }) {
   const [failed, setFailed] = React.useState(false);
   if (failed || !uri.trim()) {
-    return <Icon name="tag-outline" size={18} color={accent} />;
+    return <Icon name="tag-outline" size={20} color={accent} />;
   }
   return (
     <Image
@@ -512,8 +511,8 @@ const CategoryBrowseScreen = () => {
    * to fit long category labels and can take most of the row.
    */
   const sidebarWidth = Math.min(
-    88,
-    Math.max(72, Math.round(windowWidth * 0.2)),
+    104,
+    Math.max(84, Math.round(windowWidth * 0.23)),
   );
 
   const chipFeatured =
@@ -817,7 +816,7 @@ const CategoryBrowseScreen = () => {
             renderItem={({ item }) => (
               <ProductCard
                 product={item}
-                onAdd={p => add(p, 1, defaultPriceTier(p))}
+                onAdd={(p, tier) => add(p, 1, tier)}
                 accentColor={primary}
                 onCardPress={() => {
                   if (browseMode === 'brands') {
@@ -981,31 +980,32 @@ const styles = StyleSheet.create({
   },
   sideCell: {
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 2,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
     borderLeftWidth: 3,
     borderLeftColor: 'transparent',
     width: '100%',
     maxWidth: '100%',
   },
   sideImageWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
+    width: 48,
+    height: 48,
+    borderRadius: 10,
     borderWidth: 1,
+    borderColor: '#E2E8F0',
     backgroundColor: '#F8FAFC',
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sideEmoji: { fontSize: 18 },
+  sideEmoji: { fontSize: 20 },
   sideLabel: {
-    marginTop: 6,
+    marginTop: 8,
     fontSize: 10,
     fontWeight: '600',
     textAlign: 'center',
-    lineHeight: 13,
-    paddingHorizontal: 0,
+    lineHeight: 14,
+    paddingHorizontal: 2,
   },
   sideLabelActive: {
     fontWeight: '800',
