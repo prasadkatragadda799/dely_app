@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Linking,
   StyleSheet,
@@ -7,10 +7,11 @@ import {
   View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import TermsAndConditionsModal from '../../../shared/ui/TermsAndConditionsModal';
 
 const HelpSupportScreen = () => {
+  const [termsVisible, setTermsVisible] = useState(false);
   const privacyPolicyUrl = 'https://delycart.in/privacy-policy';
-  const termsUrl = 'https://delycart.in/terms-and-conditions';
 
   const openSupportMail = async () => {
     const url = 'mailto:support@delycart.app';
@@ -54,10 +55,15 @@ const HelpSupportScreen = () => {
         <TouchableOpacity onPress={() => openExternal(privacyPolicyUrl)} activeOpacity={0.9}>
           <Text style={styles.linkText}>Privacy Policy</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => openExternal(termsUrl)} activeOpacity={0.9}>
+        <TouchableOpacity onPress={() => setTermsVisible(true)} activeOpacity={0.9}>
           <Text style={styles.linkText}>Terms & Conditions</Text>
         </TouchableOpacity>
       </View>
+
+      <TermsAndConditionsModal
+        visible={termsVisible}
+        onClose={() => setTermsVisible(false)}
+      />
     </View>
   );
 };

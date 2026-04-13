@@ -18,7 +18,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../../../hooks/useAuth';
 import { AuthStackParamList } from '../../../navigation/types';
 import { UserRole } from '../../../types';
-import { TERMS_AND_CONDITIONS_TEXT } from '../../../constants/termsAndConditionsText';
+import TermsAndConditionsModal from '../../../shared/ui/TermsAndConditionsModal';
 import { getApiErrorMessage } from '../../../utils/apiErrorMessage';
 import {
   launchImageLibrary,
@@ -670,31 +670,10 @@ const RegisterScreen = ({ navigation }: Props) => {
           </View>
         </View>
       </Modal>
-      <Modal
-        transparent
+      <TermsAndConditionsModal
         visible={termsModalVisible}
-        animationType="slide"
-        onRequestClose={() => setTermsModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, styles.termsModalContent]}>
-            <View style={styles.termsModalHeader}>
-              <Text style={styles.modalTitle}>Terms & Conditions</Text>
-              <TouchableOpacity
-                style={styles.termsCloseBtn}
-                onPress={() => setTermsModalVisible(false)}
-              >
-                <Text style={styles.termsCloseText}>Close</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.termsScroll} showsVerticalScrollIndicator>
-              <Text style={styles.termsBodyText}>
-                {TERMS_AND_CONDITIONS_TEXT}
-              </Text>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setTermsModalVisible(false)}
+      />
     </SafeAreaView>
   );
 };
@@ -850,20 +829,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 22,
     padding: 18,
-  },
-  termsModalContent: {
-    flex: 1,
-    maxHeight: '85%',
-  },
-  termsModalHeader: { flexDirection: 'row', justifyContent: 'space-between' },
-  termsCloseBtn: { paddingHorizontal: 10, paddingVertical: 6 },
-  termsCloseText: { color: '#1D4ED8', fontWeight: '800' },
-  termsScroll: { marginTop: 10, flex: 1 },
-  termsBodyText: {
-    color: '#0F172A',
-    fontWeight: '500',
-    fontSize: 12,
-    lineHeight: 18,
   },
   modalTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
   modalSubtitle: { color: '#475569', marginTop: 4, marginBottom: 8 },
