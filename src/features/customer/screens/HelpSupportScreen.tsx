@@ -13,7 +13,9 @@ const SUPPORT_EMAIL = 'delycart.in@gmail.com';
 
 const HelpSupportScreen = () => {
   const [termsVisible, setTermsVisible] = useState(false);
+  const legalCentreUrl = 'https://delycart.in/legal';
   const privacyPolicyUrl = 'https://delycart.in/privacy-policy';
+  const termsWebUrl = 'https://delycart.in/terms-and-conditions';
 
   const openSupportMail = async () => {
     const url = `mailto:${SUPPORT_EMAIL}`;
@@ -50,11 +52,17 @@ const HelpSupportScreen = () => {
 
       <View style={styles.linksCard}>
         <Text style={styles.linksTitle}>Legal</Text>
+        <TouchableOpacity onPress={() => openExternal(legalCentreUrl)} activeOpacity={0.9}>
+          <Text style={styles.linkText}>Legal centre (all documents)</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => openExternal(privacyPolicyUrl)} activeOpacity={0.9}>
           <Text style={styles.linkText}>Privacy Policy</Text>
         </TouchableOpacity>
+        <TouchableOpacity onPress={() => openExternal(termsWebUrl)} activeOpacity={0.9}>
+          <Text style={styles.linkText}>Terms & Conditions (web)</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => setTermsVisible(true)} activeOpacity={0.9}>
-          <Text style={styles.linkText}>Terms & Conditions</Text>
+          <Text style={styles.linkText}>Terms & Conditions (in app)</Text>
         </TouchableOpacity>
       </View>
 
