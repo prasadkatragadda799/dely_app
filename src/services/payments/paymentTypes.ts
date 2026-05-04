@@ -1,2 +1,2 @@
-export type PaymentMethod = 'upi' | 'razorpay';
+export type PaymentMethod = 'cod';
 

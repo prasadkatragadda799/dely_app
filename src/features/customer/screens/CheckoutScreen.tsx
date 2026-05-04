@@ -22,18 +22,15 @@ import { PaymentMethod } from '../../../services/payments/paymentTypes';
 import {
   useCreateOrderApiMutation,
   useGetProfileQuery,
-  useInitiatePaymentMutation,
-  useVerifyPaymentMutation,
   useLazyReverseGeocodeQuery,
 } from '../../../services/api/mobileApi';
 
 const methodItems: Array<{ key: PaymentMethod; title: string; subtitle: string; icon: string }> = [
-  { key: 'upi', title: 'UPI', subtitle: 'Fast and secure instant payment', icon: 'qrcode-scan' },
   {
-    key: 'razorpay',
-    title: 'Razorpay',
-    subtitle: 'Secure payment via Razorpay',
-    icon: 'credit-card-outline',
+    key: 'cod',
+    title: 'Cash on Delivery',
+    subtitle: 'Pay in cash when your order is delivered',
+    icon: 'cash',
   },
 ];
 
@@ -44,11 +41,9 @@ const CheckoutScreen = () => {
   const homeDivision = useAppSelector(state => state.homeDivision.division);
   const tabBarHeight = useBottomTabBarHeight();
   const insets = useSafeAreaInsets();
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('upi');
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>('cod');
   const [loading, setLoading] = useState(false);
   const [createOrderApi] = useCreateOrderApiMutation();
-  const [initiatePayment] = useInitiatePaymentMutation();
-  const [verifyPayment] = useVerifyPaymentMutation();
   const { data: profileRes } = useGetProfileQuery();
   const profile = profileRes?.data as any;
 
@@ -260,7 +255,7 @@ const CheckoutScreen = () => {
         deliveryAddress.longitude = longitude;
       }
 
-      // 1) Create the order in backend (it will store cart items + set status `pending`)
+      // 1) Create COD order in backend.
       const createRes = await createOrderApi({
         items: visibleItems.map(i => ({
           product_id: i.product.id,
@@ -268,7 +263,7 @@ const CheckoutScreen = () => {
           price_option_key: i.priceOptionKey,
         })),
         delivery_address: deliveryAddress,
-        payment_method: 'online',
+        payment_method: 'cod',
       }).unwrap();
 
       if (!createRes?.success) {
@@ -278,36 +273,7 @@ const CheckoutScreen = () => {
       const order = createRes.data as any;
       const orderId = String(order.id);
       const amountToPay = Number(order.total ?? order.subtotal ?? subtotal);
-
-      // 2) Initiate the payment for this order
-      const providerLabel = selectedMethod === 'upi' ? 'UPI' : 'Razorpay';
-
-      const initiateRes = await initiatePayment({
-        order_id: orderId,
-        amount: amountToPay,
-        payment_method: 'online',
-        payment_details: { provider: providerLabel },
-      }).unwrap();
-
-      if (!initiateRes?.success) {
-        throw new Error(initiateRes?.message ?? 'Could not initiate payment');
-      }
-
-      const paymentInitiate = initiateRes.data as any;
-      const paymentId = String(paymentInitiate.payment_id);
-
-      // In production, this `transaction_id` comes from the gateway.
-      const transactionId = `txn-${Date.now()}`;
-
-      // 3) Verify payment (backend sets order status to confirmed)
-      const verifyRes = await verifyPayment({
-        payment_id: paymentId,
-        transaction_id: transactionId,
-      }).unwrap();
-
-      if (!verifyRes?.success) {
-        throw new Error(verifyRes?.message ?? 'Payment verification failed');
-      }
+      const providerLabel = 'Cash on Delivery';
 
       pushService.sendLocal({
         title: 'Order Placed',
@@ -512,7 +478,7 @@ const CheckoutScreen = () => {
           activeOpacity={0.92}>
           <Icon name="shield-check-outline" size={18} color="#FFFFFF" />
           <Text style={styles.placeOrderText}>
-            {loading ? 'Processing Payment...' : 'Pay & Place Order'}
+            {loading ? 'Placing Order...' : 'Place COD Order'}
           </Text>
         </TouchableOpacity>
       </View>
