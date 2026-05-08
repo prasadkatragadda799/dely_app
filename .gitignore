@@ -73,3 +73,9 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Firebase / Google credentials
+google-services.json
+GoogleService-Info.plist
+*-firebase-adminsdk-*.json
+firebase-adminsdk*.json
