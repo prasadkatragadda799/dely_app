@@ -14,7 +14,10 @@ import { pushService } from '../services/notifications/pushService';
 import AuthStack from './AuthStack';
 import CustomerTabs from './CustomerTabs';
 import DeliveryTabs from './DeliveryTabs';
-import { useRefreshTokenMutation } from '../services/api/mobileApi';
+import {
+  useRefreshTokenMutation,
+  useRegisterFcmTokenMutation,
+} from '../services/api/mobileApi';
 
 const SplashScreen = () => (
   <View style={styles.splashContainer}>
@@ -32,6 +35,7 @@ const RootNavigator = () => {
   const dispatch = useAppDispatch();
   const { user, isSplashVisible } = useAppSelector(state => state.auth);
   const [refreshTokenApi] = useRefreshTokenMutation();
+  const [registerFcmToken] = useRegisterFcmTokenMutation();
   const hasAttemptedRefresh = useRef(false);
 
   useEffect(() => {
@@ -40,13 +44,32 @@ const RootNavigator = () => {
   }, [dispatch]);
 
   useEffect(() => {
-    pushService.init();
+    const syncFcmToken = (token: string) => {
+      if (!token || !user?.token || user?.role === 'delivery') return;
+      registerFcmToken({ token }).catch(() => {
+        // Token registration should not interrupt app usage.
+      });
+    };
+
+    pushService
+      .init()
+      .then(result => {
+        if (!result.granted || !result.token) return;
+        syncFcmToken(result.token);
+      })
+      .catch(() => {
+        // Push setup should not block app startup if permission/API calls fail.
+      });
+    const unsubscribeTokenRefresh = pushService.onTokenRefresh(syncFcmToken);
     const unsubscribePush = pushService.subscribe(() => {
       // Keep subscription active so notification wiring remains intact
       // without showing noisy in-app toasts for every payload.
     });
-    return unsubscribePush;
-  }, []);
+    return () => {
+      unsubscribePush();
+      unsubscribeTokenRefresh();
+    };
+  }, [registerFcmToken, user?.role, user?.token]);
 
   useEffect(() => {
     if (hasAttemptedRefresh.current) return;

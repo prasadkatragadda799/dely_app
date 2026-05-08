@@ -57,6 +57,7 @@ type ChangePasswordBody = {
   current_password: string;
   new_password: string;
 };
+type FcmTokenBody = { token: string };
 
 type CartAddBody = {
   product_id: string;
@@ -518,6 +519,9 @@ export const mobileApi = createApi({
     changePassword: builder.mutation<ApiEnvelope<unknown>, ChangePasswordBody>({
       query: body => ({ url: '/user/change-password', method: 'POST', body }),
     }),
+    registerFcmToken: builder.mutation<ApiEnvelope<unknown>, FcmTokenBody>({
+      query: body => ({ url: '/user/fcm-token', method: 'POST', body }),
+    }),
     getPaymentMethods: builder.query<ApiEnvelope<unknown>, void>({
       query: () => '/user/payment-methods',
       providesTags: ['User'],
@@ -826,6 +830,7 @@ export const {
   useGetProfileQuery,
   useUpdateProfileMutation,
   useChangePasswordMutation,
+  useRegisterFcmTokenMutation,
   useGetPaymentMethodsQuery,
   useSavePaymentMethodMutation,
   useDeletePaymentMethodMutation,
