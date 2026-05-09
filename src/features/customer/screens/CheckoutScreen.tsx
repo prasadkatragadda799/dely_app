@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Toast from 'react-native-toast-message';
+import Geolocation from 'react-native-geolocation-service';
 import { useNavigation } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -125,18 +126,8 @@ const CheckoutScreen = () => {
         return;
       }
 
-      const geo = (globalThis as any)?.navigator?.geolocation;
-      if (!geo?.getCurrentPosition) {
-        Toast.show({
-          type: 'error',
-          text1: 'Geolocation not available',
-          text2: 'Device geolocation is not supported in this environment.',
-        });
-        return;
-      }
-
       setIsLocating(true);
-      geo.getCurrentPosition(
+      Geolocation.getCurrentPosition(
         async (pos: any) => {
           try {
             const coords = pos?.coords || {};

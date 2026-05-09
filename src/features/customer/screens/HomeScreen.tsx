@@ -18,7 +18,8 @@ import {
 } from 'react-native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import Geolocation from 'react-native-geolocation-service';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   useGetCategoryTreeQuery,
@@ -70,6 +71,7 @@ const divisions: Array<{
 const HomeScreen = () => {
   const { alert: appAlert } = useAppAlert();
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const dispatch = useAppDispatch();
   const { data: allProducts = [], isLoading: isProductsLoading, isError: isProductsError } = useGetProductsQuery();
   const { data: offers = [] } = useGetOffersQuery();
@@ -77,6 +79,7 @@ const HomeScreen = () => {
   const [activeDivision, setActiveDivision] = useState<DivisionKey>('fmcg');
   const { data: categoryTreeRoots = [] } = useGetCategoryTreeQuery(activeDivision);
   const [currentLocationText, setCurrentLocationText] = useState('Fetching location...');
+  const manualLocationSet = useRef(false);
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [activeCompany, setActiveCompany] = useState<string>('All');
@@ -355,14 +358,9 @@ const HomeScreen = () => {
       }
 
       const position = await new Promise<any>((resolve, reject) => {
-        const geo = (globalThis as any)?.navigator?.geolocation;
-        if (!geo?.getCurrentPosition) {
-          reject(new Error('Geolocation not available'));
-          return;
-        }
-        geo.getCurrentPosition(
-          (pos: any) => resolve(pos),
-          (err: any) => reject(err),
+        Geolocation.getCurrentPosition(
+          pos => resolve(pos),
+          err => reject(err),
           { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 },
         );
       });
@@ -418,10 +416,14 @@ const HomeScreen = () => {
         }
       }
 
-      setCurrentLocationText(resolvedText || fallbackLocationText);
+      if (!manualLocationSet.current) {
+        setCurrentLocationText(resolvedText || fallbackLocationText);
+      }
       setIsLocating(false);
     } catch {
-      setCurrentLocationText(fallbackLocationText);
+      if (!manualLocationSet.current) {
+        setCurrentLocationText(fallbackLocationText);
+      }
       setIsLocating(false);
     }
   }, []);
@@ -429,6 +431,14 @@ const HomeScreen = () => {
   React.useEffect(() => {
     fetchCurrentLocation();
   }, [fetchCurrentLocation]);
+
+  React.useEffect(() => {
+    const picked = route.params?.location;
+    if (picked?.text) {
+      manualLocationSet.current = true;
+      setCurrentLocationText(picked.text);
+    }
+  }, [route.params?.location]);
 
   React.useEffect(() => {
     setHeroDealIndex(0);
@@ -639,7 +649,7 @@ const HomeScreen = () => {
           styles.locationPill,
           { borderColor: primaryBorder, backgroundColor: '#FFFFFF' },
         ]}
-        onPress={fetchCurrentLocation}
+        onPress={() => navigation.navigate('LocationPicker')}
         disabled={isLocating}
         activeOpacity={0.9}>
         <Icon name="map-marker-outline" size={20} color={primary} />

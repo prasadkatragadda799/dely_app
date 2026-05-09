@@ -32,6 +32,7 @@ import ProfileScreen from '../features/customer/screens/ProfileScreen';
 import SecurityScreen from '../features/customer/screens/SecurityScreen';
 import NotificationsScreen from '../features/customer/screens/NotificationsScreen';
 import WishlistScreen from '../features/customer/screens/WishlistScreen';
+import LocationPickerScreen from '../features/customer/screens/LocationPickerScreen';
 import {
   CustomerProfileStackParamList,
   CustomerTabParamList,
@@ -40,7 +41,8 @@ import {
 const Tab = createBottomTabNavigator<CustomerTabParamList>();
 
 type HomeStackParamList = {
-  Home: undefined;
+  Home: { location?: { text: string; lat: number; lng: number } } | undefined;
+  LocationPicker: undefined;
   ProductOverview: {
     division: 'fmcg' | 'homeKitchen';
     productId?: string;
@@ -85,6 +87,7 @@ const HomeStackNavigator = () => {
       />
       <HomeStack.Screen name="Orders" component={OrdersScreen} />
       <HomeStack.Screen name="Wishlist" component={WishlistScreen} />
+      <HomeStack.Screen name="LocationPicker" component={LocationPickerScreen} />
     </HomeStack.Navigator>
   );
 };

@@ -48,6 +48,7 @@ class PushService {
     if (!granted) return { granted: false, token: null as string | null };
 
     const token = await messaging().getToken();
+    console.log('[FCM] Device token:', token);
 
     if (this.unsubscribeForeground) {
       this.unsubscribeForeground();

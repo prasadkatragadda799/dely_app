@@ -4,6 +4,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { skipToken } from '@reduxjs/toolkit/query';
 import { useOrders } from '../../../hooks/useOrders';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import Geolocation from 'react-native-geolocation-service';
 import { themes } from '../../../utils/theme';
 import {
   useGetDirectionsRouteQuery,
@@ -121,10 +122,7 @@ const OngoingScreen = () => {
         const ok = await requestLocationPermissionAndroid();
         if (!ok) return;
 
-        const geo = (globalThis as any)?.navigator?.geolocation;
-        if (!geo?.getCurrentPosition) return;
-
-        geo.getCurrentPosition(
+        Geolocation.getCurrentPosition(
           async (pos: any) => {
             const coords = pos?.coords;
             if (
