@@ -11,12 +11,18 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { hideSplash, loginSuccess } from '../features/auth/authSlice';
 import { useAppDispatch, useAppSelector } from '../hooks/redux';
 import { pushService } from '../services/notifications/pushService';
+import {
+  navigationRef,
+  routeNotificationTap,
+} from '../services/notifications/notificationRouter';
+import NotificationBanner from '../components/NotificationBanner';
 import AuthStack from './AuthStack';
 import CustomerTabs from './CustomerTabs';
 import DeliveryTabs from './DeliveryTabs';
 import {
   useRefreshTokenMutation,
   useRegisterFcmTokenMutation,
+  useRegisterDeliveryFcmTokenMutation,
 } from '../services/api/mobileApi';
 
 const SplashScreen = () => (
@@ -36,6 +42,7 @@ const RootNavigator = () => {
   const { user, isSplashVisible } = useAppSelector(state => state.auth);
   const [refreshTokenApi] = useRefreshTokenMutation();
   const [registerFcmToken] = useRegisterFcmTokenMutation();
+  const [registerDeliveryFcmToken] = useRegisterDeliveryFcmTokenMutation();
   const hasAttemptedRefresh = useRef(false);
 
   useEffect(() => {
@@ -45,8 +52,10 @@ const RootNavigator = () => {
 
   useEffect(() => {
     const syncFcmToken = (token: string) => {
-      if (!token || !user?.token || user?.role === 'delivery') return;
-      registerFcmToken({ token }).catch(() => {
+      if (!token || !user?.token) return;
+      const mutation =
+        user.role === 'delivery' ? registerDeliveryFcmToken : registerFcmToken;
+      mutation({ token }).catch(() => {
         // Token registration should not interrupt app usage.
       });
     };
@@ -61,15 +70,15 @@ const RootNavigator = () => {
         // Push setup should not block app startup if permission/API calls fail.
       });
     const unsubscribeTokenRefresh = pushService.onTokenRefresh(syncFcmToken);
-    const unsubscribePush = pushService.subscribe(() => {
-      // Keep subscription active so notification wiring remains intact
-      // without showing noisy in-app toasts for every payload.
+    // Tap on a background or quit-state notification → route to the right screen.
+    const unsubscribeOpens = pushService.subscribeToOpens(payload => {
+      routeNotificationTap(payload);
     });
     return () => {
-      unsubscribePush();
+      unsubscribeOpens();
       unsubscribeTokenRefresh();
     };
-  }, [registerFcmToken, user?.role, user?.token]);
+  }, [registerFcmToken, registerDeliveryFcmToken, user?.role, user?.token]);
 
   useEffect(() => {
     if (hasAttemptedRefresh.current) return;
@@ -106,7 +115,7 @@ const RootNavigator = () => {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
         {!user ? (
           <AuthStack />
         ) : user.role === 'delivery' ? (
@@ -114,6 +123,8 @@ const RootNavigator = () => {
         ) : (
           <CustomerTabs />
         )}
+        {/* Banner sits above the navigator so it overlays any screen. */}
+        {user ? <NotificationBanner /> : null}
       </NavigationContainer>
     </SafeAreaProvider>
   );

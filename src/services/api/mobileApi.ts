@@ -526,6 +526,9 @@ export const mobileApi = createApi({
     registerFcmToken: builder.mutation<ApiEnvelope<unknown>, FcmTokenBody>({
       query: body => ({ url: '/user/fcm-token', method: 'POST', body }),
     }),
+    registerDeliveryFcmToken: builder.mutation<ApiEnvelope<unknown>, FcmTokenBody>({
+      query: body => ({ url: '/delivery/auth/fcm-token', method: 'POST', body }),
+    }),
     getPaymentMethods: builder.query<ApiEnvelope<unknown>, void>({
       query: () => '/user/payment-methods',
       providesTags: ['User'],
@@ -842,6 +845,7 @@ export const {
   useUpdateProfileMutation,
   useChangePasswordMutation,
   useRegisterFcmTokenMutation,
+  useRegisterDeliveryFcmTokenMutation,
   useGetPaymentMethodsQuery,
   useSavePaymentMethodMutation,
   useDeletePaymentMethodMutation,
