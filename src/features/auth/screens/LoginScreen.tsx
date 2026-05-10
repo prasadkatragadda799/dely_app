@@ -78,7 +78,8 @@ const LoginScreen = ({ navigation }: Props) => {
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
         style={styles.keyboardArea}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -369,7 +370,8 @@ const styles = StyleSheet.create({
     paddingTop: 18,
   },
   scrollContent: {
-    paddingBottom: 24,
+    flexGrow: 1,
+    paddingBottom: 240,
   },
 
   topBar: {

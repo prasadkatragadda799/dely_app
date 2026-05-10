@@ -355,7 +355,6 @@ const OrdersScreen = () => {
                     {[invoice?.seller?.city, invoice?.seller?.state, invoice?.seller?.pincode].filter(Boolean).join(', ')}
                   </Text>
                   <Text style={styles.invoiceLine}>GSTIN: {invoice?.seller?.gstin ?? '-'}</Text>
-                  <Text style={styles.invoiceLine}>FSSAI: {invoice?.seller?.fssai ?? '-'}</Text>
                 </View>
 
                 <View style={styles.invoiceBox}>
@@ -368,6 +367,9 @@ const OrdersScreen = () => {
                     {[invoice?.buyer?.city, invoice?.buyer?.state, invoice?.buyer?.pincode].filter(Boolean).join(', ')}
                   </Text>
                   <Text style={styles.invoiceLine}>Phone: {invoice?.buyer?.phone ?? '-'}</Text>
+                  {invoice?.buyer?.gstin ? (
+                    <Text style={styles.invoiceLine}>GSTIN: {invoice.buyer.gstin}</Text>
+                  ) : null}
                 </View>
 
                 <View style={styles.invoiceTable}>

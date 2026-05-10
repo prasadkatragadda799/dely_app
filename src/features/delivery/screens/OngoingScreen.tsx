@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  FlatList,
   Linking,
   PermissionsAndroid,
   Platform,
@@ -14,8 +15,10 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { skipToken } from '@reduxjs/toolkit/query';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import Geolocation from 'react-native-geolocation-service';
+import Toast from 'react-native-toast-message';
 import { useOrders } from '../../../hooks/useOrders';
 import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
+import { Order } from '../../../types';
 import {
   useGetDirectionsRouteQuery,
   useLazyGeocodeAddressQuery,
@@ -27,18 +30,35 @@ type LatLng = { latitude: number; longitude: number };
 const GREEN = '#16A34A';
 const DARK_GREEN = '#14532D';
 const WHITE = '#FFFFFF';
+const RED = '#DC2626';
+const AMBER = '#D97706';
+
+const formatPhoneForCall = (raw?: string): string | null => {
+  if (!raw) return null;
+  const cleaned = raw.trim().replace(/[^\d+]/g, '');
+  return cleaned.length >= 10 ? cleaned : null;
+};
 
 const OngoingScreen = () => {
   const { confirm } = useAppAlert();
-  const { ongoing, setStatus } = useOrders();
-  const activeOrder = ongoing[0];
+  const { ongoing, setStatus, revertToHub, refetchOrders } = useOrders();
+  const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
+
+  // Active = the order whose map/route is being shown. Default to the first
+  // ongoing order, but allow the courier to pick a different one when they
+  // have multiple in flight.
+  const activeOrder = useMemo<Order | null>(() => {
+    if (ongoing.length === 0) return null;
+    return ongoing.find(o => o.id === activeOrderId) ?? ongoing[0];
+  }, [ongoing, activeOrderId]);
+
   const mapRef = useRef<MapView>(null);
 
   const [origin, setOrigin] = useState<LatLng | null>(null);
   const [resolvedDestination, setResolvedDestination] = useState<LatLng | null>(null);
   const [route, setRoute] = useState<LatLng[]>([]);
   const [step, setStep] = useState(0);
-  const [isActionLoading, setIsActionLoading] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
   const [updateDeliveryCurrentLocation] = useUpdateDeliveryCurrentLocationMutation();
   const [geocodeAddress, { isFetching: isGeocoding }] = useLazyGeocodeAddressQuery();
@@ -83,7 +103,7 @@ const OngoingScreen = () => {
     setRoute(pts);
   }, [directionsRes]);
 
-  // Geocode address fallback
+  // Geocode address fallback for the active order
   useEffect(() => {
     const resolve = async () => {
       if (!activeOrder || destinationFromCoords) {
@@ -99,7 +119,7 @@ const OngoingScreen = () => {
           setResolvedDestination({ latitude: d.latitude, longitude: d.longitude });
         }
       } catch {
-        // silently fall through — map stays empty
+        // map will stay empty
       }
     };
     resolve();
@@ -148,66 +168,90 @@ const OngoingScreen = () => {
   useEffect(() => {
     if (origin && destination && mapRef.current) {
       mapRef.current.fitToCoordinates([origin, destination], {
-        edgePadding: { top: 140, right: 40, bottom: 320, left: 40 },
+        edgePadding: { top: 140, right: 40, bottom: 360, left: 40 },
         animated: true,
       });
     }
   }, [origin, destination]);
 
-  const openInGoogleMaps = () => {
-    if (!destination) return;
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${destination.latitude},${destination.longitude}&travelmode=driving`;
+  const openInGoogleMaps = (dest: LatLng | null) => {
+    if (!dest) return;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${dest.latitude},${dest.longitude}&travelmode=driving`;
     Linking.openURL(url);
   };
 
-  const callCustomer = () => {
-    // In a real app, customer phone is fetched with order detail
-    // Here we open a dial intent with a placeholder
-    Linking.openURL('tel:');
-  };
-
-  const handlePrimaryAction = async () => {
-    if (!activeOrder || isActionLoading) return;
-
-    if (activeOrder.status === 'picked') {
-      setIsActionLoading(true);
-      try {
-        await setStatus(activeOrder.id, 'en_route');
-      } finally {
-        setIsActionLoading(false);
-      }
+  const callCustomer = (order: Order) => {
+    const phone = formatPhoneForCall(order.customerPhone);
+    if (!phone) {
+      Toast.show({
+        type: 'error',
+        text1: 'No phone number',
+        text2: "This order doesn't have a customer phone on file.",
+      });
       return;
     }
+    Linking.openURL(`tel:${phone}`).catch(() => {
+      Toast.show({ type: 'error', text1: 'Could not start call' });
+    });
+  };
 
-    if (activeOrder.status === 'en_route') {
-      const ok = await confirm({
-        title: 'Mark as Delivered',
-        message: `Confirm delivery for Order #${activeOrder.id}? This cannot be undone.`,
-        confirmLabel: 'Yes, Delivered',
-        cancelLabel: 'Cancel',
-      });
-      if (!ok) return;
-      setIsActionLoading(true);
-      try {
-        await setStatus(activeOrder.id, 'delivered');
-      } finally {
-        setIsActionLoading(false);
-      }
+  const handleStartTrip = async (order: Order) => {
+    if (actionLoadingId) return;
+    setActionLoadingId(order.id);
+    try {
+      await setStatus(order.id, 'en_route');
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
-  const nextActionLabel =
-    activeOrder?.status === 'picked'
-      ? 'Start Trip'
-      : activeOrder?.status === 'en_route'
-        ? 'Mark as Delivered'
-        : 'Delivered';
+  const handleMarkDelivered = async (order: Order) => {
+    if (actionLoadingId) return;
+    const ok = await confirm({
+      title: 'Mark as Delivered',
+      message: `Confirm delivery for Order #${(order.orderNumber ?? order.id).toString().slice(-8).toUpperCase()}? This cannot be undone.`,
+      confirmLabel: 'Yes, Delivered',
+      cancelLabel: 'Cancel',
+    });
+    if (!ok) return;
+    setActionLoadingId(order.id);
+    try {
+      await setStatus(order.id, 'delivered');
+      Toast.show({ type: 'success', text1: 'Order marked as delivered' });
+      await refetchOrders();
+    } catch {
+      Toast.show({ type: 'error', text1: 'Could not update order' });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
 
-  const nextActionIcon =
-    activeOrder?.status === 'picked' ? 'truck-fast-outline' : 'check-circle-outline';
-
-  const statusColor =
-    activeOrder?.status === 'en_route' ? '#2563EB' : GREEN;
+  const handleRevertToHub = async (order: Order) => {
+    if (actionLoadingId) return;
+    const ok = await confirm({
+      title: 'Return to Hub',
+      message:
+        'The customer is unreachable. Returning this order to the hub will release it for reassignment. Continue?',
+      confirmLabel: 'Return to Hub',
+      cancelLabel: 'Cancel',
+      destructive: true,
+    });
+    if (!ok) return;
+    setActionLoadingId(order.id);
+    try {
+      await revertToHub(order.id, 'Customer unreachable');
+      Toast.show({ type: 'success', text1: 'Returned to hub for reassignment' });
+      await refetchOrders();
+    } catch (err: any) {
+      Toast.show({
+        type: 'error',
+        text1: 'Could not return order',
+        text2: err?.data?.detail ?? err?.data?.message ?? 'Please try again.',
+      });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
 
   if (!activeOrder) {
     return (
@@ -219,9 +263,120 @@ const OngoingScreen = () => {
     );
   }
 
+  const statusColor =
+    activeOrder.status === 'en_route' ? '#2563EB' : GREEN;
+
+  const renderOrderCard = (order: Order, isActive: boolean) => {
+    const isLoading = actionLoadingId === order.id;
+    const orderShortId = (order.orderNumber ?? order.id).toString().slice(-8).toUpperCase();
+    return (
+      <View
+        key={order.id}
+        style={[
+          styles.orderCard,
+          isActive && styles.orderCardActive,
+        ]}
+      >
+        {/* Customer header */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => setActiveOrderId(order.id)}
+          style={styles.cardHeaderRow}
+        >
+          <View style={{ flex: 1 }}>
+            <View style={styles.cardTitleRow}>
+              {isActive && <View style={[styles.activeDot, { backgroundColor: statusColor }]} />}
+              <Text style={styles.customerName} numberOfLines={1}>
+                {order.customerName}
+              </Text>
+            </View>
+            <Text style={styles.customerAddress} numberOfLines={2}>
+              {order.address}
+            </Text>
+            <View style={styles.metaRow}>
+              <View style={styles.metaChip}>
+                <Icon name="receipt" size={11} color="#166534" />
+                <Text style={styles.metaChipText}>#{orderShortId}</Text>
+              </View>
+              <View style={styles.metaChip}>
+                <Icon name="currency-inr" size={11} color="#166534" />
+                <Text style={styles.metaChipText}>{order.amount.toLocaleString('en-IN')}</Text>
+              </View>
+              <View style={[styles.metaChip, order.status === 'en_route' ? styles.metaChipBlue : styles.metaChipGreen]}>
+                <Text style={[styles.metaChipText, { color: WHITE }]}>
+                  {order.status === 'en_route' ? 'En route' : 'Picked up'}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.callButton, !order.customerPhone && styles.callButtonDisabled]}
+            onPress={() => callCustomer(order)}
+            activeOpacity={0.85}
+          >
+            <Icon name="phone" size={18} color={order.customerPhone ? GREEN : '#9CA3AF'} />
+          </TouchableOpacity>
+        </TouchableOpacity>
+
+        {/* Phone display (so the courier can read it even if call fails) */}
+        {order.customerPhone ? (
+          <Text style={styles.phoneText}>📞 {order.customerPhone}</Text>
+        ) : null}
+
+        {/* Action buttons */}
+        <View style={styles.actionRow}>
+          {order.status === 'picked' ? (
+            <TouchableOpacity
+              style={[styles.actionPrimary, isLoading && styles.actionDisabled]}
+              onPress={() => handleStartTrip(order)}
+              disabled={isLoading}
+              activeOpacity={0.85}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color={WHITE} />
+              ) : (
+                <>
+                  <Icon name="truck-fast-outline" size={16} color={WHITE} />
+                  <Text style={styles.actionPrimaryText}>Start Trip</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.actionPrimary, styles.actionPrimaryBlue, isLoading && styles.actionDisabled]}
+              onPress={() => handleMarkDelivered(order)}
+              disabled={isLoading}
+              activeOpacity={0.85}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color={WHITE} />
+              ) : (
+                <>
+                  <Icon name="check-circle-outline" size={16} color={WHITE} />
+                  <Text style={styles.actionPrimaryText}>Mark Delivered</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={[styles.actionSecondary, isLoading && styles.actionDisabled]}
+            onPress={() => handleRevertToHub(order)}
+            disabled={isLoading}
+            activeOpacity={0.85}
+          >
+            <Icon name="undo-variant" size={16} color={AMBER} />
+            <Text style={styles.actionSecondaryText}>Return to Hub</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
-      {/* Full-screen map */}
+      {/* Map for the active order */}
       {origin && destination ? (
         <MapView
           ref={mapRef}
@@ -262,24 +417,26 @@ const OngoingScreen = () => {
         </View>
       )}
 
-      {/* ── Top floating bar ── */}
+      {/* Top bar — count + nav helper */}
       <SafeAreaView edges={['top']} style={styles.topBar} pointerEvents="box-none">
         <View style={styles.topBarInner}>
-          {/* Order info pill */}
           <View style={styles.orderPill}>
             <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
             <Text style={styles.orderPillText} numberOfLines={1}>
-              {activeOrder.status === 'picked' ? 'Picked up' : 'En route'} · {activeOrder.customerName}
+              {ongoing.length} active deliver{ongoing.length === 1 ? 'y' : 'ies'} · {activeOrder.customerName}
             </Text>
           </View>
 
-          {/* Open in Maps */}
-          <TouchableOpacity style={styles.iconButton} onPress={openInGoogleMaps} activeOpacity={0.85}>
-            <Icon name="google-maps" size={20} color={DARK_GREEN} />
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={() => openInGoogleMaps(destination)}
+            activeOpacity={0.85}
+            disabled={!destination}
+          >
+            <Icon name="google-maps" size={20} color={destination ? DARK_GREEN : '#9CA3AF'} />
           </TouchableOpacity>
         </View>
 
-        {/* Distance / ETA pill */}
         {(distanceText || durationText) && (
           <View style={styles.etaPill}>
             <Icon name="clock-fast" size={14} color={DARK_GREEN} />
@@ -294,74 +451,27 @@ const OngoingScreen = () => {
             <Text style={styles.etaText}>Loading route…</Text>
           </View>
         )}
-      </SafeAreaView>
-
-      {/* ── Bottom delivery card ── */}
-      <View style={styles.bottomCard}>
-        {/* Navigation instruction */}
         {currentInstruction ? (
-          <View style={styles.instructionRow}>
-            <Icon name="arrow-right-circle-outline" size={20} color={GREEN} />
+          <View style={styles.instructionPill}>
+            <Icon name="arrow-right-circle-outline" size={16} color={GREEN} />
             <Text style={styles.instructionText} numberOfLines={2}>
               {currentInstruction}
             </Text>
           </View>
         ) : null}
+      </SafeAreaView>
 
-        {/* Customer info */}
-        <View style={styles.customerRow}>
-          <View style={styles.customerInfo}>
-            <Text style={styles.customerName}>{activeOrder.customerName}</Text>
-            <Text style={styles.customerAddress} numberOfLines={2}>
-              {activeOrder.address}
-            </Text>
-          </View>
-          {/* Call button */}
-          <TouchableOpacity style={styles.callButton} onPress={callCustomer} activeOpacity={0.85}>
-            <Icon name="phone" size={20} color={GREEN} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Order meta */}
-        <View style={styles.metaRow}>
-          <View style={styles.metaChip}>
-            <Icon name="receipt" size={13} color="#166534" />
-            <Text style={styles.metaChipText}>#{activeOrder.id.slice(-8).toUpperCase()}</Text>
-          </View>
-          <View style={styles.metaChip}>
-            <Icon name="currency-inr" size={13} color="#166534" />
-            <Text style={styles.metaChipText}>{activeOrder.amount.toLocaleString('en-IN')}</Text>
-          </View>
-        </View>
-
-        {/* Primary action */}
-        {activeOrder.status !== 'delivered' && (
-          <TouchableOpacity
-            style={[
-              styles.actionButton,
-              activeOrder.status === 'en_route' && styles.actionButtonDelivered,
-              isActionLoading && styles.actionButtonDisabled,
-            ]}
-            onPress={handlePrimaryAction}
-            activeOpacity={0.85}
-            disabled={isActionLoading}>
-            {isActionLoading ? (
-              <ActivityIndicator size="small" color={WHITE} />
-            ) : (
-              <>
-                <Icon name={nextActionIcon} size={18} color={WHITE} />
-                <Text style={styles.actionButtonText}>{nextActionLabel}</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-
-        {activeOrder.status === 'delivered' && (
-          <View style={styles.deliveredBanner}>
-            <Icon name="check-circle" size={18} color={GREEN} />
-            <Text style={styles.deliveredBannerText}>Delivered successfully</Text>
-          </View>
-        )}
+      {/* Bottom: scrollable list of all ongoing deliveries */}
+      <View style={styles.bottomSheet}>
+        <View style={styles.bottomHandle} />
+        <FlatList
+          data={ongoing}
+          keyExtractor={item => item.id}
+          renderItem={({ item }) => renderOrderCard(item, item.id === activeOrder.id)}
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+          showsVerticalScrollIndicator={false}
+        />
       </View>
     </View>
   );
@@ -370,7 +480,6 @@ const OngoingScreen = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#E8F5E9' },
 
-  // Empty state
   emptyContainer: {
     flex: 1,
     backgroundColor: '#F0FDF4',
@@ -382,7 +491,6 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 20, fontWeight: '900', color: DARK_GREEN, marginTop: 8 },
   emptySubtitle: { textAlign: 'center', color: '#166534', fontWeight: '500', lineHeight: 20 },
 
-  // Map placeholder
   mapPlaceholder: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#F0FDF4',
@@ -449,88 +557,127 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   etaText: { fontWeight: '700', color: DARK_GREEN, fontSize: 13 },
+  instructionPill: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: WHITE,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.10,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  instructionText: { flex: 1, color: DARK_GREEN, fontWeight: '700', fontSize: 12, lineHeight: 16 },
 
-  // Bottom card
-  bottomCard: {
+  // Bottom sheet
+  bottomSheet: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
+    maxHeight: '55%',
     backgroundColor: WHITE,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 34,
+    paddingTop: 8,
+    paddingBottom: 24,
     shadowColor: '#000',
     shadowOpacity: 0.15,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: -4 },
     elevation: 12,
-    gap: 12,
   },
-  instructionRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+  bottomHandle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E5E7EB',
+    marginBottom: 8,
+  },
+  listContent: { paddingHorizontal: 14, paddingBottom: 4 },
+
+  // Order card
+  orderCard: {
+    backgroundColor: WHITE,
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  orderCardActive: {
+    borderColor: GREEN,
+    borderWidth: 1.5,
     backgroundColor: '#F0FDF4',
-    borderRadius: 12,
-    padding: 10,
-    gap: 8,
+  },
+  cardHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  activeDot: { width: 8, height: 8, borderRadius: 4 },
+  customerName: { fontWeight: '900', fontSize: 15, color: DARK_GREEN, flex: 1 },
+  customerAddress: { color: '#374151', fontSize: 12, lineHeight: 16, marginTop: 2 },
+  phoneText: { color: '#0F766E', fontSize: 12, fontWeight: '700', marginTop: 6 },
+
+  metaRow: { flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' },
+  metaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderWidth: 1,
     borderColor: '#DCFCE7',
   },
-  instructionText: { flex: 1, color: DARK_GREEN, fontWeight: '700', fontSize: 13, lineHeight: 18 },
-  customerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  customerInfo: { flex: 1 },
-  customerName: { fontWeight: '900', fontSize: 16, color: DARK_GREEN },
-  customerAddress: { marginTop: 3, color: '#374151', fontSize: 13, lineHeight: 18 },
+  metaChipText: { color: '#166534', fontWeight: '700', fontSize: 11 },
+  metaChipGreen: { backgroundColor: GREEN, borderColor: GREEN },
+  metaChipBlue: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
+
   callButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     borderWidth: 1.5,
     borderColor: '#86EFAC',
     backgroundColor: '#F0FDF4',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  metaRow: { flexDirection: 'row', gap: 8 },
-  metaChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#F0FDF4',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: '#DCFCE7',
-  },
-  metaChipText: { color: '#166534', fontWeight: '700', fontSize: 12 },
-  actionButton: {
+  callButtonDisabled: { opacity: 0.5, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB' },
+
+  actionRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  actionPrimary: {
+    flex: 1,
     backgroundColor: GREEN,
-    borderRadius: 14,
-    paddingVertical: 15,
+    borderRadius: 10,
+    paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
   },
-  actionButtonDelivered: { backgroundColor: '#1D4ED8' },
-  actionButtonDisabled: { opacity: 0.7 },
-  actionButtonText: { color: WHITE, fontWeight: '900', fontSize: 15 },
-  deliveredBanner: {
+  actionPrimaryBlue: { backgroundColor: '#2563EB' },
+  actionPrimaryText: { color: WHITE, fontWeight: '900', fontSize: 13 },
+  actionDisabled: { opacity: 0.6 },
+
+  actionSecondary: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: AMBER,
+    borderRadius: 10,
+    paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#DCFCE7',
-    borderRadius: 14,
-    paddingVertical: 14,
-    borderWidth: 1,
-    borderColor: '#86EFAC',
+    gap: 6,
+    backgroundColor: '#FFFBEB',
   },
-  deliveredBannerText: { color: DARK_GREEN, fontWeight: '900', fontSize: 15 },
+  actionSecondaryText: { color: AMBER, fontWeight: '900', fontSize: 13 },
 
   // Markers
   myLocationDot: {
@@ -547,7 +694,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#DC2626',
+    backgroundColor: RED,
     borderWidth: 2,
     borderColor: WHITE,
     alignItems: 'center',

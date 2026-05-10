@@ -18,6 +18,7 @@ import { DeliveryTabParamList } from '../../../navigation/types';
 import {
   useGetDeliveryMeQuery,
   useUpdateDeliveryMeMutation,
+  useToggleDeliveryAvailabilityMutation,
 } from '../../../services/api/mobileApi';
 import { Order } from '../../../types';
 
@@ -45,13 +46,19 @@ const AssignedOrdersScreen = () => {
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
   const { data: meRes } = useGetDeliveryMeQuery();
-  const [updateDeliveryMe, { isLoading: isTogglingOnline }] = useUpdateDeliveryMeMutation();
+  // Kept import for other future uses; availability uses its own mutation.
+  void useUpdateDeliveryMeMutation;
+  const [toggleAvailabilityApi, { isLoading: isTogglingOnline }] =
+    useToggleDeliveryAvailabilityMutation();
   const deliveryMe = meRes?.data;
-  const isOnline = deliveryMe?.isOnline ?? (deliveryMe as any)?.is_online ?? false;
+  const isAvailable =
+    (deliveryMe as any)?.isAvailable ??
+    (deliveryMe as any)?.is_available ??
+    false;
 
   const handleToggleOnline = async () => {
     try {
-      await updateDeliveryMe({ isOnline: !isOnline, is_online: !isOnline }).unwrap();
+      await toggleAvailabilityApi({ available: !isAvailable }).unwrap();
     } catch {
       // silently handle
     }
@@ -161,23 +168,23 @@ const AssignedOrdersScreen = () => {
 
         {/* Online / Offline toggle */}
         <TouchableOpacity
-          style={[styles.onlinePill, isOnline ? styles.onlinePillActive : styles.onlinePillInactive]}
+          style={[styles.onlinePill, isAvailable ? styles.onlinePillActive : styles.onlinePillInactive]}
           onPress={handleToggleOnline}
           activeOpacity={0.85}
           disabled={isTogglingOnline}>
           {isTogglingOnline ? (
-            <ActivityIndicator size="small" color={isOnline ? WHITE : '#374151'} />
+            <ActivityIndicator size="small" color={isAvailable ? WHITE : '#374151'} />
           ) : (
-            <View style={[styles.onlineDot, isOnline ? styles.onlineDotActive : styles.onlineDotInactive]} />
+            <View style={[styles.onlineDot, isAvailable ? styles.onlineDotActive : styles.onlineDotInactive]} />
           )}
-          <Text style={[styles.onlineText, isOnline ? styles.onlineTextActive : styles.onlineTextInactive]}>
-            {isOnline ? 'Online' : 'Offline'}
+          <Text style={[styles.onlineText, isAvailable ? styles.onlineTextActive : styles.onlineTextInactive]}>
+            {isAvailable ? 'Online' : 'Offline'}
           </Text>
           <Switch
-            value={isOnline}
+            value={isAvailable}
             onValueChange={handleToggleOnline}
             trackColor={{ false: '#D1D5DB', true: '#86EFAC' }}
-            thumbColor={isOnline ? GREEN : '#9CA3AF'}
+            thumbColor={isAvailable ? GREEN : '#9CA3AF'}
             ios_backgroundColor="#D1D5DB"
             style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
             disabled={isTogglingOnline}
@@ -224,11 +231,11 @@ const AssignedOrdersScreen = () => {
             <Icon name="clipboard-check-outline" size={40} color="#BBF7D0" />
             <Text style={styles.emptyTitle}>All caught up!</Text>
             <Text style={styles.emptyMeta}>
-              {isOnline
+              {isAvailable
                 ? 'No new orders assigned yet. Pull down to refresh.'
                 : 'You are offline. Go online to receive orders.'}
             </Text>
-            {!isOnline && (
+            {!isAvailable && (
               <TouchableOpacity
                 style={styles.goOnlineButton}
                 onPress={handleToggleOnline}

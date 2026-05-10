@@ -18,6 +18,7 @@ import {
   useGetDeliveryDashboardSummaryQuery,
   useGetDeliveryMeQuery,
   useUpdateDeliveryMeMutation,
+  useToggleDeliveryAvailabilityMutation,
 } from '../../../services/api/mobileApi';
 import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
 
@@ -35,6 +36,7 @@ const DeliveryProfileScreen = () => {
 
   const { data: meRes, refetch: refetchMe } = useGetDeliveryMeQuery();
   const [updateDeliveryMe, { isLoading: isUpdating }] = useUpdateDeliveryMeMutation();
+  const [toggleAvailability] = useToggleDeliveryAvailabilityMutation();
   const deliveryMe = meRes?.data;
 
   const { data: dashboardRes } = useGetDeliveryDashboardSummaryQuery();
@@ -50,8 +52,10 @@ const DeliveryProfileScreen = () => {
     (deliveryMe as any)?.vehicleType ??
     (deliveryMe as any)?.vehicle_type ??
     '';
-  const isOnline =
-    (deliveryMe as any)?.isOnline ?? (deliveryMe as any)?.is_online ?? false;
+  // "Available" = is_available (whether courier accepts new orders).
+  // "is_online" is just the session-active flag (set on login/logout).
+  const isAvailable =
+    (deliveryMe as any)?.isAvailable ?? (deliveryMe as any)?.is_available ?? false;
   const todayEarnings = dashboard?.todayEarnings ?? 0;
   const completedTodayCount = dashboard?.completedTodayCount ?? 0;
   const earningsChangePercent = dashboard?.earningsChangePercent ?? 0;
@@ -80,7 +84,7 @@ const DeliveryProfileScreen = () => {
   const handleToggleOnline = async () => {
     setIsTogglingOnline(true);
     try {
-      await updateDeliveryMe({ isOnline: !isOnline, is_online: !isOnline }).unwrap();
+      await toggleAvailability({ available: !isAvailable }).unwrap();
       await refetchMe();
     } catch {
       Toast.show({ type: 'error', text1: 'Could not update status' });
@@ -127,28 +131,28 @@ const DeliveryProfileScreen = () => {
         contentContainerStyle={{ paddingBottom: tabBarHeight + 24 }}>
 
         {/* ── Online / Offline banner ── */}
-        <View style={[styles.onlineBanner, isOnline ? styles.onlineBannerActive : styles.onlineBannerInactive]}>
+        <View style={[styles.onlineBanner, isAvailable ? styles.onlineBannerActive : styles.onlineBannerInactive]}>
           <View style={styles.onlineBannerLeft}>
-            <View style={[styles.onlineDot, isOnline ? styles.onlineDotActive : styles.onlineDotInactive]} />
+            <View style={[styles.onlineDot, isAvailable ? styles.onlineDotActive : styles.onlineDotInactive]} />
             <View>
-              <Text style={[styles.onlineTitle, isOnline ? styles.onlineTitleActive : styles.onlineTitleInactive]}>
-                {isOnline ? 'You are Online' : 'You are Offline'}
+              <Text style={[styles.onlineTitle, isAvailable ? styles.onlineTitleActive : styles.onlineTitleInactive]}>
+                {isAvailable ? 'You are Online' : 'You are Offline'}
               </Text>
               <Text style={styles.onlineSubtitle}>
-                {isOnline
+                {isAvailable
                   ? 'Receiving new delivery orders'
                   : 'Toggle to start receiving orders'}
               </Text>
             </View>
           </View>
           {isTogglingOnline ? (
-            <ActivityIndicator size="small" color={isOnline ? GREEN : '#6B7280'} />
+            <ActivityIndicator size="small" color={isAvailable ? GREEN : '#6B7280'} />
           ) : (
             <Switch
-              value={isOnline}
+              value={isAvailable}
               onValueChange={handleToggleOnline}
               trackColor={{ false: '#D1D5DB', true: '#86EFAC' }}
-              thumbColor={isOnline ? GREEN : '#9CA3AF'}
+              thumbColor={isAvailable ? GREEN : '#9CA3AF'}
               ios_backgroundColor="#D1D5DB"
             />
           )}

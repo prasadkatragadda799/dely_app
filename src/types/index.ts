@@ -117,7 +117,9 @@ export type OrderStatus =
 
 export interface Order {
   id: string;
+  orderNumber?: string;
   customerName: string;
+  customerPhone?: string;
   address: string;
   // Destination coordinates (customer delivery location).
   // These are expected to be stored inside `delivery_address.latitude/longitude` on the backend.

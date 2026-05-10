@@ -3,6 +3,7 @@ import { Order, OrderStatus } from '../types';
 import { useAppSelector } from './redux';
 import {
   useGetDeliveryAssignedOrdersQuery,
+  useRevertDeliveryOrderToHubMutation,
   useUpdateDeliveryOrderStatusMutation,
 } from '../services/api/mobileApi';
 
@@ -113,9 +114,28 @@ export const useOrders = () => {
       const deliveryAddressObj = o?.deliveryAddress ?? o?.delivery_address;
       const coords = deriveCoordinates(deliveryAddressObj);
       const backendStatus = o?.status as string;
+
+      // Customer phone may live on the user record OR on the delivery_address
+      // (when the order was placed against a saved address). Prefer user phone
+      // when present, then fall back to the per-order delivery contact phone.
+      const phoneCandidate =
+        (o?.customerPhone as string | undefined) ??
+        (o?.customer_phone as string | undefined) ??
+        (deliveryAddressObj && typeof deliveryAddressObj === 'object'
+          ? ((deliveryAddressObj as Record<string, unknown>).phone as
+              | string
+              | undefined)
+          : undefined);
+      const customerPhone =
+        typeof phoneCandidate === 'string' && phoneCandidate.trim() && phoneCandidate.trim() !== 'N/A'
+          ? phoneCandidate.trim()
+          : undefined;
+
       return {
         id: o?.id ?? '',
+        orderNumber: (o?.orderNumber ?? o?.order_number ?? undefined) as string | undefined,
         customerName: o?.customerName ?? o?.customer_name ?? 'Customer',
+        customerPhone,
         address: deriveAddress(o?.deliveryAddress ?? o?.delivery_address),
         customerLatitude: coords.latitude,
         customerLongitude: coords.longitude,
@@ -128,6 +148,7 @@ export const useOrders = () => {
   }, [assignedRes]);
 
   const [updateDeliveryStatusApi] = useUpdateDeliveryOrderStatusMutation();
+  const [revertToHubApi] = useRevertDeliveryOrderToHubMutation();
 
   return useMemo(
     () => ({
@@ -152,8 +173,15 @@ export const useOrders = () => {
         }).unwrap();
         await refetch();
       },
+      revertToHub: async (orderId: string, reason?: string) => {
+        // Returns the order to the assignment pool: clears delivery_person_id and
+        // resets status so admin can reassign. Used when the customer is unreachable.
+        await revertToHubApi({ orderId, reason }).unwrap();
+        await refetch();
+      },
+      refetchOrders: refetch,
       isLoading: isFetching,
     }),
-    [orders, updateDeliveryStatusApi, refetch, isFetching],
+    [orders, updateDeliveryStatusApi, revertToHubApi, refetch, isFetching],
   );
 };

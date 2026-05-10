@@ -125,10 +125,16 @@ type KycSubmitBody = {
 };
 
 type DeliveryLocationBody = {
-  label?: string;
-  address: string;
-  latitude: number;
-  longitude: number;
+  address_line1: string;
+  address_line2?: string;
+  city: string;
+  state: string;
+  pincode: string;
+  type?: 'home' | 'office' | 'other';
+  is_default?: boolean;
+  landmark?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 type DirectionsStep = {
@@ -718,6 +724,17 @@ export const mobileApi = createApi({
       }),
       invalidatesTags: ['Delivery'],
     }),
+    toggleDeliveryAvailability: builder.mutation<
+      ApiEnvelope<{ isAvailable?: boolean; is_available?: boolean }>,
+      { available: boolean }
+    >({
+      query: body => ({
+        url: '/delivery/orders/availability',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Delivery'],
+    }),
 
     getDeliveryDashboardSummary: builder.query<
       ApiEnvelope<DeliveryDashboardSummary>,
@@ -766,6 +783,17 @@ export const mobileApi = createApi({
         url: `/delivery/orders/${orderId}/status`,
         method: 'PUT',
         body,
+      }),
+      invalidatesTags: ['Delivery'],
+    }),
+    revertDeliveryOrderToHub: builder.mutation<
+      ApiEnvelope<unknown>,
+      { orderId: string; reason?: string }
+    >({
+      query: ({ orderId, reason }) => ({
+        url: `/delivery/orders/${orderId}/revert`,
+        method: 'POST',
+        body: reason ? { reason } : {},
       }),
       invalidatesTags: ['Delivery'],
     }),
@@ -875,9 +903,11 @@ export const {
   useDeleteDeliveryLocationMutation,
   useGetDeliveryMeQuery,
   useUpdateDeliveryMeMutation,
+  useToggleDeliveryAvailabilityMutation,
   useGetDeliveryDashboardSummaryQuery,
   useGetDeliveryAssignedOrdersQuery,
   useUpdateDeliveryOrderStatusMutation,
+  useRevertDeliveryOrderToHubMutation,
   useUpdateDeliveryCurrentLocationMutation,
   useGetDirectionsRouteQuery,
   useLazyReverseGeocodeQuery,
