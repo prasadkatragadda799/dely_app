@@ -23,6 +23,10 @@ import {
   useGetProductQuery,
   useGetProductsQuery,
 } from '../../products/api/productsApi';
+import {
+  useCheckServiceLocationQuery,
+  useGetDeliveryLocationsQuery,
+} from '../../../services/api/mobileApi';
 import { composeVariantPackagingFromApi } from '../../products/api/schemas';
 import { useCart } from '../../../hooks/useCart';
 import { useAppDispatch } from '../../../hooks/redux';
@@ -540,7 +544,24 @@ const ProductOverviewScreen = () => {
     [selectedProduct],
   );
 
-  const canPurchase = selectedProduct ? isProductPurchasable(selectedProduct) : false;
+  // Resolve the customer's default delivery pincode and check serviceability.
+  // Products always render in the listing; the warning + purchase block live here.
+  const { data: deliveryLocationsEnvelope } = useGetDeliveryLocationsQuery();
+  const deliveryLocations = (deliveryLocationsEnvelope?.data as any[]) ?? [];
+  const defaultDeliveryLocation =
+    deliveryLocations.find((l: any) => l.is_default) ?? deliveryLocations[0];
+  const defaultPincode: string = defaultDeliveryLocation?.pincode ?? '';
+  const { data: locationCheckEnvelope } = useCheckServiceLocationQuery(
+    defaultPincode,
+    { skip: !defaultPincode },
+  );
+  const locationCheck = locationCheckEnvelope?.data;
+  const isLocationUnavailable =
+    !!locationCheck && locationCheck.restricted && !locationCheck.available;
+
+  const canPurchase = selectedProduct
+    ? isProductPurchasable(selectedProduct) && !isLocationUnavailable
+    : false;
 
   const detailProductCartTotal = useMemo(() => {
     if (!selectedProduct) return 0;
@@ -664,6 +685,9 @@ const ProductOverviewScreen = () => {
 
   const stockHint = useMemo(() => {
     if (!selectedProduct) return null;
+    if (isLocationUnavailable) {
+      return { text: 'Not available in your location', tone: 'bad' as const };
+    }
     if (selectedProduct.isAvailable === false) {
       return { text: 'Currently unavailable', tone: 'bad' as const };
     }
@@ -675,7 +699,7 @@ const ProductOverviewScreen = () => {
       return { text: `Only ${q} left in stock`, tone: 'warn' as const };
     }
     return { text: 'In stock', tone: 'ok' as const };
-  }, [selectedProduct]);
+  }, [selectedProduct, isLocationUnavailable]);
 
   const carouselWidth = windowWidth;
   const carouselHeight = Math.min(Math.round(windowWidth * 0.95), 420);
@@ -1029,6 +1053,22 @@ const ProductOverviewScreen = () => {
                     <Text style={styles.detailSkuMuted} numberOfLines={1}>
                       SKU · {selectedProduct.slug}
                     </Text>
+                  ) : null}
+
+                  {isLocationUnavailable ? (
+                    <View style={styles.detailLocationBanner}>
+                      <Icon name="map-marker-off" size={18} color="#92400E" />
+                      <View style={{ flex: 1, marginLeft: 8 }}>
+                        <Text style={styles.detailLocationBannerTitle}>
+                          Not available in your location
+                        </Text>
+                        <Text style={styles.detailLocationBannerBody}>
+                          {defaultPincode
+                            ? `We don't deliver to pincode ${defaultPincode} yet. Update your delivery address to check availability.`
+                            : "We don't deliver here yet. Update your delivery address to check availability."}
+                        </Text>
+                      </View>
+                    </View>
                   ) : null}
 
                   <View style={styles.detailPriceRow}>
@@ -1732,6 +1772,29 @@ const styles = StyleSheet.create({
   },
   detailHero: {
     paddingBottom: 0,
+  },
+  detailLocationBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FCD34D',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  detailLocationBannerTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  detailLocationBannerBody: {
+    fontSize: 12,
+    color: '#92400E',
+    marginTop: 2,
+    lineHeight: 16,
   },
   detailBreadcrumb: {
     fontSize: 13,
