@@ -36,6 +36,10 @@ import Voice, {
   VOICE_NOT_AVAILABLE_MESSAGE,
 } from '../../../utils/voice';
 import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
+import {
+  useGetDeliveryLocationsQuery,
+  useCheckServiceLocationQuery,
+} from '../../../services/api/mobileApi';
 import type { Deal } from '../../../types';
 
 type DivisionKey = 'fmcg' | 'homeKitchen';
@@ -80,6 +84,18 @@ const HomeScreen = () => {
   const { data: categoryTreeRoots = [] } = useGetCategoryTreeQuery(activeDivision);
   const [currentLocationText, setCurrentLocationText] = useState('Fetching location...');
   const manualLocationSet = useRef(false);
+
+  // Location availability check
+  const { data: deliveryLocationsEnvelope } = useGetDeliveryLocationsQuery();
+  const deliveryLocations = (deliveryLocationsEnvelope?.data as any[]) ?? [];
+  const defaultLocation = deliveryLocations.find((l: any) => l.is_default) ?? deliveryLocations[0];
+  const defaultPincode: string = defaultLocation?.pincode ?? '';
+  const { data: locationCheckEnvelope } = useCheckServiceLocationQuery(defaultPincode, {
+    skip: !defaultPincode,
+  });
+  const locationCheckData = locationCheckEnvelope?.data;
+  const isLocationUnavailable =
+    !!locationCheckData && locationCheckData.restricted && !locationCheckData.available;
   const [query, setQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [activeCompany, setActiveCompany] = useState<string>('All');
@@ -473,6 +489,20 @@ const HomeScreen = () => {
         ]}
         nestedScrollEnabled
         showsVerticalScrollIndicator={false}>
+
+      {/* Location unavailability banner */}
+      {isLocationUnavailable && (
+        <View style={styles.locationUnavailableBanner}>
+          <Icon name="map-marker-off" size={20} color="#92400E" style={{ marginRight: 8 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.locationUnavailableTitle}>Products not available in your location</Text>
+            <Text style={styles.locationUnavailableSubtitle}>
+              We don't deliver to pincode {defaultPincode} yet. Update your delivery address to check availability.
+            </Text>
+          </View>
+        </View>
+      )}
+
       <View style={styles.paperHeader}>
         <View style={styles.paperHeaderTop}>
           <View style={styles.paperBrandBlock}>
@@ -1389,6 +1419,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#B91C1C',
+  },
+  locationUnavailableBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginHorizontal: 14,
+    marginBottom: 12,
+  },
+  locationUnavailableTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#92400E',
+    marginBottom: 2,
+  },
+  locationUnavailableSubtitle: {
+    fontSize: 11,
+    color: '#B45309',
+    lineHeight: 15,
   },
 });
 

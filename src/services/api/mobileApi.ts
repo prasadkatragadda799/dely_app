@@ -230,6 +230,10 @@ type UpdateDeliveryMeBody = {
   email?: string;
   vehicleNumber?: string;
   vehicleType?: string;
+  isOnline?: boolean;
+  is_online?: boolean;
+  isAvailable?: boolean;
+  is_available?: boolean;
 };
 
 type PaymentInitiateBody = {
@@ -670,6 +674,13 @@ export const mobileApi = createApi({
         `/delivery/check-availability?latitude=${latitude}&longitude=${longitude}`,
       providesTags: ['Delivery'],
     }),
+    checkServiceLocation: builder.query<
+      ApiEnvelope<{ available: boolean; restricted: boolean; pincode: string }>,
+      string
+    >({
+      query: pincode => `/location/check?pincode=${encodeURIComponent(pincode)}`,
+      providesTags: ['Delivery'],
+    }),
     updateDeliveryLocation: builder.mutation<
       ApiEnvelope<unknown>,
       DeliveryLocationIdParam & Partial<DeliveryLocationBody>
@@ -855,6 +866,7 @@ export const {
   useGetDeliveryLocationsQuery,
   useCreateDeliveryLocationMutation,
   useCheckDeliveryAvailabilityQuery,
+  useCheckServiceLocationQuery,
   useUpdateDeliveryLocationMutation,
   useDeleteDeliveryLocationMutation,
   useGetDeliveryMeQuery,

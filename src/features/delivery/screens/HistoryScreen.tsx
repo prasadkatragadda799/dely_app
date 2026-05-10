@@ -1,132 +1,259 @@
 import React from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useOrders } from '../../../hooks/useOrders';
+import { useGetDeliveryDashboardSummaryQuery } from '../../../services/api/mobileApi';
+import { Order } from '../../../types';
+
+const DARK_GREEN = '#14532D';
+const GREEN = '#16A34A';
+const WHITE = '#FFFFFF';
+
+const formatCurrency = (n: number) =>
+  `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+
+const formatDate = (iso: string): string => {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return iso;
+  }
+};
 
 const HistoryScreen = () => {
   const { history } = useOrders();
-  const deliveredCount = history.filter(item => item.status === 'delivered').length;
-  const cancelledCount = history.filter(item => item.status === 'cancelled').length;
-  const earnings = history
-    .filter(item => item.status === 'delivered')
-    .reduce((acc, item) => acc + item.amount, 0);
+  const { data: dashboardRes } = useGetDeliveryDashboardSummaryQuery();
+  const dashboard = dashboardRes?.data;
+
+  const delivered = history.filter(o => o.status === 'delivered');
+  const cancelled = history.filter(o => o.status === 'cancelled');
+  const totalEarnings = delivered.reduce((sum, o) => sum + o.amount, 0);
+
+  const renderItem = ({ item }: { item: Order }) => {
+    const isDelivered = item.status === 'delivered';
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View style={styles.cardHeaderLeft}>
+            <Text style={styles.orderId}>
+              #{item.id.slice(-8).toUpperCase()}
+            </Text>
+            <Text style={styles.dateText}>{formatDate(item.createdAt)}</Text>
+          </View>
+          <View
+            style={[
+              styles.statusPill,
+              isDelivered ? styles.statusPillDelivered : styles.statusPillCancelled,
+            ]}>
+            <Icon
+              name={isDelivered ? 'check-circle-outline' : 'close-circle-outline'}
+              size={12}
+              color={isDelivered ? '#166534' : '#991B1B'}
+            />
+            <Text
+              style={[
+                styles.statusText,
+                isDelivered ? styles.statusTextDelivered : styles.statusTextCancelled,
+              ]}>
+              {isDelivered ? 'Delivered' : 'Cancelled'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.customerRow}>
+          <Icon name="account-outline" size={14} color="#6B7280" />
+          <Text style={styles.customerName}>{item.customerName}</Text>
+        </View>
+        <View style={styles.addressRow}>
+          <Icon name="map-marker-outline" size={14} color="#6B7280" />
+          <Text style={styles.addressText} numberOfLines={1}>
+            {item.address}
+          </Text>
+        </View>
+
+        {isDelivered && (
+          <View style={styles.earningRow}>
+            <Icon name="currency-inr" size={14} color={GREEN} />
+            <Text style={styles.earningText}>{formatCurrency(item.amount)}</Text>
+          </View>
+        )}
+      </View>
+    );
+  };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Delivery History</Text>
-      <Text style={styles.subtitle}>Recent trips and payout insight</Text>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.header}>
+        <Text style={styles.title}>History</Text>
+        <Text style={styles.subtitle}>Your past deliveries</Text>
+      </View>
 
+      {/* Summary cards */}
       <View style={styles.summaryRow}>
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryValue}>{deliveredCount}</Text>
+          <Icon name="currency-inr" size={20} color={GREEN} />
+          <Text style={styles.summaryValue}>{formatCurrency(totalEarnings)}</Text>
+          <Text style={styles.summaryLabel}>Total Earned</Text>
+        </View>
+        <View style={styles.summaryCard}>
+          <Icon name="truck-check-outline" size={20} color={GREEN} />
+          <Text style={styles.summaryValue}>{delivered.length}</Text>
           <Text style={styles.summaryLabel}>Delivered</Text>
         </View>
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryValue}>{cancelledCount}</Text>
+          <Icon name="truck-remove-outline" size={20} color="#EF4444" />
+          <Text style={[styles.summaryValue, cancelled.length > 0 && styles.summaryValueRed]}>
+            {cancelled.length}
+          </Text>
           <Text style={styles.summaryLabel}>Cancelled</Text>
         </View>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryValue}>Rs {earnings}</Text>
-          <Text style={styles.summaryLabel}>Earnings</Text>
-        </View>
       </View>
+
+      {/* Today's earnings from dashboard */}
+      {!!dashboard && (
+        <View style={styles.todayBanner}>
+          <Icon name="calendar-today" size={16} color={GREEN} />
+          <Text style={styles.todayText}>
+            Today: {formatCurrency(dashboard.todayEarnings ?? 0)} · {dashboard.completedTodayCount ?? 0} deliveries
+          </Text>
+        </View>
+      )}
 
       <FlatList
         data={history}
         keyExtractor={item => item.id}
-        contentContainerStyle={history.length === 0 ? styles.emptyWrap : styles.listContent}
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            <View style={styles.rowTop}>
-              <Text style={styles.order}>Order {item.id}</Text>
-              <View
-                style={[
-                  styles.statusPill,
-                  item.status === 'delivered' ? styles.deliveredPill : styles.cancelledPill,
-                ]}>
-                <Icon
-                  name={item.status === 'delivered' ? 'check-circle-outline' : 'close-circle-outline'}
-                  size={13}
-                  color={item.status === 'delivered' ? '#166534' : '#991B1B'}
-                />
-                <Text
-                  style={[
-                    styles.statusText,
-                    item.status === 'delivered' ? styles.deliveredText : styles.cancelledText,
-                  ]}>
-                  {item.status}
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.meta}>{item.customerName}</Text>
-            <Text style={styles.meta}>{item.address}</Text>
-            <Text style={styles.amount}>Rs {item.amount}</Text>
-          </View>
-        )}
+        renderItem={renderItem}
+        contentContainerStyle={
+          history.length === 0 ? styles.emptyContainer : styles.listContent
+        }
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyCard}>
-            <Icon name="history" size={24} color="#16A34A" />
-            <Text style={styles.emptyTitle}>No past deliveries yet</Text>
-            <Text style={styles.meta}>Completed orders will appear here</Text>
+            <Icon name="history" size={40} color="#BBF7D0" />
+            <Text style={styles.emptyTitle}>No deliveries yet</Text>
+            <Text style={styles.emptyMeta}>Completed orders will appear here</Text>
           </View>
         }
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF', paddingHorizontal: 14, paddingTop: 14 },
-  title: { fontSize: 26, fontWeight: '900', color: '#14532D' },
-  subtitle: { color: '#15803D', marginTop: 3, fontWeight: '600' },
-  summaryRow: { marginTop: 12, marginBottom: 12, flexDirection: 'row', gap: 8 },
+  container: { flex: 1, backgroundColor: '#F9FAFB' },
+
+  header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10 },
+  title: { fontSize: 26, fontWeight: '900', color: DARK_GREEN },
+  subtitle: { color: '#15803D', fontWeight: '600', fontSize: 13, marginTop: 2 },
+
+  // Summary
+  summaryRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
   summaryCard: {
     flex: 1,
-    borderWidth: 1,
-    borderColor: '#DCFCE7',
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-    backgroundColor: '#F8FFF9',
-  },
-  summaryValue: { color: '#14532D', fontWeight: '900', fontSize: 16 },
-  summaryLabel: { color: '#15803D', fontWeight: '700', marginTop: 2, fontSize: 11 },
-  listContent: { paddingBottom: 16 },
-  emptyWrap: { flexGrow: 1, justifyContent: 'center' },
-  row: {
-    borderWidth: 1,
-    borderColor: '#DCFCE7',
+    backgroundColor: WHITE,
     borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
-    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingVertical: 12,
+    alignItems: 'center',
+    gap: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
-  rowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  order: { color: '#111827', fontWeight: '800' },
+  summaryValue: { fontWeight: '900', fontSize: 16, color: DARK_GREEN },
+  summaryValueRed: { color: '#DC2626' },
+  summaryLabel: { color: '#6B7280', fontWeight: '600', fontSize: 10, textAlign: 'center' },
+
+  // Today banner
+  todayBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  todayText: { color: DARK_GREEN, fontWeight: '700', fontSize: 13 },
+
+  // List
+  listContent: { paddingHorizontal: 16, paddingBottom: 24 },
+  emptyContainer: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 16 },
+
+  // Card
+  card: {
+    backgroundColor: WHITE,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 7,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  cardHeaderLeft: { gap: 2 },
+  orderId: { fontWeight: '800', fontSize: 14, color: '#111827' },
+  dateText: { color: '#9CA3AF', fontSize: 11, fontWeight: '500' },
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
-  deliveredPill: { backgroundColor: '#DCFCE7' },
-  cancelledPill: { backgroundColor: '#FEE2E2' },
-  statusText: { fontWeight: '800', fontSize: 11, textTransform: 'capitalize' },
-  deliveredText: { color: '#166534' },
-  cancelledText: { color: '#991B1B' },
-  meta: { color: '#4B5563', marginTop: 5 },
-  amount: { marginTop: 6, color: '#14532D', fontWeight: '900' },
+  statusPillDelivered: { backgroundColor: '#DCFCE7' },
+  statusPillCancelled: { backgroundColor: '#FEE2E2' },
+  statusText: { fontWeight: '800', fontSize: 11 },
+  statusTextDelivered: { color: '#166534' },
+  statusTextCancelled: { color: '#991B1B' },
+  customerRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  customerName: { color: '#374151', fontWeight: '600', fontSize: 13 },
+  addressRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  addressText: { flex: 1, color: '#6B7280', fontSize: 12 },
+  earningRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  earningText: { color: GREEN, fontWeight: '900', fontSize: 14 },
+
+  // Empty
   emptyCard: {
-    borderWidth: 1,
-    borderColor: '#DCFCE7',
-    borderRadius: 14,
-    paddingVertical: 26,
+    backgroundColor: WHITE,
+    borderRadius: 16,
+    paddingVertical: 36,
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 8,
   },
-  emptyTitle: { color: '#14532D', fontWeight: '900', marginTop: 8, fontSize: 16 },
+  emptyTitle: { fontWeight: '900', fontSize: 18, color: DARK_GREEN, marginTop: 6 },
+  emptyMeta: { color: '#6B7280', fontSize: 13 },
 });
 
 export default HistoryScreen;
