@@ -45,6 +45,7 @@ function mapServerProfileToBusinessProfile(
   const fssaiLicense = str(p.fssaiLicense) ?? str(p.fssai_license);
   const udyamRegistration = str(p.udyamRegistration) ?? str(p.udyam_registration);
   const tradeCertificate = str(p.tradeCertificate) ?? str(p.trade_certificate);
+  const shopImageUri = str(p.shopPhotoUrl) ?? str(p.shop_photo_url);
   const city = str(p.city) ?? str(p.businessCity) ?? str(p.business_city);
   const state = str(p.state) ?? str(p.businessState) ?? str(p.business_state);
   const pincode =
@@ -76,8 +77,7 @@ function mapServerProfileToBusinessProfile(
     fssaiLicense,
     udyamRegistration,
     tradeCertificate,
-    shopImageUri: undefined,
-    userIdUri: undefined,
+    shopImageUri,
     addressLine1,
     addressLine2: undefined,
     city,
@@ -247,11 +247,6 @@ export const useAuth = () => {
                     bp.tradeCertificate,
                   );
                   appendRegistrationFile(form, 'shop_photo', bp.shopImageUri);
-                  appendRegistrationFile(
-                    form,
-                    'user_id_document',
-                    bp.userIdUri,
-                  );
                   return registerMultipartApi(form).unwrap();
                 })()
               : await registerApi({

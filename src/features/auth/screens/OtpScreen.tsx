@@ -1,6 +1,7 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Image,
   Platform,
@@ -18,6 +19,8 @@ import { AuthStackParamList } from '../../../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Otp'>;
 
+const RESEND_COOLDOWN = 30;
+
 const maskPhone = (phone: string) => {
   const digits = phone.replace(/\D/g, '');
   if (digits.length <= 4) return phone;
@@ -33,11 +36,24 @@ const OtpScreen = ({ navigation, route }: Props) => {
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
+  const [countdown, setCountdown] = useState(RESEND_COOLDOWN);
+  const inputRef = useRef<TextInput>(null);
 
-  const onVerify = async () => {
+  useEffect(() => {
+    const t = setTimeout(() => inputRef.current?.focus(), 300);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const id = setInterval(() => setCountdown(c => c - 1), 1000);
+    return () => clearInterval(id);
+  }, [countdown]);
+
+  const onVerify = async (code: string) => {
     try {
       setLoading(true);
-      await verifyCustomerOtp({ phone, requestId, otp: otp.trim() });
+      await verifyCustomerOtp({ phone, requestId, otp: code.trim() });
     } catch (e) {
       Toast.show({
         type: 'error',
@@ -49,11 +65,22 @@ const OtpScreen = ({ navigation, route }: Props) => {
     }
   };
 
+  const handleOtpChange = (val: string) => {
+    const digits = val.replace(/\D/g, '').slice(0, 6);
+    setOtp(digits);
+    if (digits.length === 6 && !loading) {
+      onVerify(digits);
+    }
+  };
+
   const onResend = async () => {
+    if (countdown > 0 || resendLoading) return;
     try {
       setResendLoading(true);
       const next = await sendCustomerOtp({ phone });
       navigation.setParams({ requestId: next.requestId });
+      setCountdown(RESEND_COOLDOWN);
+      setOtp('');
       Toast.show({ type: 'success', text1: 'OTP resent' });
     } catch (e) {
       Toast.show({
@@ -91,15 +118,16 @@ const OtpScreen = ({ navigation, route }: Props) => {
         <View style={styles.card}>
           <Text style={styles.title}>Enter OTP</Text>
           <Text style={styles.subtitle}>
-            We sent a code to {maskedPhone}
+            We sent a 6-digit code to {maskedPhone}
           </Text>
 
           <Text style={styles.label}>OTP</Text>
           <View style={styles.inputRow}>
             <Icon name="shield-key-outline" size={18} color="#64748B" />
             <TextInput
+              ref={inputRef}
               value={otp}
-              onChangeText={setOtp}
+              onChangeText={handleOtpChange}
               keyboardType="number-pad"
               placeholder="6-digit OTP"
               placeholderTextColor="#94A3B8"
@@ -107,23 +135,35 @@ const OtpScreen = ({ navigation, route }: Props) => {
               maxLength={6}
               autoComplete="sms-otp"
               textContentType="oneTimeCode"
+              editable={!loading}
             />
+            {loading && <ActivityIndicator size="small" color="#1D4ED8" style={{ marginRight: 4 }} />}
           </View>
 
           <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            disabled={loading}
-            onPress={onVerify}
+            style={[styles.button, (loading || otp.length < 6) && styles.buttonDisabled]}
+            disabled={loading || otp.length < 6}
+            onPress={() => onVerify(otp)}
           >
-            <Text style={styles.buttonText}>Verify OTP</Text>
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text style={styles.buttonText}>Verify OTP</Text>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.outlineButton, resendLoading && styles.buttonDisabled]}
-            disabled={resendLoading}
+            style={[styles.outlineButton, (countdown > 0 || resendLoading) && styles.buttonDisabled]}
+            disabled={countdown > 0 || resendLoading}
             onPress={onResend}
           >
-            <Text style={styles.outlineButtonText}>Resend OTP</Text>
+            {resendLoading ? (
+              <ActivityIndicator color="#1D4ED8" size="small" />
+            ) : (
+              <Text style={styles.outlineButtonText}>
+                {countdown > 0 ? `Resend OTP in ${countdown}s` : 'Resend OTP'}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -172,14 +212,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     backgroundColor: '#F8FAFC',
   },
-  input: { flex: 1, paddingVertical: 14, paddingLeft: 10, color: '#0F172A' },
+  input: { flex: 1, paddingVertical: 14, paddingLeft: 10, color: '#0F172A', fontSize: 20, letterSpacing: 6, fontWeight: '800' },
   button: {
     marginTop: 16,
     backgroundColor: '#1D4ED8',
     borderRadius: 14,
     paddingVertical: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
   },
-  buttonDisabled: { opacity: 0.7 },
+  buttonDisabled: { opacity: 0.55 },
   buttonText: {
     color: '#FFFFFF',
     textAlign: 'center',
@@ -192,6 +235,9 @@ const styles = StyleSheet.create({
     borderColor: '#1D4ED8',
     borderRadius: 14,
     paddingVertical: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
   },
   outlineButtonText: {
     color: '#1D4ED8',
@@ -202,4 +248,3 @@ const styles = StyleSheet.create({
 });
 
 export default OtpScreen;
-

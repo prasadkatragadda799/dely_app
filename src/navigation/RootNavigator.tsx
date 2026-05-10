@@ -39,7 +39,7 @@ const RootNavigator = () => {
   const hasAttemptedRefresh = useRef(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => dispatch(hideSplash()), 3000);
+    const timer = setTimeout(() => dispatch(hideSplash()), 1500);
     return () => clearTimeout(timer);
   }, [dispatch]);
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigation } from '@react-navigation/native';
 import {
   Image,
   ScrollView,
@@ -46,6 +47,7 @@ const EditInfoScreen = () => {
   const { alert: appAlert } = useAppAlert();
   const { user } = useAuth();
   const dispatch = useAppDispatch();
+  const navigation = useNavigation();
   const business = useAppSelector(state => state.businessProfile.profile);
   const homeDivision = useAppSelector(state => state.homeDivision.division);
   const isHomeKitchen = homeDivision === 'homeKitchen';
@@ -72,7 +74,6 @@ const EditInfoScreen = () => {
     business?.tradeCertificate,
   );
   const [shopImageUri, setShopImageUri] = useState<string | undefined>(business?.shopImageUri);
-  const [userIdUri, setUserIdUri] = useState<string | undefined>(business?.userIdUri);
 
   useEffect(() => {
     setAddressLine1(business?.addressLine1 ?? '');
@@ -88,7 +89,6 @@ const EditInfoScreen = () => {
     setUdyamRegistration(business?.udyamRegistration);
     setTradeCertificate(business?.tradeCertificate);
     setShopImageUri(business?.shopImageUri);
-    setUserIdUri(business?.userIdUri);
   }, [business]);
 
   const fssaiDigits = useMemo(
@@ -108,12 +108,8 @@ const EditInfoScreen = () => {
     if (fssaiDigits.length !== 14) {
       issues.push('FSSAI must be exactly 14 digits');
     }
-    if (!gstCertificate) issues.push('GST certificate photo');
-    if (!fssaiLicense) issues.push('FSSAI license photo');
-    if (!udyamRegistration) issues.push('Udyam registration photo');
-    if (!tradeCertificate) issues.push('Trade certificate photo');
-    if (!shopImageUri) issues.push('Shop photo');
-    if (!userIdUri) issues.push('User ID photo');
+    const hasAtLeastOneDoc = gstCertificate || fssaiLicense || udyamRegistration || tradeCertificate || shopImageUri;
+    if (!hasAtLeastOneDoc) issues.push('At least one document (GST certificate, FSSAI license, Udyam registration, trade certificate, or shop photo)');
     return issues;
   }, [
     addressLine1,
@@ -129,7 +125,6 @@ const EditInfoScreen = () => {
     udyamRegistration,
     tradeCertificate,
     shopImageUri,
-    userIdUri,
   ]);
 
   const canSave = validationIssues.length === 0;
@@ -178,7 +173,6 @@ const EditInfoScreen = () => {
         udyamRegistration,
         tradeCertificate,
         shopImageUri,
-        userIdUri,
       }),
     );
 
@@ -186,6 +180,7 @@ const EditInfoScreen = () => {
       title: 'Saved',
       message: 'KYC details updated. Resubmit KYC from your Profile screen.',
     });
+    navigation.goBack();
   };
 
   return (
@@ -298,7 +293,7 @@ const EditInfoScreen = () => {
 
         <Text style={styles.sectionLabel}>Certificates & documents</Text>
         <Text style={styles.docHint}>
-          Upload a clear photo of each certificate (same as registration).
+          Upload at least one document — a clear photo of the certificate.
         </Text>
 
         <View style={styles.docGrid}>
@@ -343,13 +338,7 @@ const EditInfoScreen = () => {
             accent={primary}
             onPick={() => pickImage(setShopImageUri)}
           />
-          <KycDocPickCard
-            uri={userIdUri}
-            label="User ID"
-            icon="badge-account-outline"
-            accent={primary}
-            onPick={() => pickImage(setUserIdUri)}
-          />
+          <View style={styles.col} />
         </View>
 
         <TouchableOpacity

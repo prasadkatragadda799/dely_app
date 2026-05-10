@@ -2,6 +2,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -42,7 +43,6 @@ type RegisterForm = {
   gstNumber: string;
   fmcgNumber: string;
   shopImageUri?: string;
-  userIdUri?: string;
   gstCertificateUri?: string;
   fssaiLicenseUri?: string;
   udyamRegistrationUri?: string;
@@ -58,6 +58,8 @@ const RegisterScreen = ({ navigation }: Props) => {
   const [otpInput, setOtpInput] = useState('');
   const [pendingForm, setPendingForm] = useState<RegisterForm | null>(null);
   const [termsModalVisible, setTermsModalVisible] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
   const { registerWithRole, verifyCustomerOtp } = useAuth();
   const { control, handleSubmit } = useForm<RegisterForm>({
     defaultValues: {
@@ -74,7 +76,6 @@ const RegisterScreen = ({ navigation }: Props) => {
       gstNumber: '',
       fmcgNumber: '',
       shopImageUri: undefined,
-      userIdUri: undefined,
       gstCertificateUri: undefined,
       fssaiLicenseUri: undefined,
       udyamRegistrationUri: undefined,
@@ -84,7 +85,6 @@ const RegisterScreen = ({ navigation }: Props) => {
   });
 
   const [shopImageUri, setShopImageUri] = useState<string | undefined>(undefined);
-  const [userIdUri, setUserIdUri] = useState<string | undefined>(undefined);
   const [gstCertificateUri, setGstCertificateUri] = useState<string | undefined>(undefined);
   const [fssaiLicenseUri, setFssaiLicenseUri] = useState<string | undefined>(undefined);
   const [udyamRegistrationUri, setUdyamRegistrationUri] = useState<string | undefined>(undefined);
@@ -122,6 +122,7 @@ const RegisterScreen = ({ navigation }: Props) => {
     }
 
     if (selectedRole === 'customer') {
+      const hasAtLeastOneDoc = gstCertificateUri || fssaiLicenseUri || udyamRegistrationUri || tradeCertificateUri || shopImageUri;
       if (
         !form.addressLine1.trim() ||
         !form.city.trim() ||
@@ -130,17 +131,12 @@ const RegisterScreen = ({ navigation }: Props) => {
         !form.businessName.trim() ||
         !form.gstNumber.trim() ||
         !form.fmcgNumber.trim() ||
-        !gstCertificateUri ||
-        !fssaiLicenseUri ||
-        !udyamRegistrationUri ||
-        !tradeCertificateUri ||
-        !shopImageUri ||
-        !userIdUri
+        !hasAtLeastOneDoc
       ) {
         await appAlert({
           title: 'Complete your profile',
           message:
-            'Address, business name, GST number, FMCG (FSSAI) number, uploads for GST certificate, FSSAI license, Udyam registration, trade certificate, shop photo, and user ID are required.',
+            'Address, business name, GST number, and FMCG (FSSAI) number are required. Please upload at least one document (GST certificate, FSSAI license, Udyam registration, trade certificate, or shop photo).',
         });
         return;
       }
@@ -149,7 +145,6 @@ const RegisterScreen = ({ navigation }: Props) => {
     const enrichedForm: RegisterForm = {
       ...form,
       shopImageUri,
-      userIdUri,
       gstCertificateUri,
       fssaiLicenseUri,
       udyamRegistrationUri,
@@ -157,6 +152,7 @@ const RegisterScreen = ({ navigation }: Props) => {
     };
 
     try {
+      setRegistering(true);
       const businessProfile =
         selectedRole === 'customer'
           ? {
@@ -168,7 +164,6 @@ const RegisterScreen = ({ navigation }: Props) => {
               tradeCertificate: tradeCertificateUri,
               fmcgNumber: form.fmcgNumber,
               shopImageUri,
-              userIdUri,
             }
           : null;
 
@@ -187,44 +182,49 @@ const RegisterScreen = ({ navigation }: Props) => {
 
       setPendingForm({ ...enrichedForm, requestId: next.requestId });
       setOtpVisible(true);
-      await appAlert({
-        title: 'OTP sent',
-        message: 'Check your phone for the verification code.',
-      });
     } catch (e: unknown) {
       await appAlert({
         title: 'Registration failed',
         message: getApiErrorMessage(e),
       });
+    } finally {
+      setRegistering(false);
     }
   };
 
-  const verifyOtp = async () => {
-    if (!pendingForm) {
-      return;
-    }
-
+  const verifyOtp = async (code?: string) => {
+    if (!pendingForm) return;
+    const otpCode = (code ?? otpInput).trim();
     try {
+      setVerifyingOtp(true);
       if (!pendingForm.requestId) {
         throw new Error('OTP request missing. Please register again.');
       }
-
       await verifyCustomerOtp({
         phone: pendingForm.phone,
         requestId: pendingForm.requestId,
-        otp: otpInput.trim(),
+        otp: otpCode,
         role: selectedRole,
       });
+      setOtpVisible(false);
+      setOtpInput('');
+      setPendingForm(null);
     } catch (e: unknown) {
       await appAlert({
         title: 'OTP verification failed',
         message: getApiErrorMessage(e),
       });
-      return;
+    } finally {
+      setVerifyingOtp(false);
     }
-    setOtpVisible(false);
-    setOtpInput('');
-    setPendingForm(null);
+  };
+
+  const handleOtpChange = (val: string) => {
+    const digits = val.replace(/\D/g, '').slice(0, 6);
+    setOtpInput(digits);
+    if (digits.length === 6 && !verifyingOtp) {
+      verifyOtp(digits);
+    }
   };
 
   return (
@@ -530,7 +530,7 @@ const RegisterScreen = ({ navigation }: Props) => {
                   Certificates & documents
                 </Text>
                 <Text style={styles.docHint}>
-                  Upload a clear photo of each certificate (same as shop photo and ID).
+                  Upload at least one document — a clear photo of the certificate.
                 </Text>
 
                 <View style={styles.docGrid}>
@@ -592,17 +592,7 @@ const RegisterScreen = ({ navigation }: Props) => {
                     )}
                     <Text style={styles.docText}>Shop photo</Text>
                   </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={() => pickImage(setUserIdUri)}
-                    style={styles.docCard}>
-                    {userIdUri ? (
-                      <Image source={{ uri: userIdUri }} style={styles.docPreview} />
-                    ) : (
-                      <Icon name="badge-account-outline" size={24} color="#1D4ED8" />
-                    )}
-                    <Text style={styles.docText}>User ID</Text>
-                  </TouchableOpacity>
+                  <View style={styles.col} />
                 </View>
               </View>
             ) : null}
@@ -631,10 +621,15 @@ const RegisterScreen = ({ navigation }: Props) => {
             </View>
 
             <TouchableOpacity
-              style={styles.button}
+              style={[styles.button, registering && { opacity: 0.7 }]}
+              disabled={registering}
               onPress={handleSubmit(onSubmit)}
             >
-              <Text style={styles.buttonText}>Register</Text>
+              {registering ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.buttonText}>Register</Text>
+              )}
             </TouchableOpacity>
           </View>
           <TouchableOpacity onPress={() => navigation.navigate('Login')}>
@@ -653,16 +648,26 @@ const RegisterScreen = ({ navigation }: Props) => {
               <Icon name="shield-key-outline" size={18} color="#64748B" />
               <TextInput
                 value={otpInput}
-                onChangeText={setOtpInput}
+                onChangeText={handleOtpChange}
                 keyboardType="number-pad"
                 placeholder="Enter 6-digit OTP"
                 placeholderTextColor="#94A3B8"
                 style={styles.input}
                 maxLength={6}
+                autoFocus
+                editable={!verifyingOtp}
               />
+              {verifyingOtp && <ActivityIndicator size="small" color="#1D4ED8" style={{ marginRight: 4 }} />}
             </View>
-            <TouchableOpacity style={styles.button} onPress={verifyOtp}>
-              <Text style={styles.buttonText}>Verify & Continue</Text>
+            <TouchableOpacity
+              style={[styles.button, (verifyingOtp || otpInput.length < 6) && { opacity: 0.6 }]}
+              disabled={verifyingOtp || otpInput.length < 6}
+              onPress={() => verifyOtp()}>
+              {verifyingOtp ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.buttonText}>Verify & Continue</Text>
+              )}
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setOtpVisible(false)}>
               <Text style={styles.link}>Cancel</Text>

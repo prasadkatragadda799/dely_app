@@ -13,7 +13,6 @@ export interface BusinessProfile {
   /** Local file URI or uploaded URL for trade certificate */
   tradeCertificate?: string;
   shopImageUri?: string;
-  userIdUri?: string;
   /** Mirrors customer registration address fields (stored locally after signup). */
   addressLine1?: string;
   addressLine2?: string;

@@ -192,6 +192,8 @@ function CustomerStyledTabBar(props: BottomTabBarProps) {
   const isHomeKitchen = useAppSelector(
     s => s.homeDivision.division === 'homeKitchen',
   );
+  const cartItems = useAppSelector(s => s.cart.items);
+  const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
   const accent = isHomeKitchen ? '#16A34A' : '#2563EB';
   const accentWash = isHomeKitchen
     ? 'rgba(22,163,74,0.09)'
@@ -272,26 +274,35 @@ function CustomerStyledTabBar(props: BottomTabBarProps) {
           onPress={onPress}
           onLongPress={onLongPress}
           style={styles.tabColumn}>
-          <View
-            style={[
-              styles.tabIconMount,
-              focused
-                ? {
-                    backgroundColor: accent,
-                    borderColor: `${accent}CC`,
-                    shadowColor: accent,
-                    shadowOpacity: 0.28,
-                    shadowRadius: 10,
-                    shadowOffset: { width: 0, height: 3 },
-                    elevation: 4,
-                  }
-                : inactiveMount,
-            ]}>
-            <Icon
-              name={focused ? icons.solid : icons.outline}
-              size={19}
-              color={focused ? '#FFFFFF' : '#64748B'}
-            />
+          <View style={{ position: 'relative' }}>
+            <View
+              style={[
+                styles.tabIconMount,
+                focused
+                  ? {
+                      backgroundColor: accent,
+                      borderColor: `${accent}CC`,
+                      shadowColor: accent,
+                      shadowOpacity: 0.28,
+                      shadowRadius: 10,
+                      shadowOffset: { width: 0, height: 3 },
+                      elevation: 4,
+                    }
+                  : inactiveMount,
+              ]}>
+              <Icon
+                name={focused ? icons.solid : icons.outline}
+                size={19}
+                color={focused ? '#FFFFFF' : '#64748B'}
+              />
+            </View>
+            {cartCount > 0 && (
+              <View style={styles.cartBadge}>
+                <Text style={styles.cartBadgeText}>
+                  {cartCount > 99 ? '99+' : cartCount}
+                </Text>
+              </View>
+            )}
           </View>
           <Text
             style={[
@@ -507,5 +518,25 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     textAlign: 'center',
     maxWidth: '100%',
+  },
+  cartBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -6,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: '#F8FAFC',
+  },
+  cartBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '900',
+    lineHeight: 12,
   },
 });

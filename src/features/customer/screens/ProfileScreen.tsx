@@ -98,9 +98,7 @@ const ProfileScreen = () => {
         gst_number: business.gstNumber,
         fssai_number: fssaiDigits,
         shop_image_url: business.shopImageUri ?? undefined,
-        // Prefer FSSAI license from registration; fall back for older local profiles.
-        fssai_license_image_url:
-          business.fssaiLicense ?? business.userIdUri ?? undefined,
+        fssai_license_image_url: business.fssaiLicense ?? undefined,
       }).unwrap();
 
       await refetchKyc();
@@ -283,7 +281,7 @@ const ProfileScreen = () => {
 
               <Text style={[styles.label, { marginTop: 14 }]}>Certificates & documents</Text>
               <Text style={styles.docHint}>
-                Same uploads as registration (GST, FSSAI, Udyam, trade, shop, user ID).
+                Uploaded documents (GST, FSSAI, Udyam, trade, shop).
               </Text>
               <View style={styles.docRow}>
                 <KycDocTile uri={business.gstCertificate} label="GST certificate" />
@@ -295,7 +293,7 @@ const ProfileScreen = () => {
               </View>
               <View style={styles.docRow}>
                 <KycDocTile uri={business.shopImageUri} label="Shop photo" />
-                <KycDocTile uri={business.userIdUri} label="User ID" />
+                <View style={{ flex: 1 }} />
               </View>
 
               <View style={{ marginTop: 18 }}>

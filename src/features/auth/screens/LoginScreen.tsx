@@ -2,6 +2,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
+  ActivityIndicator,
   Keyboard,
   KeyboardAvoidingView,
   Image,
@@ -247,14 +248,18 @@ const LoginScreen = ({ navigation }: Props) => {
               </View>
 
               <TouchableOpacity
-                style={styles.primaryButton}
+                style={[styles.primaryButton, styles.deliverySubmitButton, loading && styles.buttonLoading]}
                 disabled={loading}
                 onPress={onSubmitDelivery}
               >
-                <Text style={styles.primaryButtonText}>
-                  Continue as Partner
-                </Text>
-                <Icon name="arrow-right" size={18} color="#FFFFFF" />
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <>
+                    <Text style={styles.primaryButtonText}>Continue as Partner</Text>
+                    <Icon name="arrow-right" size={18} color="#FFFFFF" />
+                  </>
+                )}
               </TouchableOpacity>
 
               {/* <Text style={styles.bottomQuestion}>
@@ -321,12 +326,18 @@ const LoginScreen = ({ navigation }: Props) => {
               />
 
               <TouchableOpacity
-                style={styles.primaryButton}
+                style={[styles.primaryButton, loading && styles.buttonLoading]}
                 disabled={loading}
                 onPress={handleSubmit(onSubmitCustomer)}
               >
-                <Text style={styles.primaryButtonText}>Send OTP</Text>
-                <Icon name="arrow-right" size={18} color="#FFFFFF" />
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <>
+                    <Text style={styles.primaryButtonText}>Send OTP</Text>
+                    <Icon name="arrow-right" size={18} color="#FFFFFF" />
+                  </>
+                )}
               </TouchableOpacity>
 
               <Text style={styles.bottomQuestion}>
@@ -586,6 +597,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    minHeight: 52,
+  },
+  deliverySubmitButton: {
+    backgroundColor: '#16A34A',
+  },
+  buttonLoading: {
+    opacity: 0.75,
   },
   primaryButtonText: {
     color: '#FFFFFF',
