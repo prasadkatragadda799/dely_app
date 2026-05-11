@@ -309,6 +309,7 @@ const ProductOverviewScreen = () => {
   const subCategoryFilter: string | undefined = route.params?.subCategory;
   const brandFilter: string | undefined = route.params?.brand;
   const companyFilter: string | undefined = route.params?.company;
+  const searchParam: string | undefined = route.params?.search;
   const categoryFilter:
     | { ids?: string[]; names?: string[]; slugs?: string[] }
     | undefined = route.params?.categoryFilter;
@@ -322,7 +323,7 @@ const ProductOverviewScreen = () => {
   const { toggle, isWishlisted } = useWishlist();
   const dispatch = useAppDispatch();
 
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(searchParam ?? '');
   const [isListening, setIsListening] = useState(false);
   const [selectedSets, setSelectedSets] = useState(1);
   const [detailTierKey, setDetailTierKey] = useState<PriceOptionKey>('unit');
@@ -355,6 +356,10 @@ const ProductOverviewScreen = () => {
   React.useEffect(() => {
     dispatch(setHomeDivision(division));
   }, [dispatch, division]);
+
+  React.useEffect(() => {
+    if (searchParam) setQuery(searchParam);
+  }, [searchParam]);
 
   React.useEffect(() => {
     return () => {

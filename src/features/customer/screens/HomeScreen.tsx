@@ -319,6 +319,12 @@ const HomeScreen = () => {
       const value = e.value?.[0] ?? '';
       setQuery(value);
       setIsListening(false);
+      if (value.trim()) {
+        navigation.navigate('ProductOverview', {
+          division: activeDivision,
+          search: value.trim(),
+        });
+      }
     };
 
     Voice.onSpeechError = e => {
@@ -338,7 +344,7 @@ const HomeScreen = () => {
         // ignore
       }
     };
-  }, [appAlert]);
+  }, [appAlert, activeDivision, navigation]);
 
   const fetchCurrentLocation = useCallback(async () => {
     const fallbackLocationText = 'Location unavailable';
@@ -488,7 +494,8 @@ const HomeScreen = () => {
           },
         ]}
         nestedScrollEnabled
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled">
 
       {/* Location unavailability banner */}
       {isLocationUnavailable && (
@@ -567,6 +574,15 @@ const HomeScreen = () => {
           placeholderTextColor="#94A3B8"
           value={query}
           onChangeText={setQuery}
+          returnKeyType="search"
+          onSubmitEditing={() => {
+            const q = query.trim();
+            if (!q) return;
+            navigation.navigate('ProductOverview', {
+              division: activeDivision,
+              search: q,
+            });
+          }}
         />
         <TouchableOpacity
           onPress={async () => {
