@@ -207,9 +207,17 @@ const OngoingScreen = () => {
 
   const handleMarkDelivered = async (order: Order) => {
     if (actionLoadingId) return;
+    const orderShortId = (order.orderNumber ?? order.id).toString().slice(-8).toUpperCase();
+    const collected = await confirm({
+      title: 'Collect Payment',
+      message: `Collect ₹${order.amount.toLocaleString('en-IN')} cash from ${order.customerName} before delivering.\n\nHave you collected the payment?`,
+      confirmLabel: 'Yes, Collected',
+      cancelLabel: 'Cancel',
+    });
+    if (!collected) return;
     const ok = await confirm({
       title: 'Mark as Delivered',
-      message: `Confirm delivery for Order #${(order.orderNumber ?? order.id).toString().slice(-8).toUpperCase()}? This cannot be undone.`,
+      message: `Confirm delivery for Order #${orderShortId}? This cannot be undone.`,
       confirmLabel: 'Yes, Delivered',
       cancelLabel: 'Cancel',
     });
@@ -650,7 +658,7 @@ const styles = StyleSheet.create({
   },
   callButtonDisabled: { opacity: 0.5, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB' },
 
-  actionRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  actionRow: { flexDirection: 'column', gap: 8, marginTop: 10 },
   actionPrimary: {
     flex: 1,
     backgroundColor: GREEN,

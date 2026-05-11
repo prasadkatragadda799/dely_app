@@ -253,14 +253,36 @@ export const useCart = () => {
             // Silent; checkout already handles errors.
           });
       },
-      decrement: (productId: string, priceOptionKey?: PriceOptionKey) => {
+      increment: (productId: string, priceOptionKey?: PriceOptionKey): Promise<void> => {
+        const target = items.find(
+          i =>
+            i.product.id === productId &&
+            (priceOptionKey === undefined || i.priceOptionKey === priceOptionKey),
+        );
+        if (!target?.cartItemId) return Promise.resolve();
+        const stock = target.product.stockQuantity;
+        const maxQty = stock !== undefined && stock > 0 ? stock : 99;
+        const nextQty = Math.min(target.quantity + 1, maxQty);
+        if (nextQty === target.quantity) return Promise.resolve();
+        return updateCartItemApi({ cartItemId: target.cartItemId, quantity: nextQty })
+          .unwrap()
+          .then(() => {})
+          .catch((e: any) => {
+            Toast.show({
+              type: 'error',
+              text1: 'Could not update cart',
+              text2: e?.data?.message ?? e?.message ?? 'Please try again.',
+            });
+          });
+      },
+      decrement: (productId: string, priceOptionKey?: PriceOptionKey): Promise<void> => {
         const target = items.find(
           i =>
             i.product.id === productId &&
             (priceOptionKey === undefined ||
               i.priceOptionKey === priceOptionKey),
         );
-        if (!target?.cartItemId) return;
+        if (!target?.cartItemId) return Promise.resolve();
         const nextQty = Math.max(0, target.quantity - 1);
         const minOrder = Math.max(
           1,
@@ -276,7 +298,7 @@ export const useCart = () => {
           nextQty <= 0 || nextQty < minLineQty
             ? deleteCartItemApi({ cartItemId: target.cartItemId })
             : updateCartItemApi({ cartItemId: target.cartItemId, quantity: nextQty });
-        op.unwrap().catch((e: any) => {
+        return op.unwrap().then(() => {}).catch((e: any) => {
           Toast.show({
             type: 'error',
             text1: 'Could not update cart',

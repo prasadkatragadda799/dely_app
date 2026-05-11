@@ -43,7 +43,8 @@ const ProductCard = ({
   onCardPress,
   onNamePress,
 }: Props) => {
-  const { items, decrement } = useCart();
+  const { items, increment, decrement } = useCart();
+  const [mutating, setMutating] = useState(false);
   const { isWishlisted, toggle } = useWishlist();
   const isFavorite = isWishlisted(product.id);
   const favBg = useMemo(() => hexToRgba(accentColor, 0.35), [accentColor]);
@@ -259,15 +260,17 @@ const ProductCard = ({
             <View style={styles.stepSideCol}>
               <TouchableOpacity
                 style={styles.stepSideHit}
+                disabled={mutating}
                 onPress={e => {
                   e.stopPropagation?.();
-                  if (cartLineForCard) {
-                    decrement(product.id, cartLineForCard.priceOptionKey);
-                  }
+                  if (mutating || !cartLineForCard) return;
+                  setMutating(true);
+                  decrement(product.id, cartLineForCard.priceOptionKey)
+                    .finally(() => setMutating(false));
                 }}
                 activeOpacity={0.85}
                 hitSlop={{ top: 6, bottom: 6, left: 8, right: 4 }}>
-                <Icon name="minus" size={16} color={accentColor} />
+                <Icon name="minus" size={16} color={mutating ? '#CBD5E1' : accentColor} />
               </TouchableOpacity>
             </View>
             <View style={styles.stepQtySlot}>
@@ -288,16 +291,17 @@ const ProductCard = ({
             <View style={styles.stepSideCol}>
               <TouchableOpacity
                 style={styles.stepSideHit}
+                disabled={mutating}
                 onPress={e => {
                   e.stopPropagation?.();
-                  onAdd(
-                    product,
-                    cartLineForCard?.priceOptionKey ?? tierKey,
-                  );
+                  if (mutating) return;
+                  setMutating(true);
+                  increment(product.id, cartLineForCard?.priceOptionKey ?? tierKey)
+                    .finally(() => setMutating(false));
                 }}
                 activeOpacity={0.85}
                 hitSlop={{ top: 6, bottom: 6, left: 4, right: 8 }}>
-                <Text style={[styles.stepPlusGlyph, { color: accentColor }]}>+</Text>
+                <Text style={[styles.stepPlusGlyph, { color: mutating ? '#CBD5E1' : accentColor }]}>+</Text>
               </TouchableOpacity>
             </View>
           </View>

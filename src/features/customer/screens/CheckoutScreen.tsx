@@ -700,7 +700,7 @@ const CheckoutScreen = () => {
           </View>
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Subtotal</Text>
-            <Text style={styles.rowValue}>Rs {subtotal}</Text>
+            <Text style={styles.rowValue}>Rs {subtotal.toFixed(2)}</Text>
           </View>
           <View style={styles.row}>
             <Text style={styles.rowLabel}>Delivery</Text>
@@ -709,7 +709,7 @@ const CheckoutScreen = () => {
           <View style={styles.divider} />
           <View style={styles.row}>
             <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>Rs {subtotal}</Text>
+            <Text style={styles.totalValue}>Rs {subtotal.toFixed(2)}</Text>
           </View>
         </View>
       </ScrollView>
