@@ -274,16 +274,38 @@ const HomeScreen = () => {
 
   const categoryGridItems = useMemo(() => {
     if (categoryTreeRoots.length > 0) {
-      return categoryTreeRoots.slice(0, 9).map(n => ({
-        key: String(n.id),
-        name: n.name,
-        imageUrl: String(n.image_url ?? '').trim() || undefined,
-        icon: n.icon ?? undefined,
-        count:
-          typeof n.product_count === 'number'
-            ? n.product_count
-            : categoryCountMap[n.name] ?? 0,
-      }));
+      return categoryTreeRoots.slice(0, 9).map(n => {
+        const collectIds = (node: typeof n): string[] => {
+          const ids = [String(node.id)];
+          (node.children ?? []).forEach((c: typeof n) => ids.push(...collectIds(c)));
+          return ids;
+        };
+        const collectNames = (node: typeof n): string[] => {
+          const names = [node.name];
+          (node.children ?? []).forEach((c: typeof n) => names.push(...collectNames(c)));
+          return names;
+        };
+        const collectSlugs = (node: typeof n): string[] => {
+          const slugs = node.slug ? [String(node.slug)] : [];
+          (node.children ?? []).forEach((c: typeof n) => slugs.push(...collectSlugs(c)));
+          return slugs;
+        };
+        return {
+          key: String(n.id),
+          name: n.name,
+          imageUrl: String(n.image_url ?? '').trim() || undefined,
+          icon: n.icon ?? undefined,
+          count:
+            typeof n.product_count === 'number'
+              ? n.product_count
+              : categoryCountMap[n.name] ?? 0,
+          categoryFilter: {
+            ids: collectIds(n),
+            names: collectNames(n),
+            slugs: collectSlugs(n),
+          },
+        };
+      });
     }
     return categories
       .filter((c): c is string => c !== 'All')
@@ -294,6 +316,7 @@ const HomeScreen = () => {
         imageUrl: undefined as string | undefined,
         icon: undefined as string | undefined,
         count: categoryCountMap[c] ?? 0,
+        categoryFilter: undefined as { ids: string[]; names: string[]; slugs: string[] } | undefined,
       }));
   }, [categoryTreeRoots, categories, categoryCountMap]);
 
@@ -1051,9 +1074,9 @@ const HomeScreen = () => {
                       ]}
                       onPress={() => {
                         setActiveCategory(cat.name);
-                        navigation.navigate('ProductOverview', {
+                        navigation.navigate('CategoryBrowse', {
                           division: activeDivision,
-                          subCategory: cat.name,
+                          parentNodeId: cat.key,
                         });
                       }}
                       activeOpacity={0.92}>

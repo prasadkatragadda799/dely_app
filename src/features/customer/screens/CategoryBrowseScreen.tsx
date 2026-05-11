@@ -27,6 +27,8 @@ type RouteParams = {
   division: DivisionKey;
   /** Rail + product grid: `brands` / `companies` match Shop by brand / Shop by company → See all. */
   mode?: 'categories' | 'brands' | 'companies';
+  /** When set, sidebar shows children of this category node instead of all root categories. */
+  parentNodeId?: string;
 };
 
 type SortKey = 'relevance' | 'priceAsc' | 'priceDesc';
@@ -92,6 +94,15 @@ function normalizeCategoryId(s: string): string {
   return String(s).trim().toLowerCase();
 }
 
+function findNodeById(nodes: ShopCategoryNode[], id: string): ShopCategoryNode | null {
+  for (const node of nodes) {
+    if (String(node.id) === id) return node;
+    const found = findNodeById((node.children ?? []) as ShopCategoryNode[], id);
+    if (found) return found;
+  }
+  return null;
+}
+
 /** Ids, display names, and slugs under `node` (admin tree / product.category). */
 function collectSubtreeMatchMeta(node: ShopCategoryNode): SubtreeMatchScope {
   const ids: string[] = [];
@@ -145,20 +156,20 @@ function countProductsForSubtree(
 }
 
 /**
- * One sidebar row per admin category node (parent before children), same order as admin tree.
- * Selecting a parent shows products in that category or any subcategory (by id or name).
+ * One sidebar row per ROOT category node only.
+ * Selecting a root shows products in that category and all its subcategories
+ * (matchCategoryIds/matchNames/matchSlugs already cover the full subtree).
  */
 function buildSidebarFromAdminTree(
   roots: ShopCategoryNode[],
   products: Product[],
   showImages: boolean,
 ): CategoryLeaf[] {
-  const rows: CategoryLeaf[] = [];
-  const walk = (node: ShopCategoryNode) => {
+  return roots.map(node => {
     const meta = collectSubtreeMatchMeta(node);
-    rows.push({
+    return {
       key: `cat-${node.id}`,
-      kind: 'leaf',
+      kind: 'leaf' as const,
       label: node.name,
       matchCategoryIds: meta.ids,
       matchNames: meta.names,
@@ -168,16 +179,8 @@ function buildSidebarFromAdminTree(
         : undefined,
       icon: node.icon ?? undefined,
       count: countProductsForSubtree(products, meta),
-    });
-    const children = (node.children ?? []).filter(Boolean) as ShopCategoryNode[];
-    for (const ch of children) {
-      walk(ch);
-    }
-  };
-  for (const r of roots) {
-    walk(r);
-  }
-  return rows;
+    };
+  });
 }
 
 function productMatchesCategoryLeaf(p: Product, leaf: CategoryLeaf): boolean {
@@ -258,11 +261,22 @@ const CategoryBrowseScreen = () => {
       : p?.mode === 'brands'
         ? 'brands'
         : 'categories';
+  const parentNodeId: string | undefined =
+    typeof p?.parentNodeId === 'string' ? p.parentNodeId : undefined;
 
   const { data: allProducts = [] } = useGetProductsQuery();
   const { data: categoryTreeRoots = [] } = useGetCategoryTreeQuery(division, {
     skip: browseMode !== 'categories',
   });
+
+  const parentNode = useMemo(
+    () => (parentNodeId ? findNodeById(categoryTreeRoots, parentNodeId) : null),
+    [categoryTreeRoots, parentNodeId],
+  );
+  const parentScope = useMemo(
+    () => (parentNode ? collectSubtreeMatchMeta(parentNode) : null),
+    [parentNode],
+  );
 
   const [selectedKey, setSelectedKey] = useState<string>('all');
   const [sortKey, setSortKey] = useState<SortKey>('relevance');
@@ -271,7 +285,7 @@ const CategoryBrowseScreen = () => {
 
   React.useEffect(() => {
     setSelectedKey('all');
-  }, [browseMode, division]);
+  }, [browseMode, division, parentNodeId]);
 
   const isHomeKitchen = division === 'homeKitchen';
   const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
@@ -393,10 +407,15 @@ const CategoryBrowseScreen = () => {
       ];
     }
     if (categoryTreeRoots.length > 0) {
+      const children = parentNode
+        ? ((parentNode.children ?? []).filter(Boolean) as ShopCategoryNode[])
+        : null;
+      const sourceRoots =
+        children && children.length > 0 ? children : categoryTreeRoots;
       return [
         allItem,
         ...buildSidebarFromAdminTree(
-          categoryTreeRoots,
+          sourceRoots,
           divisionProducts,
           showCategoryImages,
         ),
@@ -430,6 +449,7 @@ const CategoryBrowseScreen = () => {
     categoryCountMap,
     divisionProducts,
     showCategoryImages,
+    parentNode,
   ]);
 
   const selectedLeaf = useMemo((): CategoryLeaf | BrandLeaf | CompanyLeaf | null => {
@@ -447,6 +467,7 @@ const CategoryBrowseScreen = () => {
 
   const headerTitle =
     selectedLeaf?.label ??
+    parentNode?.name ??
     (browseMode === 'brands'
       ? 'Brands'
       : browseMode === 'companies'
@@ -473,12 +494,17 @@ const CategoryBrowseScreen = () => {
       );
     }
     if (!selectedLeaf || !isCategoryLeaf(selectedLeaf)) {
+      // When a parent category was tapped from HomeScreen, "All" should show
+      // only products within that parent's subtree, not the entire division.
+      if (parentScope) {
+        return divisionProducts.filter(p => productMatchesSubtree(p, parentScope));
+      }
       return divisionProducts;
     }
     return divisionProducts.filter(p =>
       productMatchesCategoryLeaf(p, selectedLeaf),
     );
-  }, [browseMode, divisionProducts, selectedLeaf]);
+  }, [browseMode, divisionProducts, selectedLeaf, parentScope]);
 
   const filteredProducts = useMemo(() => {
     let list = baseFiltered;
