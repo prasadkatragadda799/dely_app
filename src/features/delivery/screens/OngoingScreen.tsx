@@ -660,10 +660,9 @@ const styles = StyleSheet.create({
 
   actionRow: { flexDirection: 'column', gap: 8, marginTop: 10 },
   actionPrimary: {
-    flex: 1,
     backgroundColor: GREEN,
     borderRadius: 10,
-    paddingVertical: 10,
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -674,11 +673,10 @@ const styles = StyleSheet.create({
   actionDisabled: { opacity: 0.6 },
 
   actionSecondary: {
-    flex: 1,
     borderWidth: 1.5,
     borderColor: AMBER,
     borderRadius: 10,
-    paddingVertical: 10,
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
