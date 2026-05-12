@@ -45,6 +45,7 @@ const ProductCard = ({
 }: Props) => {
   const { items, increment, decrement } = useCart();
   const [mutating, setMutating] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const { isWishlisted, toggle } = useWishlist();
   const isFavorite = isWishlisted(product.id);
   const favBg = useMemo(() => hexToRgba(accentColor, 0.35), [accentColor]);
@@ -100,7 +101,7 @@ const ProductCard = ({
   const opts = product.priceOptions;
   const activeOpt = selectedPriceOption(product, tierKey);
   const displayPrice = activeOpt?.sellingPrice ?? product.price;
-  const discountPct = activeOpt?.discount ?? product.discountPercent;
+  const discountPct = Number(activeOpt?.discount ?? product.discountPercent ?? 0);
   const multiTier = (opts?.length ?? 0) > 1;
   /** After the first line exists, chips switch which tier the stepper edits. */
   const showTierChips = multiTier && totalQtyAllTiers > 0;
@@ -117,7 +118,17 @@ const ProductCard = ({
       activeOpacity={0.95}
       style={[styles.card, { borderColor: borderTint }]}>
       <View style={styles.imageWrap}>
-        <Image source={{ uri: product.image }} style={styles.image} />
+        {imageError || !product.image ? (
+          <View style={[styles.image, styles.imageFallback]}>
+            <Icon name="image-off-outline" size={28} color="#CBD5E1" />
+          </View>
+        ) : (
+          <Image
+            source={{ uri: product.image }}
+            style={styles.image}
+            onError={() => setImageError(true)}
+          />
+        )}
         {discountPct > 0 ? (
           <View style={[styles.discountPill, { backgroundColor: accentColor }]}>
             <Text style={styles.discountPillText}>{Math.round(discountPct)}% off</Text>
@@ -345,6 +356,10 @@ const styles = StyleSheet.create({
     height: 108,
     borderRadius: 12,
     backgroundColor: '#F1F5F9',
+  },
+  imageFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   discountPill: {
     position: 'absolute',

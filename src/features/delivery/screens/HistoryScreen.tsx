@@ -1,5 +1,5 @@
 import React from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useOrders } from '../../../hooks/useOrders';
@@ -28,7 +28,7 @@ const formatDate = (iso: string): string => {
 };
 
 const HistoryScreen = () => {
-  const { history } = useOrders();
+  const { history, isLoading } = useOrders();
   const { data: dashboardRes } = useGetDeliveryDashboardSummaryQuery();
   const dashboard = dashboardRes?.data;
 
@@ -126,6 +126,11 @@ const HistoryScreen = () => {
         </View>
       )}
 
+      {isLoading ? (
+        <View style={styles.loaderWrap}>
+          <ActivityIndicator size="large" color={GREEN} />
+        </View>
+      ) : (
       <FlatList
         data={history}
         keyExtractor={item => item.id}
@@ -142,12 +147,14 @@ const HistoryScreen = () => {
           </View>
         }
       />
+      )}
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FAFB' },
+  loaderWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10 },
   title: { fontSize: 26, fontWeight: '900', color: DARK_GREEN },

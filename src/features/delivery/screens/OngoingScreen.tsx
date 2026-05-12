@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { skipToken } from '@reduxjs/toolkit/query';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
@@ -40,6 +41,7 @@ const formatPhoneForCall = (raw?: string): string | null => {
 };
 
 const OngoingScreen = () => {
+  const tabBarHeight = useBottomTabBarHeight();
   const { confirm } = useAppAlert();
   const { ongoing, setStatus, revertToHub, refetchOrders } = useOrders();
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
@@ -470,7 +472,7 @@ const OngoingScreen = () => {
       </SafeAreaView>
 
       {/* Bottom: scrollable list of all ongoing deliveries */}
-      <View style={styles.bottomSheet}>
+      <View style={[styles.bottomSheet, { bottom: tabBarHeight }]}>
         <View style={styles.bottomHandle} />
         <FlatList
           data={ongoing}

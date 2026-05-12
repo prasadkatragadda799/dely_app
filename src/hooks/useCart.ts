@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import Toast from 'react-native-toast-message';
 import { CartLineItem, PriceOptionKey, Product } from '../types';
-import { defaultPriceTier } from '../utils/productPricing';
+import { defaultPriceTier, productImpliesSetPurchase } from '../utils/productPricing';
 import {
   useAddToCartApiMutation,
   useClearCartApiMutation,
@@ -12,7 +12,7 @@ import {
 import { useAppSelector } from './redux';
 
 export const useCart = () => {
-  const homeDivision = useAppSelector(state => state.homeDivision.division);
+  const homeDivision = useAppSelector(state => state.homeDivision!.division);
   const isHomeKitchen = homeDivision === 'homeKitchen';
 
   const { data } = useGetCartQuery(homeDivision);
@@ -33,22 +33,19 @@ export const useCart = () => {
         .toLowerCase();
       const normDiv = divisionSlug.replace(/-/g, '');
       const normCat = categorySlug.replace(/-/g, '');
-      const grocerySlugs = new Set(['', 'default', 'grocery', 'fmcg']);
       const categoryImpliesHomeKitchen =
         normCat === 'homecare' ||
         normCat.includes('kitchen') ||
         categorySlug.startsWith('home-');
-      const explicitHomeKitchen =
+      return (
         normDiv === 'kitchen' ||
         normDiv === 'home' ||
         normDiv === 'homekitchen' ||
         normCat === 'kitchen' ||
         normCat === 'home' ||
         normCat === 'homekitchen' ||
-        categoryImpliesHomeKitchen;
-      const nonGroceryDivision =
-        Boolean(divisionSlug) && !grocerySlugs.has(divisionSlug);
-      return explicitHomeKitchen || nonGroceryDivision;
+        categoryImpliesHomeKitchen
+      );
     };
     const filteredRaw = rawItems.filter(it =>
       isHomeKitchen ? isHomeKitchenItem(it) : !isHomeKitchenItem(it),
@@ -85,7 +82,6 @@ export const useCart = () => {
         .toLowerCase();
       const normDiv = divisionSlug.replace(/-/g, '');
       const normCat = categorySlug.replace(/-/g, '');
-      const grocerySlugs = new Set(['', 'default', 'grocery', 'fmcg']);
       const categoryImpliesHomeKitchen =
         normCat === 'homecare' ||
         normCat.includes('kitchen') ||
@@ -97,8 +93,7 @@ export const useCart = () => {
         normDiv === 'kitchen' ||
         normDiv === 'homekitchen' ||
         normCat === 'homekitchen' ||
-        categoryImpliesHomeKitchen ||
-        (Boolean(divisionSlug) && !grocerySlugs.has(divisionSlug));
+        categoryImpliesHomeKitchen;
       const productCategory: Product['category'] = isHk
         ? normCat === 'home' ||
             normDiv === 'home' ||
@@ -198,10 +193,14 @@ export const useCart = () => {
           i => i.product.id === product.id && i.priceOptionKey === tier,
         );
         const pcs = Math.max(1, product.piecesPerSet ?? 1);
+        // 'set' price-tier: qty is in set units, minOrder is in pieces → convert.
+        // All other tiers: qty and minOrder share the same unit; use minOrder directly.
         const minLineQty =
-          tier === 'set' && pcs > 1 && minOrder > 1 && minOrder % pcs === 0
-            ? Math.max(1, Math.floor(minOrder / pcs))
-            : minOrder;
+          tier === 'set'
+            ? Math.max(1, Math.ceil(minOrder / pcs))
+            : tier === 'remaining'
+              ? 1
+              : minOrder;
         const safeQuantity = alreadyInCart
           ? requested
           : Math.max(minLineQty, requested);
@@ -232,9 +231,10 @@ export const useCart = () => {
             });
           });
       },
-      clear: () => {
-        clearCartApi()
+      clear: (): Promise<void> => {
+        return clearCartApi()
           .unwrap()
+          .then(() => {})
           .catch((e: any) => {
             Toast.show({
               type: 'error',
@@ -262,7 +262,21 @@ export const useCart = () => {
         if (!target?.cartItemId) return Promise.resolve();
         const stock = target.product.stockQuantity;
         const maxQty = stock !== undefined && stock > 0 ? stock : 99;
-        const nextQty = Math.min(target.quantity + 1, maxQty);
+        const tPcs = Math.max(1, target.product.piecesPerSet ?? 1);
+        const tMinO = Math.max(1, Math.trunc(Number(target.product.minOrderQuantity) || 1));
+        // 'set'/'remaining' tiers: qty already in bundle units → step 1.
+        // 'unit' tier with pcs>1: step by pack size (works for both unit='piece' and
+        //   unit='set' — the backend counts raw units and pcs drives the step size).
+        // 'unit' tier implied-set (pcs=1, minO>1): step by minOrder.
+        const step =
+          target.priceOptionKey === 'set' || target.priceOptionKey === 'remaining'
+            ? 1
+            : tPcs > 1
+              ? tPcs
+              : tMinO > 1 && productImpliesSetPurchase(target.product)
+                ? tMinO
+                : 1;
+        const nextQty = Math.min(target.quantity + step, maxQty);
         if (nextQty === target.quantity) return Promise.resolve();
         return updateCartItemApi({ cartItemId: target.cartItemId, quantity: nextQty })
           .unwrap()
@@ -283,17 +297,29 @@ export const useCart = () => {
               i.priceOptionKey === priceOptionKey),
         );
         if (!target?.cartItemId) return Promise.resolve();
-        const nextQty = Math.max(0, target.quantity - 1);
+        const dPcs = Math.max(1, target.product.piecesPerSet ?? 1);
+        const dMinO = Math.max(1, Math.trunc(Number(target.product.minOrderQuantity) || 1));
+        const tier = target.priceOptionKey;
+        const dStep =
+          tier === 'set' || tier === 'remaining'
+            ? 1
+            : dPcs > 1
+              ? dPcs
+              : dMinO > 1 && productImpliesSetPurchase(target.product)
+                ? dMinO
+                : 1;
+        const nextQty = Math.max(0, target.quantity - dStep);
         const minOrder = Math.max(
           1,
           Math.trunc(Number(target.product.minOrderQuantity) || 1),
         );
         const pcs = Math.max(1, target.product.piecesPerSet ?? 1);
-        const tier = target.priceOptionKey;
         const minLineQty =
-          tier === 'set' && pcs > 1 && minOrder > 1 && minOrder % pcs === 0
-            ? Math.max(1, Math.floor(minOrder / pcs))
-            : minOrder;
+          tier === 'set'
+            ? Math.max(1, Math.ceil(minOrder / pcs))
+            : tier === 'remaining'
+              ? 1
+              : minOrder;
         const op =
           nextQty <= 0 || nextQty < minLineQty
             ? deleteCartItemApi({ cartItemId: target.cartItemId })

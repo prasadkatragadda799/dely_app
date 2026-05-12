@@ -1,4 +1,4 @@
-import { NavigationContainer } from '@react-navigation/native';
+import { DefaultTheme, NavigationContainer } from '@react-navigation/native';
 import React, { useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
@@ -25,6 +25,11 @@ import {
   useRegisterDeliveryFcmTokenMutation,
 } from '../services/api/mobileApi';
 
+const NAV_THEME = {
+  ...DefaultTheme,
+  colors: { ...DefaultTheme.colors, background: '#062B66' },
+};
+
 const SplashScreen = () => (
   <View style={styles.splashContainer}>
     <Image
@@ -39,11 +44,19 @@ const SplashScreen = () => (
 
 const RootNavigator = () => {
   const dispatch = useAppDispatch();
-  const { user, isSplashVisible } = useAppSelector(state => state.auth);
+  const { user, isSplashVisible } = useAppSelector(state => state.auth!);
   const [refreshTokenApi] = useRefreshTokenMutation();
   const [registerFcmToken] = useRegisterFcmTokenMutation();
   const [registerDeliveryFcmToken] = useRegisterDeliveryFcmTokenMutation();
   const hasAttemptedRefresh = useRef(false);
+
+  // Keep refs to the latest mutation fns so the push effect doesn't need them
+  // as dependencies (RTK Query mutation trigger references are unstable and would
+  // cause pushService.init() to fire on every render).
+  const registerFcmTokenRef = useRef(registerFcmToken);
+  const registerDeliveryFcmTokenRef = useRef(registerDeliveryFcmToken);
+  registerFcmTokenRef.current = registerFcmToken;
+  registerDeliveryFcmTokenRef.current = registerDeliveryFcmToken;
 
   useEffect(() => {
     const timer = setTimeout(() => dispatch(hideSplash()), 1500);
@@ -54,7 +67,9 @@ const RootNavigator = () => {
     const syncFcmToken = (token: string) => {
       if (!token || !user?.token) return;
       const mutation =
-        user.role === 'delivery' ? registerDeliveryFcmToken : registerFcmToken;
+        user.role === 'delivery'
+          ? registerDeliveryFcmTokenRef.current
+          : registerFcmTokenRef.current;
       mutation({ token }).catch(() => {
         // Token registration should not interrupt app usage.
       });
@@ -78,7 +93,7 @@ const RootNavigator = () => {
       unsubscribeOpens();
       unsubscribeTokenRefresh();
     };
-  }, [registerFcmToken, registerDeliveryFcmToken, user?.role, user?.token]);
+  }, [user?.role, user?.token]);
 
   useEffect(() => {
     if (hasAttemptedRefresh.current) return;
@@ -100,6 +115,9 @@ const RootNavigator = () => {
             ...user,
             token: data.token,
             refreshToken: data.refresh_token,
+            ...(data.name && { name: data.name }),
+            ...(data.email && { email: data.email }),
+            ...(data.role && { role: data.role }),
           }),
         );
       })
@@ -115,7 +133,7 @@ const RootNavigator = () => {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer ref={navigationRef}>
+      <NavigationContainer ref={navigationRef} theme={NAV_THEME}>
         {!user ? (
           <AuthStack />
         ) : user.role === 'delivery' ? (

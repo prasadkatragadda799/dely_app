@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,7 +12,7 @@ import { useAppSelector } from '../../../hooks/redux';
 
 const WishlistScreen = () => {
   const navigation = useNavigation();
-  const { data: products = [] } = useGetProductsQuery();
+  const { data: products = [], isLoading: isProductsLoading } = useGetProductsQuery();
   const { productIds, toggle } = useWishlist();
   const { add } = useCart();
   const homeDivision = useAppSelector(state => state.homeDivision.division);
@@ -56,6 +56,11 @@ const WishlistScreen = () => {
         </View>
       </View>
 
+      {isProductsLoading ? (
+        <View style={styles.loaderWrap}>
+          <ActivityIndicator size="large" color={primary} />
+        </View>
+      ) : (
       <FlatList
         data={wishlistProducts}
         keyExtractor={item => item.id}
@@ -107,12 +112,14 @@ const WishlistScreen = () => {
           </View>
         )}
       />
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F8FAFC', paddingHorizontal: 14 },
+  loaderWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
   backLink: {
     flexDirection: 'row',
     alignItems: 'center',

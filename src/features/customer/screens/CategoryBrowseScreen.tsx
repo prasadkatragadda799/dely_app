@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Image,
   ScrollView,
@@ -66,11 +67,14 @@ type CompanyLeaf = {
   count: number;
 };
 
+type BackItem = { key: '__back__'; kind: 'back'; parentLabel: string };
+
 type SidebarItem =
   | { key: string; kind: 'all' }
   | CategoryLeaf
   | BrandLeaf
-  | CompanyLeaf;
+  | CompanyLeaf
+  | BackItem;
 
 function isCategoryLeaf(item: SidebarItem): item is CategoryLeaf {
   return item.kind === 'leaf' && 'matchCategoryIds' in item;
@@ -82,6 +86,10 @@ function isBrandLeaf(item: SidebarItem): item is BrandLeaf {
 
 function isCompanyLeaf(item: SidebarItem): item is CompanyLeaf {
   return item.kind === 'leaf' && 'companyName' in item;
+}
+
+function isBackItem(item: SidebarItem): item is BackItem {
+  return item.kind === 'back';
 }
 
 type SubtreeMatchScope = {
@@ -264,8 +272,8 @@ const CategoryBrowseScreen = () => {
   const parentNodeId: string | undefined =
     typeof p?.parentNodeId === 'string' ? p.parentNodeId : undefined;
 
-  const { data: allProducts = [] } = useGetProductsQuery();
-  const { data: categoryTreeRoots = [] } = useGetCategoryTreeQuery(division, {
+  const { data: allProducts = [], isLoading: isProductsLoading } = useGetProductsQuery();
+  const { data: categoryTreeRoots = [], isLoading: isCategoryLoading } = useGetCategoryTreeQuery(division, {
     skip: browseMode !== 'categories',
   });
 
@@ -273,18 +281,24 @@ const CategoryBrowseScreen = () => {
     () => (parentNodeId ? findNodeById(categoryTreeRoots, parentNodeId) : null),
     [categoryTreeRoots, parentNodeId],
   );
-  const parentScope = useMemo(
-    () => (parentNode ? collectSubtreeMatchMeta(parentNode) : null),
-    [parentNode],
-  );
-
   const [selectedKey, setSelectedKey] = useState<string>('all');
   const [sortKey, setSortKey] = useState<SortKey>('relevance');
   const [priceDropOnly, setPriceDropOnly] = useState(false);
   const [popularOnly, setPopularOnly] = useState(false);
+  // In-screen drill-down: set when user taps a root category that has children
+  // (only active when no parentNodeId was passed from navigation).
+  const [drillNode, setDrillNode] = useState<ShopCategoryNode | null>(null);
+
+  // Effective parent: route-param parentNode takes priority, then in-screen drillNode.
+  const effectiveParentNode = parentNode ?? drillNode;
+  const effectiveParentScope = useMemo(
+    () => (effectiveParentNode ? collectSubtreeMatchMeta(effectiveParentNode) : null),
+    [effectiveParentNode],
+  );
 
   React.useEffect(() => {
     setSelectedKey('all');
+    setDrillNode(null);
   }, [browseMode, division, parentNodeId]);
 
   const isHomeKitchen = division === 'homeKitchen';
@@ -407,18 +421,26 @@ const CategoryBrowseScreen = () => {
       ];
     }
     if (categoryTreeRoots.length > 0) {
-      const children = parentNode
-        ? ((parentNode.children ?? []).filter(Boolean) as ShopCategoryNode[])
+      // effectiveParentNode: route-param parentNode OR in-screen drillNode
+      const children = effectiveParentNode
+        ? ((effectiveParentNode.children ?? []).filter(Boolean) as ShopCategoryNode[])
         : null;
       const sourceRoots =
         children && children.length > 0 ? children : categoryTreeRoots;
+      const leafItems = buildSidebarFromAdminTree(
+        sourceRoots,
+        divisionProducts,
+        showCategoryImages,
+      );
+      // When drilled in (no route-level parentNodeId), prepend a back button
+      const backItem: SidebarItem | null =
+        drillNode && !parentNodeId
+          ? { key: '__back__', kind: 'back', parentLabel: drillNode.name }
+          : null;
       return [
+        ...(backItem ? [backItem] : []),
         allItem,
-        ...buildSidebarFromAdminTree(
-          sourceRoots,
-          divisionProducts,
-          showCategoryImages,
-        ),
+        ...leafItems,
       ];
     }
     const names = new Set<string>();
@@ -449,7 +471,9 @@ const CategoryBrowseScreen = () => {
     categoryCountMap,
     divisionProducts,
     showCategoryImages,
-    parentNode,
+    effectiveParentNode,
+    drillNode,
+    parentNodeId,
   ]);
 
   const selectedLeaf = useMemo((): CategoryLeaf | BrandLeaf | CompanyLeaf | null => {
@@ -467,7 +491,7 @@ const CategoryBrowseScreen = () => {
 
   const headerTitle =
     selectedLeaf?.label ??
-    parentNode?.name ??
+    effectiveParentNode?.name ??
     (browseMode === 'brands'
       ? 'Brands'
       : browseMode === 'companies'
@@ -494,17 +518,17 @@ const CategoryBrowseScreen = () => {
       );
     }
     if (!selectedLeaf || !isCategoryLeaf(selectedLeaf)) {
-      // When a parent category was tapped from HomeScreen, "All" should show
-      // only products within that parent's subtree, not the entire division.
-      if (parentScope) {
-        return divisionProducts.filter(p => productMatchesSubtree(p, parentScope));
+      // When a parent node is active (via route param or in-screen drill), "All"
+      // scopes to that parent's subtree rather than the whole division.
+      if (effectiveParentScope) {
+        return divisionProducts.filter(p => productMatchesSubtree(p, effectiveParentScope));
       }
       return divisionProducts;
     }
     return divisionProducts.filter(p =>
       productMatchesCategoryLeaf(p, selectedLeaf),
     );
-  }, [browseMode, divisionProducts, selectedLeaf, parentScope]);
+  }, [browseMode, divisionProducts, selectedLeaf, effectiveParentScope]);
 
   const filteredProducts = useMemo(() => {
     let list = baseFiltered;
@@ -784,10 +808,46 @@ const CategoryBrowseScreen = () => {
                 </TouchableOpacity>
               );
             }
+            if (isBackItem(item)) {
+              return (
+                <TouchableOpacity
+                  key={item.key}
+                  onPress={() => { setDrillNode(null); setSelectedKey('all'); }}
+                  style={styles.sideCell}
+                  activeOpacity={0.9}>
+                  <View style={[styles.sideImageWrap, { borderColor: primary }]}>
+                    <Icon name="chevron-left" size={18} color={primary} />
+                  </View>
+                  <Text numberOfLines={3} style={[styles.sideLabel, { color: primary, fontWeight: '700' }]}>
+                    All
+                  </Text>
+                </TouchableOpacity>
+              );
+            }
             return (
               <TouchableOpacity
                 key={item.key}
-                onPress={() => setSelectedKey(item.key)}
+                onPress={() => {
+                  // In "View All" mode (no parentNodeId, no drillNode): if this
+                  // category has children, drill into it instead of filtering.
+                  if (
+                    isCategoryLeaf(item) &&
+                    browseMode === 'categories' &&
+                    !drillNode &&
+                    !parentNodeId
+                  ) {
+                    const nodeId = item.matchCategoryIds[0];
+                    if (nodeId) {
+                      const node = findNodeById(categoryTreeRoots, nodeId);
+                      if (node && (node.children ?? []).filter(Boolean).length > 0) {
+                        setDrillNode(node);
+                        setSelectedKey('all');
+                        return;
+                      }
+                    }
+                  }
+                  setSelectedKey(item.key);
+                }}
                 style={[
                   styles.sideCell,
                   active && {
@@ -830,6 +890,11 @@ const CategoryBrowseScreen = () => {
         </View>
 
         <View style={styles.mainPane}>
+          {(isProductsLoading || isCategoryLoading) ? (
+            <View style={styles.mainLoaderWrap}>
+              <ActivityIndicator size="large" color={primary} />
+            </View>
+          ) : (
           <FlatList
             style={styles.mainList}
             data={filteredProducts}
@@ -898,6 +963,7 @@ const CategoryBrowseScreen = () => {
               </View>
             }
           />
+          )}
         </View>
       </View>
 
@@ -1040,6 +1106,12 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     backgroundColor: '#F8FAFC',
+  },
+  mainLoaderWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 60,
   },
   mainList: {
     flex: 1,

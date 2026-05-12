@@ -11,11 +11,13 @@ export function productImpliesSetPurchase(
     return true;
   }
   const pcs = Math.max(1, p.piecesPerSet ?? 1);
-  if (pcs <= 1) {
-    return false;
-  }
   const minO = Math.max(1, Math.trunc(Number(p.minOrderQuantity) || 1));
   const u = (p.unit || 'piece').toLowerCase();
+  if (pcs <= 1) {
+    // No explicit piecesPerSet configured; treat a minimum order > 1 as an
+    // implied pack (e.g. minOrderQuantity:12, unit:piece → 1 set = 12 pcs).
+    return u === 'piece' && minO > 1;
+  }
   return u === 'piece' && minO >= pcs && minO % pcs === 0;
 }
 

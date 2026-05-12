@@ -26,6 +26,18 @@ import {
   type Asset,
 } from 'react-native-image-picker';
 import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
+import { API_V1_BASE_URL } from '../../../services/api/config';
+
+type GstData = {
+  gst_number: string;
+  trade_name: string;
+  legal_name: string;
+  status: string;
+  business_type: string;
+  registration_date: string;
+  pan_number: string;
+  address?: { street?: string; city?: string; state?: string; pincode?: string };
+};
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 
@@ -61,7 +73,7 @@ const RegisterScreen = ({ navigation }: Props) => {
   const [registering, setRegistering] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const { registerWithRole, verifyCustomerOtp } = useAuth();
-  const { control, handleSubmit } = useForm<RegisterForm>({
+  const { control, handleSubmit, setValue, getValues } = useForm<RegisterForm>({
     defaultValues: {
       name: '',
       email: '',
@@ -84,6 +96,41 @@ const RegisterScreen = ({ navigation }: Props) => {
     },
   });
 
+  const [gstFetching, setGstFetching] = useState(false);
+  const [gstInfo, setGstInfo] = useState<GstData | null>(null);
+  const [gstError, setGstError] = useState<string | null>(null);
+
+  const fetchGstDetails = async () => {
+    const gstin = getValues('gstNumber').trim().toUpperCase();
+    if (!gstin || gstin.length < 15) {
+      setGstError('Enter a valid 15-character GSTIN first.');
+      return;
+    }
+    setGstFetching(true);
+    setGstInfo(null);
+    setGstError(null);
+    try {
+      const res = await fetch(`${API_V1_BASE_URL}/kyc/verify-gst`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gst_number: gstin }),
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        setGstInfo(json.data as GstData);
+        if (json.data.trade_name) {
+          setValue('businessName', json.data.trade_name, { shouldDirty: true });
+        }
+      } else {
+        setGstError(json.detail || json.message || 'GST number not found or invalid.');
+      }
+    } catch {
+      setGstError('Could not verify GST. Check your connection.');
+    } finally {
+      setGstFetching(false);
+    }
+  };
+
   const [shopImageUri, setShopImageUri] = useState<string | undefined>(undefined);
   const [gstCertificateUri, setGstCertificateUri] = useState<string | undefined>(undefined);
   const [fssaiLicenseUri, setFssaiLicenseUri] = useState<string | undefined>(undefined);
@@ -91,82 +138,47 @@ const RegisterScreen = ({ navigation }: Props) => {
   const [tradeCertificateUri, setTradeCertificateUri] = useState<string | undefined>(undefined);
 
   const pickImage = (setter: (uri?: string) => void) => {
-    launchImageLibrary(
-      {
-        mediaType: 'photo',
-        selectionLimit: 1,
-      },
-      resp => {
-        const asset: Asset | undefined = resp.assets?.[0];
-        setter(asset?.uri);
-      },
-    );
+    launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 }, resp => {
+      const asset: Asset | undefined = resp.assets?.[0];
+      setter(asset?.uri);
+    });
   };
 
   const onSubmit = async (form: RegisterForm) => {
     if (!acceptedTerms) {
-      await appAlert({
-        title: 'Terms required',
-        message: 'Please accept terms to continue.',
-      });
+      await appAlert({ title: 'Terms required', message: 'Please accept terms to continue.' });
       return;
     }
-
     if (selectedRole === 'delivery') {
       await appAlert({
         title: 'Delivery registration unavailable',
-        message:
-          'Delivery partners are created by admin. Please use “Continue as Partner” to login, or contact support.',
+        message: 'Delivery partners are created by admin. Please use "Continue as Partner" to login, or contact support.',
       });
       return;
     }
-
     if (selectedRole === 'customer') {
       const hasAtLeastOneDoc = gstCertificateUri || fssaiLicenseUri || udyamRegistrationUri || tradeCertificateUri || shopImageUri;
-      if (
-        !form.addressLine1.trim() ||
-        !form.city.trim() ||
-        !form.state.trim() ||
-        !form.pincode.trim() ||
-        !form.businessName.trim() ||
-        !form.gstNumber.trim() ||
-        !form.fmcgNumber.trim() ||
-        !hasAtLeastOneDoc
-      ) {
+      if (!form.addressLine1.trim() || !form.city.trim() || !form.state.trim() || !form.pincode.trim() || !form.businessName.trim() || !form.gstNumber.trim() || !form.fmcgNumber.trim() || !hasAtLeastOneDoc) {
         await appAlert({
           title: 'Complete your profile',
-          message:
-            'Address, business name, GST number, and FMCG (FSSAI) number are required. Please upload at least one document (GST certificate, FSSAI license, Udyam registration, trade certificate, or shop photo).',
+          message: 'Address, business name, GST number, and FMCG (FSSAI) number are required. Please upload at least one document.',
         });
         return;
       }
     }
-
-    const enrichedForm: RegisterForm = {
-      ...form,
-      shopImageUri,
-      gstCertificateUri,
-      fssaiLicenseUri,
-      udyamRegistrationUri,
-      tradeCertificateUri,
-    };
-
+    const enrichedForm: RegisterForm = { ...form, shopImageUri, gstCertificateUri, fssaiLicenseUri, udyamRegistrationUri, tradeCertificateUri };
     try {
       setRegistering(true);
-      const businessProfile =
-        selectedRole === 'customer'
-          ? {
-              businessName: form.businessName,
-              gstNumber: form.gstNumber,
-              gstCertificate: gstCertificateUri,
-              fssaiLicense: fssaiLicenseUri,
-              udyamRegistration: udyamRegistrationUri,
-              tradeCertificate: tradeCertificateUri,
-              fmcgNumber: form.fmcgNumber,
-              shopImageUri,
-            }
-          : null;
-
+      const businessProfile = selectedRole === 'customer' ? {
+        businessName: form.businessName,
+        gstNumber: form.gstNumber,
+        gstCertificate: gstCertificateUri,
+        fssaiLicense: fssaiLicenseUri,
+        udyamRegistration: udyamRegistrationUri,
+        tradeCertificate: tradeCertificateUri,
+        fmcgNumber: form.fmcgNumber,
+        shopImageUri,
+      } : null;
       const next = await registerWithRole({
         name: form.name,
         email: form.email,
@@ -179,14 +191,10 @@ const RegisterScreen = ({ navigation }: Props) => {
         state: form.state,
         pincode: form.pincode,
       });
-
       setPendingForm({ ...enrichedForm, requestId: next.requestId });
       setOtpVisible(true);
     } catch (e: unknown) {
-      await appAlert({
-        title: 'Registration failed',
-        message: getApiErrorMessage(e),
-      });
+      await appAlert({ title: 'Registration failed', message: getApiErrorMessage(e) });
     } finally {
       setRegistering(false);
     }
@@ -197,23 +205,13 @@ const RegisterScreen = ({ navigation }: Props) => {
     const otpCode = (code ?? otpInput).trim();
     try {
       setVerifyingOtp(true);
-      if (!pendingForm.requestId) {
-        throw new Error('OTP request missing. Please register again.');
-      }
-      await verifyCustomerOtp({
-        phone: pendingForm.phone,
-        requestId: pendingForm.requestId,
-        otp: otpCode,
-        role: selectedRole,
-      });
+      if (!pendingForm.requestId) throw new Error('OTP request missing. Please register again.');
+      await verifyCustomerOtp({ phone: pendingForm.phone, requestId: pendingForm.requestId, otp: otpCode, role: selectedRole });
       setOtpVisible(false);
       setOtpInput('');
       setPendingForm(null);
     } catch (e: unknown) {
-      await appAlert({
-        title: 'OTP verification failed',
-        message: getApiErrorMessage(e),
-      });
+      await appAlert({ title: 'OTP verification failed', message: getApiErrorMessage(e) });
     } finally {
       setVerifyingOtp(false);
     }
@@ -222,437 +220,320 @@ const RegisterScreen = ({ navigation }: Props) => {
   const handleOtpChange = (val: string) => {
     const digits = val.replace(/\D/g, '').slice(0, 6);
     setOtpInput(digits);
-    if (digits.length === 6 && !verifyingOtp) {
-      verifyOtp(digits);
-    }
+    if (digits.length === 6 && !verifyingOtp) verifyOtp(digits);
   };
+
+  const SectionCard = ({ icon, title, children }: { icon: string; title: string; children: React.ReactNode }) => (
+    <View style={styles.sectionCard}>
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionIconBadge}>
+          <Icon name={icon} size={14} color="#1D4ED8" />
+        </View>
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+      <View style={styles.sectionDivider} />
+      {children}
+    </View>
+  );
+
+  const FieldLabel = ({ label, optional }: { label: string; optional?: boolean }) => (
+    <Text style={styles.fieldLabel}>
+      {label}
+      {optional ? <Text style={styles.optionalText}> (optional)</Text> : null}
+    </Text>
+  );
+
+  const InputBox = ({ icon, children }: { icon: string; children: React.ReactNode }) => (
+    <View style={styles.inputBox}>
+      <Icon name={icon} size={17} color="#94A3B8" />
+      {children}
+    </View>
+  );
+
+  const DocUploadCard = ({
+    icon, label, uri, onPress,
+  }: { icon: string; label: string; uri?: string; onPress: () => void }) => (
+    <TouchableOpacity style={styles.docCard} onPress={onPress} activeOpacity={0.8}>
+      {uri ? (
+        <Image source={{ uri }} style={styles.docPreview} />
+      ) : (
+        <View style={styles.docIconWrap}>
+          <Icon name={icon} size={26} color="#1D4ED8" />
+        </View>
+      )}
+      <Text style={styles.docLabel}>{label}</Text>
+      <Text style={styles.docHint}>{uri ? 'Tap to change' : 'Tap to upload'}</Text>
+    </TouchableOpacity>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        style={styles.keyboardArea}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
+      <KeyboardAvoidingView style={styles.flex1} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
+          {/* Top bar */}
           <View style={styles.topBar}>
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              style={styles.backBtn}
-              activeOpacity={0.9}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.9}>
               <Icon name="arrow-left" size={22} color="#FFFFFF" />
             </TouchableOpacity>
-            <Image
-              source={require('../../../../assets/logo.png')}
-              style={styles.topBarLogo}
-              resizeMode="contain"
-            />
+            <Image source={require('../../../../assets/logo.png')} style={styles.topBarLogo} resizeMode="contain" />
             <View style={{ width: 38 }} />
           </View>
-          <View style={styles.card}>
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>
-              Join and start ordering in minutes
-            </Text>
 
-            {(
-              [
-                { key: 'name', icon: 'account-outline', label: 'Full name' },
-                { key: 'email', icon: 'email-outline', label: 'Email address' },
-                { key: 'password', icon: 'lock-outline', label: 'Password' },
-                { key: 'phone', icon: 'phone-outline', label: 'Phone number' },
-              ] as const
-            ).map(field => (
-              <View key={field.key}>
-                <Text style={styles.label}>{field.label}</Text>
-                <Controller
-                  control={control}
-                  name={field.key}
-                  render={({ field: { onChange, value } }) => (
-                    <View style={styles.inputRow}>
-                      <Icon name={field.icon} size={18} color="#64748B" />
-                      <TextInput
-                        placeholder={field.label}
-                        placeholderTextColor="#94A3B8"
-                        value={value}
-                        onChangeText={onChange}
-                        style={styles.input}
-                        secureTextEntry={field.key === 'password'}
-                        keyboardType={
-                          field.key === 'phone' ? 'phone-pad' : 'default'
-                        }
-                        autoCapitalize={
-                          field.key === 'email' ? 'none' : 'sentences'
-                        }
-                      />
-                    </View>
-                  )}
-                />
-              </View>
-            ))}
+          {/* Page heading */}
+          <View style={styles.pageHeading}>
+            <Text style={styles.pageTitle}>Create Account</Text>
+            <Text style={styles.pageSubtitle}>Join DelyCart and start ordering</Text>
+          </View>
 
-            <Text style={styles.label}>Role</Text>
-            <View style={styles.roleRow}>
-              {(['customer'] as UserRole[]).map(role => (
-                <TouchableOpacity
-                  key={role}
-                  style={[
-                    styles.roleChip,
-                    selectedRole === role && styles.roleChipActive,
-                  ]}
-                  onPress={() => setSelectedRole(role)}
-                >
-                  <Text
-                    style={[
-                      styles.roleChipText,
-                      selectedRole === role && styles.roleChipTextActive,
-                    ]}
+          {/* ── Section 1: Personal Info ── */}
+          <SectionCard icon="account-outline" title="Personal Info">
+            <FieldLabel label="Full name" />
+            <Controller control={control} name="name" render={({ field: { onChange, value } }) => (
+              <InputBox icon="account-outline">
+                <TextInput style={styles.input} placeholder="Enter your full name" placeholderTextColor="#CBD5E1" value={value} onChangeText={onChange} autoCapitalize="words" />
+              </InputBox>
+            )} />
+
+            <FieldLabel label="Email address" />
+            <Controller control={control} name="email" render={({ field: { onChange, value } }) => (
+              <InputBox icon="email-outline">
+                <TextInput style={styles.input} placeholder="you@example.com" placeholderTextColor="#CBD5E1" value={value} onChangeText={onChange} keyboardType="email-address" autoCapitalize="none" />
+              </InputBox>
+            )} />
+
+            <FieldLabel label="Password" />
+            <Controller control={control} name="password" render={({ field: { onChange, value } }) => (
+              <InputBox icon="lock-outline">
+                <TextInput style={styles.input} placeholder="Create a password" placeholderTextColor="#CBD5E1" value={value} onChangeText={onChange} secureTextEntry />
+              </InputBox>
+            )} />
+
+            <FieldLabel label="Phone number" />
+            <Controller control={control} name="phone" render={({ field: { onChange, value } }) => (
+              <InputBox icon="phone-outline">
+                <TextInput style={styles.input} placeholder="+91 XXXXX XXXXX" placeholderTextColor="#CBD5E1" value={value} onChangeText={onChange} keyboardType="phone-pad" />
+              </InputBox>
+            )} />
+          </SectionCard>
+
+          {/* ── Section 2: Business Details (only for customer) ── */}
+          {selectedRole === 'customer' ? (
+            <SectionCard icon="store-outline" title="Business Details">
+
+              {/* GST Number */}
+              <FieldLabel label="GST Number (GSTIN)" />
+              <Controller control={control} name="gstNumber" render={({ field: { onChange, value } }) => (
+                <View style={styles.inputBox}>
+                  <Icon name="receipt-outline" size={17} color="#94A3B8" />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. 29ABCDE1234F1Z5"
+                    placeholderTextColor="#CBD5E1"
+                    value={value}
+                    onChangeText={v => { onChange(v); setGstInfo(null); setGstError(null); }}
+                    autoCapitalize="characters"
+                  />
+                  <TouchableOpacity
+                    onPress={fetchGstDetails}
+                    disabled={gstFetching}
+                    style={styles.fetchBtn}
+                    activeOpacity={0.85}
                   >
-                    {role === 'customer' ? 'Customer' : 'Delivery'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                    {gstFetching
+                      ? <ActivityIndicator size="small" color="#FFFFFF" />
+                      : <Text style={styles.fetchBtnText}>Verify</Text>}
+                  </TouchableOpacity>
+                </View>
+              )} />
+              {gstError ? (
+                <View style={styles.errorRow}>
+                  <Icon name="alert-circle-outline" size={13} color="#DC2626" />
+                  <Text style={styles.errorText}>{gstError}</Text>
+                </View>
+              ) : null}
 
-            {selectedRole === 'customer' ? (
-              <View style={styles.businessBlock}>
-                <Text style={[styles.label, { marginTop: 16, marginBottom: 10 }]}>
-                  Address Details
-                </Text>
-
-                <View style={styles.grid2}>
-                  <View style={styles.colWithGap}>
-                    <Text style={styles.smallLabel}>City</Text>
-                    <Controller
-                      control={control}
-                      name="city"
-                      render={({ field: { onChange, value } }) => (
-                        <View style={styles.inputRow}>
-                          <Icon
-                            name="city-variant-outline"
-                            size={18}
-                            color="#64748B"
-                          />
-                          <TextInput
-                            placeholder="Enter city"
-                            placeholderTextColor="#94A3B8"
-                            value={value}
-                            onChangeText={onChange}
-                            style={styles.input}
-                            autoCapitalize="words"
-                          />
-                        </View>
-                      )}
-                    />
+              {/* GST verified card */}
+              {gstInfo ? (
+                <View style={styles.gstCard}>
+                  <View style={styles.gstCardTop}>
+                    <Icon name="check-decagram" size={18} color="#16A34A" />
+                    <Text style={styles.gstCardTopText}>GST Verified</Text>
+                    <Text style={[styles.gstStatusBadge, { backgroundColor: gstInfo.status === 'Active' ? '#DCFCE7' : '#FEE2E2', color: gstInfo.status === 'Active' ? '#15803D' : '#B91C1C' }]}>
+                      {gstInfo.status}
+                    </Text>
                   </View>
-                  <View style={styles.col}>
-                    <Text style={styles.smallLabel}>State</Text>
-                    <Controller
-                      control={control}
-                      name="state"
-                      render={({ field: { onChange, value } }) => (
-                        <View style={styles.inputRow}>
-                          <Icon
-                            name="flag-outline"
-                            size={18}
-                            color="#64748B"
-                          />
-                          <TextInput
-                            placeholder="Enter state"
-                            placeholderTextColor="#94A3B8"
-                            value={value}
-                            onChangeText={onChange}
-                            style={styles.input}
-                            autoCapitalize="words"
-                          />
-                        </View>
-                      )}
-                    />
+                  <Text style={styles.gstTradeName}>{gstInfo.trade_name}</Text>
+                  {gstInfo.legal_name !== gstInfo.trade_name ? (
+                    <Text style={styles.gstLegalName}>{gstInfo.legal_name}</Text>
+                  ) : null}
+                  <View style={styles.gstMetaRow}>
+                    <View style={styles.gstMetaItem}>
+                      <Text style={styles.gstMetaKey}>PAN</Text>
+                      <Text style={styles.gstMetaVal}>{gstInfo.pan_number}</Text>
+                    </View>
+                    <View style={styles.gstMetaItem}>
+                      <Text style={styles.gstMetaKey}>Type</Text>
+                      <Text style={styles.gstMetaVal}>{gstInfo.business_type}</Text>
+                    </View>
+                    <View style={styles.gstMetaItem}>
+                      <Text style={styles.gstMetaKey}>Since</Text>
+                      <Text style={styles.gstMetaVal}>{gstInfo.registration_date}</Text>
+                    </View>
                   </View>
+                  {gstInfo.address?.street ? (
+                    <View style={styles.gstAddressRow}>
+                      <Icon name="map-marker-outline" size={13} color="#6B7280" />
+                      <Text style={styles.gstAddress}>
+                        {[gstInfo.address.street, gstInfo.address.city, gstInfo.address.pincode].filter(Boolean).join(', ')}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
+              ) : null}
 
-                <View>
-                  <Text style={styles.smallLabel}>Pincode</Text>
-                  <Controller
-                    control={control}
-                    name="pincode"
-                    render={({ field: { onChange, value } }) => (
-                      <View style={styles.inputRow}>
-                        <Icon
-                          name="badge-account-outline"
-                          size={18}
-                          color="#64748B"
-                        />
-                        <TextInput
-                          placeholder="Pincode"
-                          placeholderTextColor="#94A3B8"
-                          value={value}
-                          onChangeText={onChange}
-                          style={styles.input}
-                          keyboardType="phone-pad"
-                          autoCapitalize="none"
-                        />
-                      </View>
-                    )}
-                  />
+              {/* Business Name */}
+              <FieldLabel label="Business Name" />
+              <Controller control={control} name="businessName" render={({ field: { onChange, value } }) => (
+                <InputBox icon="storefront-outline">
+                  <TextInput style={styles.input} placeholder="Your registered business name" placeholderTextColor="#CBD5E1" value={value} onChangeText={onChange} />
+                </InputBox>
+              )} />
+
+              {/* FMCG Number */}
+              <FieldLabel label="FMCG / FSSAI Number" />
+              <Controller control={control} name="fmcgNumber" render={({ field: { onChange, value } }) => (
+                <InputBox icon="barcode-scan">
+                  <TextInput style={styles.input} placeholder="Enter FSSAI license number" placeholderTextColor="#CBD5E1" value={value} onChangeText={onChange} />
+                </InputBox>
+              )} />
+            </SectionCard>
+          ) : null}
+
+          {/* ── Section 3: Address (only for customer) ── */}
+          {selectedRole === 'customer' ? (
+            <SectionCard icon="map-marker-outline" title="Address">
+
+              <View style={styles.row}>
+                <View style={styles.rowCol}>
+                  <FieldLabel label="City" />
+                  <Controller control={control} name="city" render={({ field: { onChange, value } }) => (
+                    <InputBox icon="city-variant-outline">
+                      <TextInput style={styles.input} placeholder="City" placeholderTextColor="#CBD5E1" value={value} onChangeText={onChange} autoCapitalize="words" />
+                    </InputBox>
+                  )} />
                 </View>
-
-                <View>
-                  <Text style={styles.smallLabel}>Address line 1</Text>
-                  <Controller
-                    control={control}
-                    name="addressLine1"
-                    render={({ field: { onChange, value } }) => (
-                      <View style={styles.inputRow}>
-                        <Icon
-                          name="map-marker-outline"
-                          size={18}
-                          color="#64748B"
-                        />
-                        <TextInput
-                          placeholder="House / street / locality"
-                          placeholderTextColor="#94A3B8"
-                          value={value}
-                          onChangeText={onChange}
-                          style={styles.input}
-                          autoCapitalize="sentences"
-                        />
-                      </View>
-                    )}
-                  />
-                </View>
-
-                <View>
-                  <Text style={styles.smallLabel}>Address line 2 (optional)</Text>
-                  <Controller
-                    control={control}
-                    name="addressLine2"
-                    render={({ field: { onChange, value } }) => (
-                      <View style={styles.inputRow}>
-                        <Icon
-                          name="map-marker-plus-outline"
-                          size={18}
-                          color="#64748B"
-                        />
-                        <TextInput
-                          placeholder="Landmark (optional)"
-                          placeholderTextColor="#94A3B8"
-                          value={value ?? ''}
-                          onChangeText={onChange}
-                          style={styles.input}
-                          autoCapitalize="sentences"
-                        />
-                      </View>
-                    )}
-                  />
-                </View>
-
-                <Text style={[styles.label, { marginTop: 16 }]}>
-                  Business Details
-                </Text>
-                <View style={styles.grid2}>
-                  <View style={styles.colWithGap}>
-                    <Text style={styles.smallLabel}>Business name</Text>
-                    <Controller
-                      control={control}
-                      name="businessName"
-                      render={({ field: { onChange, value } }) => (
-                        <View style={styles.inputRow}>
-                          <Icon
-                            name="store-outline"
-                            size={18}
-                            color="#64748B"
-                          />
-                          <TextInput
-                            placeholder="Enter business name"
-                            placeholderTextColor="#94A3B8"
-                            value={value}
-                            onChangeText={onChange}
-                            style={styles.input}
-                          />
-                        </View>
-                      )}
-                    />
-                  </View>
-                  <View style={styles.col}>
-                    <Text style={styles.smallLabel}>GST number</Text>
-                    <Controller
-                      control={control}
-                      name="gstNumber"
-                      render={({ field: { onChange, value } }) => (
-                        <View style={styles.inputRow}>
-                          <Icon
-                            name="receipt-outline"
-                            size={18}
-                            color="#64748B"
-                          />
-                          <TextInput
-                            placeholder="GSTIN"
-                            placeholderTextColor="#94A3B8"
-                            value={value}
-                            onChangeText={onChange}
-                            style={styles.input}
-                            autoCapitalize="characters"
-                          />
-                        </View>
-                      )}
-                    />
-                  </View>
-                </View>
-
-                <View>
-                  <Text style={styles.smallLabel}>FMCG number</Text>
-                  <Controller
-                    control={control}
-                    name="fmcgNumber"
-                    render={({ field: { onChange, value } }) => (
-                      <View style={styles.inputRow}>
-                        <Icon
-                          name="badge-account-outline"
-                          size={18}
-                          color="#64748B"
-                        />
-                        <TextInput
-                          placeholder="Enter FMCG number"
-                          placeholderTextColor="#94A3B8"
-                          value={value}
-                          onChangeText={onChange}
-                          style={styles.input}
-                        />
-                      </View>
-                    )}
-                  />
-                </View>
-
-                <Text style={[styles.label, { marginTop: 16, marginBottom: 6 }]}>
-                  Certificates & documents
-                </Text>
-                <Text style={styles.docHint}>
-                  Upload at least one document — a clear photo of the certificate.
-                </Text>
-
-                <View style={styles.docGrid}>
-                  <TouchableOpacity
-                    onPress={() => pickImage(setGstCertificateUri)}
-                    style={[styles.docCard, styles.docCardGap]}>
-                    {gstCertificateUri ? (
-                      <Image source={{ uri: gstCertificateUri }} style={styles.docPreview} />
-                    ) : (
-                      <Icon name="file-certificate-outline" size={24} color="#1D4ED8" />
-                    )}
-                    <Text style={styles.docText}>GST certificate</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={() => pickImage(setFssaiLicenseUri)}
-                    style={styles.docCard}>
-                    {fssaiLicenseUri ? (
-                      <Image source={{ uri: fssaiLicenseUri }} style={styles.docPreview} />
-                    ) : (
-                      <Icon name="file-document-outline" size={24} color="#1D4ED8" />
-                    )}
-                    <Text style={styles.docText}>FSSAI license</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={[styles.docGrid, { marginTop: 10 }]}>
-                  <TouchableOpacity
-                    onPress={() => pickImage(setUdyamRegistrationUri)}
-                    style={[styles.docCard, styles.docCardGap]}>
-                    {udyamRegistrationUri ? (
-                      <Image source={{ uri: udyamRegistrationUri }} style={styles.docPreview} />
-                    ) : (
-                      <Icon name="file-document-outline" size={24} color="#1D4ED8" />
-                    )}
-                    <Text style={styles.docText}>Udyam registration</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={() => pickImage(setTradeCertificateUri)}
-                    style={styles.docCard}>
-                    {tradeCertificateUri ? (
-                      <Image source={{ uri: tradeCertificateUri }} style={styles.docPreview} />
-                    ) : (
-                      <Icon name="file-check-outline" size={24} color="#1D4ED8" />
-                    )}
-                    <Text style={styles.docText}>Trade certificate</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={[styles.docGrid, { marginTop: 10 }]}>
-                  <TouchableOpacity
-                    onPress={() => pickImage(setShopImageUri)}
-                    style={[styles.docCard, styles.docCardGap]}>
-                    {shopImageUri ? (
-                      <Image source={{ uri: shopImageUri }} style={styles.docPreview} />
-                    ) : (
-                      <Icon name="storefront-outline" size={24} color="#1D4ED8" />
-                    )}
-                    <Text style={styles.docText}>Shop photo</Text>
-                  </TouchableOpacity>
-                  <View style={styles.col} />
+                <View style={styles.rowGap} />
+                <View style={styles.rowCol}>
+                  <FieldLabel label="State" />
+                  <Controller control={control} name="state" render={({ field: { onChange, value } }) => (
+                    <InputBox icon="flag-outline">
+                      <TextInput style={styles.input} placeholder="State" placeholderTextColor="#CBD5E1" value={value} onChangeText={onChange} autoCapitalize="words" />
+                    </InputBox>
+                  )} />
                 </View>
               </View>
-            ) : null}
 
-            <View style={styles.termsRow}>
-              <TouchableOpacity
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: acceptedTerms }}
-                onPress={() => setAcceptedTerms(prev => !prev)}
-                style={[styles.checkbox, acceptedTerms && styles.checkboxActive]}
-                activeOpacity={0.8}
-              >
-                {acceptedTerms ? (
-                  <Icon name="check" size={12} color="#FFFFFF" />
-                ) : null}
-              </TouchableOpacity>
+              <FieldLabel label="Pincode" />
+              <Controller control={control} name="pincode" render={({ field: { onChange, value } }) => (
+                <InputBox icon="map-marker-radius-outline">
+                  <TextInput style={styles.input} placeholder="6-digit pincode" placeholderTextColor="#CBD5E1" value={value} onChangeText={onChange} keyboardType="number-pad" maxLength={6} />
+                </InputBox>
+              )} />
+
+              <FieldLabel label="Address Line 1" />
+              <Controller control={control} name="addressLine1" render={({ field: { onChange, value } }) => (
+                <InputBox icon="home-outline">
+                  <TextInput style={styles.input} placeholder="House no., Street, Locality" placeholderTextColor="#CBD5E1" value={value} onChangeText={onChange} autoCapitalize="sentences" />
+                </InputBox>
+              )} />
+
+              <FieldLabel label="Address Line 2" optional />
+              <Controller control={control} name="addressLine2" render={({ field: { onChange, value } }) => (
+                <InputBox icon="map-marker-plus-outline">
+                  <TextInput style={styles.input} placeholder="Landmark, Area (optional)" placeholderTextColor="#CBD5E1" value={value ?? ''} onChangeText={onChange} autoCapitalize="sentences" />
+                </InputBox>
+              )} />
+            </SectionCard>
+          ) : null}
+
+          {/* ── Section 4: Documents (only for customer) ── */}
+          {selectedRole === 'customer' ? (
+            <SectionCard icon="file-document-outline" title="Certificates & Documents">
+              <Text style={styles.docSectionHint}>
+                Upload at least one document — a clear photo of the certificate is fine.
+              </Text>
+              <View style={styles.docGrid}>
+                <DocUploadCard icon="file-certificate-outline" label="GST Certificate" uri={gstCertificateUri} onPress={() => pickImage(setGstCertificateUri)} />
+                <DocUploadCard icon="file-document-outline" label="FSSAI License" uri={fssaiLicenseUri} onPress={() => pickImage(setFssaiLicenseUri)} />
+                <DocUploadCard icon="office-building-outline" label="Udyam Reg." uri={udyamRegistrationUri} onPress={() => pickImage(setUdyamRegistrationUri)} />
+                <DocUploadCard icon="file-check-outline" label="Trade Certificate" uri={tradeCertificateUri} onPress={() => pickImage(setTradeCertificateUri)} />
+                <DocUploadCard icon="storefront-outline" label="Shop Photo" uri={shopImageUri} onPress={() => pickImage(setShopImageUri)} />
+              </View>
+            </SectionCard>
+          ) : null}
+
+          {/* ── Footer: Terms + Submit ── */}
+          <View style={styles.footerCard}>
+            <TouchableOpacity
+              style={styles.termsRow}
+              onPress={() => setAcceptedTerms(prev => !prev)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: acceptedTerms }}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.checkbox, acceptedTerms && styles.checkboxActive]}>
+                {acceptedTerms ? <Icon name="check" size={11} color="#FFFFFF" /> : null}
+              </View>
               <Text style={styles.termsText}>
-                I agree to{' '}
-                <Text
-                  style={styles.termsLink}
-                  onPress={() => setTermsModalVisible(true)}
-                >
+                I agree to the{' '}
+                <Text style={styles.termsLink} onPress={() => setTermsModalVisible(true)}>
                   terms & conditions
                 </Text>
               </Text>
-            </View>
+            </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.button, registering && { opacity: 0.7 }]}
+              style={[styles.registerBtn, registering && { opacity: 0.7 }]}
               disabled={registering}
               onPress={handleSubmit(onSubmit)}
+              activeOpacity={0.9}
             >
-              {registering ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={styles.buttonText}>Register</Text>
-              )}
+              {registering
+                ? <ActivityIndicator color="#FFFFFF" size="small" />
+                : (
+                  <View style={styles.registerBtnInner}>
+                    <Text style={styles.registerBtnText}>Create Account</Text>
+                    <Icon name="arrow-right" size={18} color="#FFFFFF" />
+                  </View>
+                )}
             </TouchableOpacity>
           </View>
-          <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-            <Text style={styles.link}>Already have an account? Login</Text>
+
+          <TouchableOpacity onPress={() => navigation.navigate('Login')} style={styles.loginLinkWrap}>
+            <Text style={styles.loginLink}>Already have an account? <Text style={styles.loginLinkBold}>Sign in</Text></Text>
           </TouchableOpacity>
+
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* OTP Modal */}
       <Modal transparent visible={otpVisible} animationType="slide">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>OTP Verification</Text>
-            <Text style={styles.modalSubtitle}>
-              Enter the OTP sent to your phone
-            </Text>
-            <View style={styles.inputRow}>
-              <Icon name="shield-key-outline" size={18} color="#64748B" />
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <Icon name="shield-key-outline" size={36} color="#1D4ED8" style={{ alignSelf: 'center', marginBottom: 12 }} />
+            <Text style={styles.modalTitle}>Verify Your Number</Text>
+            <Text style={styles.modalSubtitle}>Enter the 6-digit OTP sent to your phone</Text>
+            <View style={[styles.inputBox, { marginTop: 16 }]}>
+              <Icon name="numeric" size={17} color="#94A3B8" />
               <TextInput
                 value={otpInput}
                 onChangeText={handleOtpChange}
                 keyboardType="number-pad"
-                placeholder="Enter 6-digit OTP"
-                placeholderTextColor="#94A3B8"
-                style={styles.input}
+                placeholder="• • • • • •"
+                placeholderTextColor="#CBD5E1"
+                style={[styles.input, { letterSpacing: 6, fontSize: 18, fontWeight: '700' }]}
                 maxLength={6}
                 autoFocus
                 editable={!verifyingOtp}
@@ -660,183 +541,235 @@ const RegisterScreen = ({ navigation }: Props) => {
               {verifyingOtp && <ActivityIndicator size="small" color="#1D4ED8" style={{ marginRight: 4 }} />}
             </View>
             <TouchableOpacity
-              style={[styles.button, (verifyingOtp || otpInput.length < 6) && { opacity: 0.6 }]}
+              style={[styles.registerBtn, { marginTop: 16 }, (verifyingOtp || otpInput.length < 6) && { opacity: 0.6 }]}
               disabled={verifyingOtp || otpInput.length < 6}
-              onPress={() => verifyOtp()}>
-              {verifyingOtp ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={styles.buttonText}>Verify & Continue</Text>
-              )}
+              onPress={() => verifyOtp()}
+              activeOpacity={0.9}
+            >
+              {verifyingOtp
+                ? <ActivityIndicator color="#FFFFFF" size="small" />
+                : (
+                  <View style={styles.registerBtnInner}>
+                    <Text style={styles.registerBtnText}>Verify & Continue</Text>
+                    <Icon name="check" size={18} color="#FFFFFF" />
+                  </View>
+                )}
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setOtpVisible(false)}>
-              <Text style={styles.link}>Cancel</Text>
+            <TouchableOpacity onPress={() => setOtpVisible(false)} style={{ marginTop: 14, alignSelf: 'center' }}>
+              <Text style={{ color: '#64748B', fontWeight: '600', fontSize: 14 }}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
-      <TermsAndConditionsModal
-        visible={termsModalVisible}
-        onClose={() => setTermsModalVisible(false)}
-      />
+
+      <TermsAndConditionsModal visible={termsModalVisible} onClose={() => setTermsModalVisible(false)} />
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0B3B8F' },
-  keyboardArea: { flex: 1 },
-  scrollContent: { paddingHorizontal: 20, paddingVertical: 20 },
+  container: { flex: 1, backgroundColor: '#0B2D71' },
+  flex1: { flex: 1 },
+  scrollContent: { paddingHorizontal: 16, paddingBottom: 36 },
+
+  // Top bar
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
-    marginTop: 4,
+    paddingVertical: 14,
   },
   backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  topBarLogo: { width: 120, height: 34 },
-  card: {
+  topBarLogo: { width: 110, height: 32 },
+
+  // Page heading (on blue background)
+  pageHeading: { paddingHorizontal: 4, marginBottom: 20, marginTop: 4 },
+  pageTitle: { fontSize: 30, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.5 },
+  pageSubtitle: { color: 'rgba(255,255,255,0.65)', fontSize: 14, marginTop: 4, fontWeight: '500' },
+
+  // Section cards
+  sectionCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 22,
+    borderRadius: 20,
     padding: 18,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation: 2,
   },
-  title: { fontSize: 28, fontWeight: '800', color: '#0F172A' },
-  subtitle: { color: '#334155', marginTop: 4, marginBottom: 12 },
-  label: {
-    color: '#1E3A8A',
-    fontWeight: '700',
-    marginTop: 10,
-    marginBottom: 6,
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  sectionIconBadge: {
+    width: 26, height: 26, borderRadius: 8,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center', justifyContent: 'center',
+    marginRight: 10,
   },
-  inputRow: {
-    borderWidth: 1,
-    borderColor: '#DBEAFE',
-    backgroundColor: '#F8FAFF',
-    borderRadius: 14,
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: '#0F172A' },
+  sectionDivider: { height: 1, backgroundColor: '#F1F5F9', marginBottom: 14 },
+
+  // Field label
+  fieldLabel: {
+    fontSize: 12, fontWeight: '700', color: '#475569',
+    marginBottom: 6, marginTop: 12,
+    textTransform: 'uppercase', letterSpacing: 0.4,
+  },
+  optionalText: { fontWeight: '500', color: '#94A3B8', textTransform: 'none', letterSpacing: 0 },
+
+  // Input box
+  inputBox: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
     paddingHorizontal: 12,
+    minHeight: 48,
   },
   input: {
     flex: 1,
     color: '#0F172A',
+    fontSize: 14,
+    fontWeight: '500',
     paddingLeft: 10,
-    paddingVertical: 12,
+    paddingVertical: 0,
   },
-  termsRow: { marginTop: 16, flexDirection: 'row', alignItems: 'center' },
-  roleRow: { marginTop: 14, flexDirection: 'row', gap: 10 },
-  roleChip: {
-    borderWidth: 1,
-    borderColor: '#DBEAFE',
-    borderRadius: 16,
+
+  // Fetch / Verify button
+  fetchBtn: {
+    backgroundColor: '#1D4ED8',
+    borderRadius: 9,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#F8FAFF',
-  },
-  roleChipActive: { borderColor: '#1D4ED8', backgroundColor: '#DBEAFE' },
-  roleChipText: { color: '#334155', fontWeight: '600' },
-  roleChipTextActive: { color: '#1D4ED8' },
-  businessBlock: {
-    marginTop: 12,
-    padding: 14,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.65)',
-    borderWidth: 1,
-    borderColor: '#DBEAFE',
-  },
-  grid2: { flexDirection: 'row', marginTop: 10 },
-  col: { flex: 1 },
-  colWithGap: { flex: 1, marginRight: 12 },
-  smallLabel: {
-    color: '#475569',
-    fontWeight: '800',
-    fontSize: 12,
-    marginBottom: 6,
-  },
-  docHint: {
-    color: '#64748B',
-    fontWeight: '600',
-    fontSize: 12,
-    marginBottom: 10,
-    lineHeight: 17,
-  },
-  docGrid: { flexDirection: 'row', marginTop: 6 },
-  docCard: {
-    flex: 1,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#DBEAFE',
-    backgroundColor: 'rgba(248,250,255,0.9)',
-    padding: 12,
-    alignItems: 'center',
-  },
-  docCardGap: { marginRight: 12 },
-  docPreview: {
-    width: '100%',
-    height: 92,
-    borderRadius: 12,
-  },
-  docText: {
-    marginTop: 10,
-    color: '#1D4ED8',
-    fontWeight: '900',
-    fontSize: 12,
-    textAlign: 'center',
-  },
-  checkbox: {
-    width: 18,
-    height: 18,
-    borderWidth: 1,
-    borderColor: '#94A3B8',
-    borderRadius: 4,
-    marginRight: 8,
+    paddingVertical: 7,
+    marginLeft: 8,
+    minWidth: 60,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  fetchBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12 },
+
+  // Error
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 },
+  errorText: { color: '#DC2626', fontSize: 12, fontWeight: '600' },
+
+  // GST verified card
+  gstCard: {
+    marginTop: 12,
+    borderRadius: 14,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    padding: 14,
+  },
+  gstCardTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  gstCardTopText: { fontWeight: '800', color: '#15803D', fontSize: 13, flex: 1 },
+  gstStatusBadge: {
+    fontSize: 11, fontWeight: '700', paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 20,
+  },
+  gstTradeName: { fontSize: 16, fontWeight: '800', color: '#0F172A', marginBottom: 2 },
+  gstLegalName: { fontSize: 12, color: '#6B7280', fontWeight: '500', marginBottom: 8 },
+  gstMetaRow: { flexDirection: 'row', gap: 12, marginBottom: 10, marginTop: 6 },
+  gstMetaItem: { flex: 1 },
+  gstMetaKey: { fontSize: 10, color: '#9CA3AF', fontWeight: '600', textTransform: 'uppercase', marginBottom: 2 },
+  gstMetaVal: { fontSize: 12, color: '#374151', fontWeight: '700' },
+  gstAddressRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 5 },
+  gstAddress: { fontSize: 11, color: '#6B7280', flex: 1, lineHeight: 16 },
+
+  // Row layout (city + state)
+  row: { flexDirection: 'row' },
+  rowCol: { flex: 1 },
+  rowGap: { width: 12 },
+
+  // Documents section
+  docSectionHint: {
+    fontSize: 12, color: '#64748B', fontWeight: '500',
+    marginBottom: 14, lineHeight: 18,
+  },
+  docGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  docCard: {
+    width: '47%',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+    backgroundColor: '#F8FAFC',
+    padding: 14,
+    alignItems: 'center',
+  },
+  docIconWrap: {
+    width: 52, height: 52, borderRadius: 12,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 8,
+  },
+  docPreview: { width: '100%', height: 72, borderRadius: 10, marginBottom: 8 },
+  docLabel: { fontSize: 12, fontWeight: '700', color: '#334155', textAlign: 'center' },
+  docHint: { fontSize: 10, color: '#94A3B8', fontWeight: '500', marginTop: 3, textAlign: 'center' },
+
+  // Footer card
+  footerCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  termsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
+  checkbox: {
+    width: 20, height: 20, borderRadius: 6,
+    borderWidth: 1.5, borderColor: '#CBD5E1',
+    alignItems: 'center', justifyContent: 'center',
+    marginRight: 10,
   },
   checkboxActive: { backgroundColor: '#1D4ED8', borderColor: '#1D4ED8' },
-  termsText: { color: '#334155', fontWeight: '500' },
-  termsLink: { color: '#1D4ED8', fontWeight: '800' },
-  button: {
-    marginTop: 18,
+  termsText: { color: '#475569', fontSize: 13, fontWeight: '500', flex: 1 },
+  termsLink: { color: '#1D4ED8', fontWeight: '700' },
+  registerBtn: {
     backgroundColor: '#1D4ED8',
     borderRadius: 14,
-    paddingVertical: 13,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    textAlign: 'center',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  link: {
-    marginTop: 16,
-    textAlign: 'center',
-    color: '#93C5FD',
-    fontWeight: '700',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    paddingVertical: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 20,
   },
-  modalContent: {
-    width: '100%',
+  registerBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  registerBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 16 },
+
+  // Login link
+  loginLinkWrap: { alignItems: 'center', paddingVertical: 8 },
+  loginLink: { color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: '500' },
+  loginLinkBold: { color: '#93C5FD', fontWeight: '800' },
+
+  // OTP Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    padding: 18,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 24,
+    paddingBottom: 36,
   },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
-  modalSubtitle: { color: '#475569', marginTop: 4, marginBottom: 8 },
+  modalHandle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: '#E2E8F0',
+    alignSelf: 'center', marginBottom: 20,
+  },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: '#0F172A', textAlign: 'center' },
+  modalSubtitle: { color: '#64748B', textAlign: 'center', marginTop: 6, fontSize: 14 },
 });
 
 export default RegisterScreen;

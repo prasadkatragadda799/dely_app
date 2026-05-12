@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -112,6 +112,7 @@ const OrdersScreen = () => {
   const insets = useSafeAreaInsets();
   const [invoiceOrderId, setInvoiceOrderId] = React.useState<string | null>(null);
   const [cancellingOrderId, setCancellingOrderId] = React.useState<string | null>(null);
+  const confirmingRef = useRef<Set<string>>(new Set());
 
   const { data, isFetching, isLoading, refetch } = useGetOrdersQuery();
   const [cancelOrder] = useCancelOrderApiMutation();
@@ -163,6 +164,8 @@ const OrdersScreen = () => {
     : 'Date not available';
 
   const confirmCancelOrder = async (order: UiOrder) => {
+    if (confirmingRef.current.has(order.id)) return;
+    confirmingRef.current.add(order.id);
     const ok = await confirm({
       title: 'Cancel order?',
       message: `Cancel order #${(order.orderNumber ?? order.id).slice(-12)}? This cannot be undone.`,
@@ -170,6 +173,7 @@ const OrdersScreen = () => {
       cancelLabel: 'Keep order',
       destructive: true,
     });
+    confirmingRef.current.delete(order.id);
     if (!ok) return;
 
     setCancellingOrderId(order.id);

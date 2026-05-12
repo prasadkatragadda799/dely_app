@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { combineReducers, configureStore } from '@reduxjs/toolkit';
 import {
   persistReducer,
+  createTransform,
   FLUSH,
   REHYDRATE,
   PAUSE,
@@ -30,6 +31,17 @@ const rootReducer = combineReducers({
   [mobileApi.reducerPath]: mobileApi.reducer,
 });
 
+// isSplashVisible is ephemeral UI state — strip it before writing so it always
+// resets to `true` (initialState) on the next cold start.
+const authTransform = createTransform(
+  (state: any) => {
+    const { isSplashVisible, ...rest } = state;
+    return rest;
+  },
+  undefined,
+  { whitelist: ['auth'] },
+);
+
 const persistConfig = {
   key: 'root',
   storage: AsyncStorage,
@@ -41,6 +53,7 @@ const persistConfig = {
     'businessProfile',
     'wishlist',
   ],
+  transforms: [authTransform],
 };
 
 const persistedReducer = persistReducer(persistConfig, rootReducer);

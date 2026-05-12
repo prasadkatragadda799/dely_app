@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   FlatList,
   Image,
@@ -39,6 +40,7 @@ import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
 import {
   useGetDeliveryLocationsQuery,
   useCheckServiceLocationQuery,
+  useGetCompaniesQuery,
 } from '../../../services/api/mobileApi';
 import type { Deal } from '../../../types';
 
@@ -78,7 +80,8 @@ const HomeScreen = () => {
   const route = useRoute<any>();
   const dispatch = useAppDispatch();
   const { data: allProducts = [], isLoading: isProductsLoading, isError: isProductsError } = useGetProductsQuery();
-  const { data: offers = [] } = useGetOffersQuery();
+  const { data: offers = [], isLoading: isOffersLoading } = useGetOffersQuery();
+  const { data: companiesEnvelope, isLoading: isCompaniesLoading } = useGetCompaniesQuery();
   const { add } = useCart();
   const [activeDivision, setActiveDivision] = useState<DivisionKey>('fmcg');
   const { data: categoryTreeRoots = [] } = useGetCategoryTreeQuery(activeDivision);
@@ -206,14 +209,26 @@ const HomeScreen = () => {
     return ['All', ...Array.from(set)];
   }, [divisionProducts]);
 
+  const apiCompanies: Array<{ id: string; name: string; logoUrl?: string }> = useMemo(() => {
+    const items = (companiesEnvelope?.data as any)?.items ?? [];
+    return items
+      .filter((c: any) => c?.name)
+      .map((c: any) => ({ id: String(c.id), name: String(c.name).trim(), logoUrl: c.logoUrl ?? undefined }))
+      .sort((a: any, b: any) => a.name.localeCompare(b.name));
+  }, [companiesEnvelope]);
+
   const companies = useMemo(() => {
+    if (apiCompanies.length > 0) {
+      return ['All', ...apiCompanies.map(c => c.name)];
+    }
+    // Fallback: derive from loaded products if API hasn't resolved yet.
     const set = new Set<string>();
     divisionProducts.forEach(p => {
       const n = p.companyName?.trim();
       if (n) set.add(n);
     });
     return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))];
-  }, [divisionProducts]);
+  }, [apiCompanies, divisionProducts]);
 
   const categoryCountMap = useMemo(() => {
     const map: Record<string, number> = {};
@@ -236,6 +251,7 @@ const HomeScreen = () => {
 
   const companyLogoByName = useMemo(() => {
     const map: Record<string, string> = {};
+    // Seed from product data first (may have logos for fewer companies).
     divisionProducts.forEach(p => {
       const name = p.companyName?.trim();
       const url = p.companyLogoUrl?.trim();
@@ -243,8 +259,14 @@ const HomeScreen = () => {
         map[name] = url;
       }
     });
+    // Override/fill with API logos, which are authoritative and cover all companies.
+    apiCompanies.forEach(c => {
+      if (c.logoUrl && c.name) {
+        map[c.name] = c.logoUrl;
+      }
+    });
     return map;
-  }, [divisionProducts]);
+  }, [divisionProducts, apiCompanies]);
 
   const dealsForDivision = useMemo(() => {
     const color = isHomeKitchen ? '#16A34A' : '#1D4ED8';
@@ -738,6 +760,11 @@ const HomeScreen = () => {
       <Text style={[styles.paperSectionTitle, { color: primaryText }]}>
         Featured offers
       </Text>
+      {isOffersLoading ? (
+        <View style={[styles.heroCarouselLoader, { width: heroPageWidth }]}>
+          <ActivityIndicator size="large" color={primary} />
+        </View>
+      ) : (
       <FlatList
         data={heroDeals}
         keyExtractor={item => item.id}
@@ -782,6 +809,7 @@ const HomeScreen = () => {
           </View>
         )}
       />
+      )}
       <View style={styles.carouselDots}>
         {heroDeals.map((d, i) => (
           <View
@@ -798,7 +826,9 @@ const HomeScreen = () => {
       </View>
 
       {isProductsLoading ? (
-        <Text style={[styles.stateText, { color: primary }]}>Loading products...</Text>
+        <View style={styles.productsLoaderWrap}>
+          <ActivityIndicator size="large" color={primary} />
+        </View>
       ) : null}
       {isProductsError ? (
         <Text style={styles.stateErrorText}>
@@ -913,7 +943,11 @@ const HomeScreen = () => {
             </Text>
           </TouchableOpacity>
         ) : null}
-        {companyGridItems.length === 0 ? (
+        {isCompaniesLoading ? (
+          <View style={styles.sectionLoaderWrap}>
+            <ActivityIndicator size="small" color={primary} />
+          </View>
+        ) : companyGridItems.length === 0 ? (
           <Text style={styles.gridEmptyHint}>
             Companies appear when products are linked to sellers.
           </Text>
@@ -1303,6 +1337,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   heroCarouselList: { marginTop: 4, marginHorizontal: -14 },
+  heroCarouselLoader: { marginTop: 4, height: 180, alignItems: 'center', justifyContent: 'center' },
   heroSlideCard: {
     position: 'relative',
     height: 168,
@@ -1452,6 +1487,14 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 12,
     fontWeight: '700',
+  },
+  productsLoaderWrap: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  sectionLoaderWrap: {
+    alignItems: 'center',
+    paddingVertical: 20,
   },
   stateErrorText: {
     marginTop: 6,

@@ -47,11 +47,12 @@ export function packagingShortLine(p: PackFields): string | null {
   if (variant) return variant;
   const pcs = Math.max(1, p.piecesPerSet ?? 1);
   const u = (p.unit || 'piece').toLowerCase();
-  // "piece" is already atomic; showing "12 pcs / piece" is misleading.
-  if (u === 'piece') return null;
   if (pcs > 1) {
+    // For piece units say "Pack of 12"; for others say "12 pcs / pack" etc.
+    if (u === 'piece') return `Pack of ${pcs}`;
     return `${pcs} pcs / ${orderQuantityLabel(p.unit)}`;
   }
+  if (u === 'piece') return null;
   return `Per ${orderQuantityLabel(p.unit)}`;
 }
 
@@ -61,11 +62,11 @@ export function packagingDetailLine(p: PackFields): string | null {
   if (variant) return `Packaging: ${variant}`;
   const pcs = Math.max(1, p.piecesPerSet ?? 1);
   const u = (p.unit || 'piece').toLowerCase();
-  // Keep detail empty for single-piece sale units.
-  if (u === 'piece') return null;
   if (pcs > 1) {
+    if (u === 'piece') return `Pack of ${pcs} pieces`;
     return `${pcs} pieces per ${orderQuantityLabel(p.unit)}`;
   }
+  if (u === 'piece') return null;
   return `Sold per ${orderQuantityLabel(p.unit)}`;
 }
 
@@ -85,7 +86,8 @@ export function cartQuantityCaption(
   const pcs = Math.max(1, p.piecesPerSet ?? 1);
   const u = (p.unit || 'piece').toLowerCase();
   if (pcs > 1 && u !== 'piece') {
-    return `${qty} ${plural} (${qty * pcs} pcs)`;
+    const label = qty === 1 ? orderQuantityLabel(p.unit) : plural;
+    return `${qty} ${label} (${qty * pcs} pcs)`;
   }
   return `${qty} ${plural}`;
 }
@@ -97,15 +99,21 @@ export function displayTierAndQtyForLine(
   lineTier: PriceOptionKey,
 ): { tier: PriceOptionKey; qty: number } {
   const pcs = Math.max(1, catalog.piecesPerSet ?? 1);
+  const minO = Math.max(1, Math.trunc(Number(catalog.minOrderQuantity) || 1));
+  // When piecesPerSet is 1 but minOrderQuantity > 1, the effective pack size is
+  // minOrderQuantity (e.g. min 12 pieces → 1 set = 12 pcs).
+  const effectivePcs = pcs > 1 ? pcs : minO > 1 ? minO : 1;
+  const isSetProduct =
+    catalog.priceOptions?.some(o => o.key === 'set') ||
+    productImpliesSetPurchase(catalog);
   const treatAsSet =
-    (catalog.priceOptions?.some(o => o.key === 'set') ||
-      productImpliesSetPurchase(catalog)) &&
+    isSetProduct &&
     lineTier === 'unit' &&
-    pcs > 1 &&
-    lineQty >= pcs &&
-    lineQty % pcs === 0;
+    effectivePcs > 1 &&
+    lineQty >= effectivePcs &&
+    lineQty % effectivePcs === 0;
   if (treatAsSet) {
-    return { tier: 'set', qty: lineQty / pcs };
+    return { tier: 'set', qty: lineQty / effectivePcs };
   }
   return { tier: lineTier, qty: lineQty };
 }
@@ -186,7 +194,8 @@ export function stepperQuantityCaption(
     return qty === 1 ? '1 piece' : `${qty} pieces`;
   }
   if (pcs > 1 && u !== 'piece') {
-    return `${qty} ${plural}`;
+    const label = qty === 1 ? orderQuantityLabel(p.unit) : plural;
+    return `${qty} ${label}`;
   }
   return String(qty);
 }

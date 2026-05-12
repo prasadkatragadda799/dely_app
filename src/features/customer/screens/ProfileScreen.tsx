@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -298,9 +298,16 @@ const ProfileScreen = () => {
 
               <View style={{ marginTop: 18 }}>
                 <Text style={[styles.label, { marginTop: 6 }]}>KYC verification</Text>
+                {isKycLoading ? (
+                  <View style={styles.kycLoaderRow}>
+                    <ActivityIndicator size="small" color={primary} />
+                    <Text style={styles.kycStatusText}>Checking status...</Text>
+                  </View>
+                ) : (
                 <Text style={styles.kycStatusText}>
-                  {isKycLoading ? 'Checking status...' : `Status: ${kycStatus ?? 'unknown'}`}
+                  {`Status: ${kycStatus ?? 'unknown'}`}
                 </Text>
+                )}
 
                 {kycStatus !== 'verified' ? (
                   <>
@@ -512,6 +519,12 @@ const styles = StyleSheet.create({
     marginTop: 6,
     color: '#0F172A',
     fontWeight: '800',
+  },
+  kycLoaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
   },
   kycButton: {
     marginTop: 12,

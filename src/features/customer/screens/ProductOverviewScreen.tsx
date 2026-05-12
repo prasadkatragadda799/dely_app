@@ -18,7 +18,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import {
   useGetProductQuery,
   useGetProductsQuery,
@@ -517,6 +517,14 @@ const ProductOverviewScreen = () => {
     setSelectedDetailImageIndex(0);
   }, [selectedProductId]);
 
+  // Reset stepper to 1 every time the screen comes into focus so stale
+  // quantities from a previous visit don't persist after Cart → back.
+  useFocusEffect(
+    React.useCallback(() => {
+      setSelectedSets(1);
+    }, []),
+  );
+
   React.useEffect(() => {
     if (!selectedProduct) return;
     setDetailTierKey(defaultPriceTier(selectedProduct));
@@ -725,8 +733,23 @@ const ProductOverviewScreen = () => {
     }
   }, [detailImages.length, selectedDetailImageIndex]);
 
+  /**
+   * Convert the UI set-count to the raw quantity the API/cart expects.
+   * When a product is stored as 'unit' pieces but the stepper shows "sets",
+   * the user's set count must be multiplied by piecesPerSet (or minOrderQuantity
+   * when piecesPerSet is 1) before sending to the cart.
+   */
+  const toRawQty = (item: Product, sets: number, tier: PriceOptionKey): number => {
+    const uiTier = uiTierForQuantityCopy(item, tier);
+    if (tier !== 'unit' || uiTier !== 'set') return sets;
+    const pcs = Math.max(1, item.piecesPerSet ?? 1);
+    const minO = Math.max(1, Math.trunc(Number(item.minOrderQuantity) || 1));
+    const effectivePcs = pcs > 1 ? pcs : minO > 1 ? minO : 1;
+    return sets * effectivePcs;
+  };
+
   const addSelectedProductToCartWithTier = (item: Product, tier: PriceOptionKey) => {
-    add(item, selectedSets, tier);
+    add(item, toRawQty(item, selectedSets, tier), tier);
     const uiTier = uiTierForQuantityCopy(item, tier);
     const summary = cartQuantityCaption(item, selectedSets, uiTier);
     showUiAlert(
@@ -1523,7 +1546,7 @@ const ProductOverviewScreen = () => {
             const goCart = buyNowAfterAddRef.current;
             buyNowAfterAddRef.current = false;
             setDetailTierKey(tier);
-            add(selectedProduct, selectedSets, tier);
+            add(selectedProduct, toRawQty(selectedProduct, selectedSets, tier), tier);
             const uiTier = uiTierForQuantityCopy(selectedProduct, tier);
             const summary = cartQuantityCaption(
               selectedProduct,

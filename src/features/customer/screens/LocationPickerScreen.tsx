@@ -77,9 +77,7 @@ const LocationPickerScreen = () => {
         const result = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         );
-        console.log('[Location] Permission result:', result);
         if (result !== PermissionsAndroid.RESULTS.GRANTED) {
-          console.log('[Location] Permission denied, using default region');
           reverseGeocode(DEFAULT_REGION.latitude, DEFAULT_REGION.longitude);
           return;
         }
@@ -88,18 +86,14 @@ const LocationPickerScreen = () => {
       // Try high-accuracy first; fall back to network/cached location
       Geolocation.getCurrentPosition(
         pos => {
-          console.log('[Location] High-accuracy success:', pos.coords.latitude, pos.coords.longitude);
           moveToCoords(pos.coords.latitude, pos.coords.longitude);
         },
-        err => {
-          console.log('[Location] High-accuracy failed:', err.code, err.message);
+        _err => {
           Geolocation.getCurrentPosition(
             pos => {
-              console.log('[Location] Low-accuracy success:', pos.coords.latitude, pos.coords.longitude);
               moveToCoords(pos.coords.latitude, pos.coords.longitude);
             },
-            err2 => {
-              console.log('[Location] Low-accuracy also failed:', err2.code, err2.message);
+            _err2 => {
               reverseGeocode(DEFAULT_REGION.latitude, DEFAULT_REGION.longitude);
             },
             { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 },

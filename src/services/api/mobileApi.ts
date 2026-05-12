@@ -369,7 +369,7 @@ export const mobileApi = createApi({
     }),
 
     getCompanies: builder.query<ApiEnvelope<unknown>, void>({
-      query: () => '/companies',
+      query: () => '/companies?limit=100',
       providesTags: ['Companies'],
     }),
     getCompanyById: builder.query<ApiEnvelope<unknown>, IdParam>({

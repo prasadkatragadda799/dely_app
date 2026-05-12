@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -12,9 +12,15 @@ const OrderSuccessScreen = () => {
   const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
   const primaryText = isHomeKitchen ? '#14532D' : '#0B3B8F';
 
-  const orderId = route.params?.orderId ?? 'N/A';
+  const orderId = route.params?.orderId;
   const amount = route.params?.amount ?? 0;
   const provider = route.params?.provider ?? 'Online';
+
+  useEffect(() => {
+    if (!orderId) {
+      navigation.replace('Orders');
+    }
+  }, [orderId, navigation]);
 
   return (
     <View style={styles.container}>
@@ -27,7 +33,7 @@ const OrderSuccessScreen = () => {
       <View style={styles.summaryCard}>
         <View style={styles.row}>
           <Text style={styles.label}>Order ID</Text>
-          <Text style={styles.value}>{orderId}</Text>
+          <Text style={styles.value}>{orderId ?? '—'}</Text>
         </View>
         <View style={styles.row}>
           <Text style={styles.label}>Amount Paid</Text>

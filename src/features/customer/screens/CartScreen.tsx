@@ -1,5 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   StyleSheet,
@@ -17,14 +19,30 @@ import {
   cartLineQuantityCaption,
   stepperQuantityCaptionForCartLine,
 } from '../../../utils/productPackaging';
-import { priceTierLabel } from '../../../utils/productPricing';
+import { priceTierLabel, productImpliesSetPurchase } from '../../../utils/productPricing';
 import { useAppDispatch, useAppSelector } from '../../../hooks/redux';
+import { CartLineItem } from '../../../types';
 import { setHomeDivision } from '../homeDivisionSlice';
+import {
+  useCheckServiceLocationQuery,
+  useGetDeliveryLocationsQuery,
+} from '../../../services/api/mobileApi';
 
 const formatInrAmount = (value: number) => {
   const n = Number(value);
   if (!Number.isFinite(n)) return '0.00';
-  return (Math.round((n + Number.EPSILON) * 100) / 100).toFixed(2);
+  // Integer-round via paise to eliminate floating-point drift.
+  return (Math.round(n * 100) / 100).toFixed(2);
+};
+
+/** Same step logic as useCart increment/decrement — kept here for optimistic UI. */
+const cartItemStep = (item: CartLineItem): number => {
+  if (item.priceOptionKey === 'set' || item.priceOptionKey === 'remaining') return 1;
+  const pcs = Math.max(1, item.product.piecesPerSet ?? 1);
+  const minO = Math.max(1, Math.trunc(Number(item.product.minOrderQuantity) || 1));
+  if (pcs > 1) return pcs;
+  if (minO > 1 && productImpliesSetPurchase(item.product)) return minO;
+  return 1;
 };
 
 const hexToRgba = (hex: string, alpha: number) => {
@@ -41,7 +59,7 @@ const hexToRgba = (hex: string, alpha: number) => {
 const CartScreen = () => {
   const navigation = useNavigation<any>();
   const dispatch = useAppDispatch();
-  const { items, add, decrement } = useCart();
+  const { items, increment, decrement, clear } = useCart();
   const homeDivision = useAppSelector(state => state.homeDivision.division);
   const tabBarHeight = useBottomTabBarHeight();
   const insets = useSafeAreaInsets();
@@ -49,13 +67,71 @@ const CartScreen = () => {
   const isHomeKitchen = homeDivision === 'homeKitchen';
   const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
 
-  // Cart is now backed by API and already scoped to the active division.
+  const [mutatingIds, setMutatingIds] = useState<Set<string>>(new Set());
+  const [clearing, setClearing] = useState(false);
+  // Optimistic quantities: applied immediately on tap, cleared once API settles.
+  const [pendingQtys, setPendingQtys] = useState<Record<string, number>>({});
+
+  const { data: deliveryLocationsEnvelope } = useGetDeliveryLocationsQuery();
+  const deliveryLocations = (deliveryLocationsEnvelope?.data as any[]) ?? [];
+  const defaultLocation = deliveryLocations.find((l: any) => l.is_default) ?? deliveryLocations[0];
+  const defaultPincode: string = defaultLocation?.pincode ?? '';
+  const { data: locationCheckEnvelope } = useCheckServiceLocationQuery(defaultPincode, {
+    skip: !defaultPincode,
+  });
+  const locationCheckData = locationCheckEnvelope?.data;
+  const serviceUnavailable =
+    !!defaultPincode &&
+    !!locationCheckData &&
+    locationCheckData.restricted &&
+    !locationCheckData.available;
+
+  const setMutating = useCallback((cartItemId: string, on: boolean) => {
+    setMutatingIds(prev => {
+      const next = new Set(prev);
+      on ? next.add(cartItemId) : next.delete(cartItemId);
+      return next;
+    });
+  }, []);
+
+  const setPendingQty = useCallback((cartItemId: string, qty: number | null) => {
+    setPendingQtys(prev => {
+      if (qty === null) {
+        const next = { ...prev };
+        delete next[cartItemId];
+        return next;
+      }
+      return { ...prev, [cartItemId]: qty };
+    });
+  }, []);
+
+  const handleClearAll = useCallback(() => {
+    if (!items.length) return;
+    Alert.alert(
+      'Clear cart',
+      'Remove all items from this cart?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: () => {
+            setClearing(true);
+            clear().finally(() => setClearing(false));
+          },
+        },
+      ],
+    );
+  }, [clear, items.length]);
+
   const visibleItems = useMemo(() => items, [items]);
 
-  const visibleTotal = visibleItems.reduce(
-    (sum, item) => sum + item.product.price * item.quantity,
-    0,
-  );
+  // Use pending (optimistic) quantity when available; integer paise math avoids
+  // floating-point drift that accumulates when summing many line prices.
+  const visibleTotal = visibleItems.reduce((paise, item) => {
+    const qty = pendingQtys[item.cartItemId] ?? item.quantity;
+    return paise + Math.round(item.product.price * 100) * qty;
+  }, 0) / 100;
 
   return (
     <View style={styles.container}>
@@ -64,8 +140,26 @@ const CartScreen = () => {
           <Icon name="cart-outline" size={22} color="#FFFFFF" />
           <Text style={styles.headerTitle}>Cart</Text>
         </View>
-        <View style={styles.headerPill}>
-          <Text style={styles.headerPillText}>{visibleItems.length} items</Text>
+        <View style={styles.headerRight}>
+          <View style={styles.headerPill}>
+            <Text style={styles.headerPillText}>{visibleItems.length} items</Text>
+          </View>
+          {visibleItems.length > 0 && (
+            <TouchableOpacity
+              style={styles.clearAllBtn}
+              onPress={handleClearAll}
+              disabled={clearing}
+              activeOpacity={0.75}>
+              {clearing ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Icon name="trash-can-outline" size={14} color="#FFFFFF" />
+                  <Text style={styles.clearAllText}>Clear All</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -113,70 +207,98 @@ const CartScreen = () => {
           styles.listContent,
           { paddingBottom: tabBarHeight + insets.bottom + 140 },
         ]}
-        renderItem={({ item }) => (
-          <View style={styles.rowCard}>
-            <View style={styles.rowInfo}>
-              <Image source={{ uri: item.product.image }} style={styles.thumb} />
-              <View style={styles.rowInfoText}>
-                <Text style={styles.name}>{item.product.name}</Text>
-                <Text style={styles.brand}>{item.product.brand}</Text>
-                <Text style={styles.meta}>
-                  {priceTierLabel(item.priceOptionKey)} · Rs {formatInrAmount(item.product.price)} ×{' '}
-                  {cartLineQuantityCaption(
-                    item.product,
-                    item.quantity,
-                    item.priceOptionKey,
-                  )}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.rowRight}>
-              <Text style={styles.rowTotal}>
-                Rs {formatInrAmount(item.product.price * item.quantity)}
-              </Text>
-              <View
-                style={[
-                  styles.cartStepperShell,
-                  {
-                    borderColor: hexToRgba(primary, 0.35),
-                    backgroundColor: hexToRgba(primary, 0.06),
-                  },
-                ]}>
-                <View style={styles.cartStepSideCol}>
-                  <TouchableOpacity
-                    style={styles.cartStepSideHit}
-                    onPress={() => decrement(item.product.id, item.priceOptionKey)}
-                    activeOpacity={0.85}
-                    hitSlop={{ top: 6, bottom: 6, left: 8, right: 4 }}>
-                    <Icon name="minus" size={16} color={primary} />
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.cartStepQtySlot}>
-                  <Text
-                    style={styles.cartStepQty}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.72}>
-                    {stepperQuantityCaptionForCartLine(
+        renderItem={({ item }) => {
+          const isMutating = mutatingIds.has(item.cartItemId) || clearing;
+          const stepColor = isMutating ? '#CBD5E1' : primary;
+          const step = cartItemStep(item);
+          const effectiveQty = pendingQtys[item.cartItemId] ?? item.quantity;
+          return (
+            <View style={[styles.rowCard, isMutating && styles.rowCardMutating]}>
+              <View style={styles.rowInfo}>
+                <Image source={{ uri: item.product.image }} style={styles.thumb} />
+                <View style={styles.rowInfoText}>
+                  <Text style={styles.name}>{item.product.name}</Text>
+                  <Text style={styles.brand}>{item.product.brand}</Text>
+                  <Text style={styles.meta}>
+                    {priceTierLabel(item.priceOptionKey)} · Rs {formatInrAmount(item.product.price)} ×{' '}
+                    {cartLineQuantityCaption(
                       item.product,
-                      item.quantity,
+                      effectiveQty,
                       item.priceOptionKey,
                     )}
                   </Text>
                 </View>
-                <View style={styles.cartStepSideCol}>
-                  <TouchableOpacity
-                    style={styles.cartStepSideHit}
-                    onPress={() => add(item.product, 1, item.priceOptionKey)}
-                    activeOpacity={0.85}
-                    hitSlop={{ top: 6, bottom: 6, left: 4, right: 8 }}>
-                    <Text style={[styles.cartStepPlusGlyph, { color: primary }]}>+</Text>
-                  </TouchableOpacity>
+              </View>
+              <View style={styles.rowRight}>
+                <Text style={styles.rowTotal}>
+                  Rs {formatInrAmount(Math.round(item.product.price * 100) * effectiveQty / 100)}
+                </Text>
+                <View
+                  style={[
+                    styles.cartStepperShell,
+                    {
+                      borderColor: hexToRgba(isMutating ? '#94A3B8' : primary, 0.35),
+                      backgroundColor: hexToRgba(isMutating ? '#94A3B8' : primary, 0.06),
+                    },
+                  ]}>
+                  <View style={styles.cartStepSideCol}>
+                    <TouchableOpacity
+                      style={styles.cartStepSideHit}
+                      disabled={isMutating}
+                      onPress={() => {
+                        const nextQty = Math.max(0, effectiveQty - step);
+                        setPendingQty(item.cartItemId, nextQty);
+                        setMutating(item.cartItemId, true);
+                        decrement(item.product.id, item.priceOptionKey)
+                          .finally(() => {
+                            setMutating(item.cartItemId, false);
+                            setPendingQty(item.cartItemId, null);
+                          });
+                      }}
+                      activeOpacity={0.85}
+                      hitSlop={{ top: 6, bottom: 6, left: 8, right: 4 }}>
+                      <Icon name="minus" size={16} color={stepColor} />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.cartStepQtySlot}>
+                    <Text
+                      style={styles.cartStepQty}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.72}>
+                      {stepperQuantityCaptionForCartLine(
+                        item.product,
+                        effectiveQty,
+                        item.priceOptionKey,
+                      )}
+                    </Text>
+                  </View>
+                  <View style={styles.cartStepSideCol}>
+                    <TouchableOpacity
+                      style={styles.cartStepSideHit}
+                      disabled={isMutating}
+                      onPress={() => {
+                        const stock = item.product.stockQuantity;
+                        const maxQty = stock !== undefined && stock > 0 ? stock : 99;
+                        const nextQty = Math.min(effectiveQty + step, maxQty);
+                        setPendingQty(item.cartItemId, nextQty);
+                        setMutating(item.cartItemId, true);
+                        increment(item.product.id, item.priceOptionKey)
+                          .finally(() => {
+                            setMutating(item.cartItemId, false);
+                            setPendingQty(item.cartItemId, null);
+                          });
+                      }}
+                      activeOpacity={0.85}
+                      hitSlop={{ top: 6, bottom: 6, left: 4, right: 8 }}>
+                      <Text style={[styles.cartStepPlusGlyph, { color: stepColor }]}>+</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             </View>
-          </View>
-        )}
+          );
+        }}
         ListEmptyComponent={
           <View style={styles.emptyWrap}>
             <Icon name="cart-off" size={34} color={primary} />
@@ -201,20 +323,31 @@ const CartScreen = () => {
           <Text style={styles.total}>Total</Text>
           <Text style={styles.total}>Rs {formatInrAmount(visibleTotal)}</Text>
         </View>
-        <TouchableOpacity
-          style={[styles.checkout, { backgroundColor: primary }]}
-          onPress={() => {
-            if (!visibleItems.length) {
-              Toast.show({ type: 'error', text1: 'Cart is empty for this division' });
-              return;
-            }
-            navigation.navigate('Checkout');
-          }}>
-          <View style={styles.checkoutRow}>
-            <Icon name="lock-check-outline" size={18} color="#FFFFFF" />
-            <Text style={styles.checkoutText}>Proceed to Checkout</Text>
+        {serviceUnavailable ? (
+          <View style={[styles.checkout, styles.checkoutUnavailable]}>
+            <View style={styles.checkoutRow}>
+              <Icon name="map-marker-off-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.checkoutText}>
+                We don&apos;t deliver to {defaultPincode} yet
+              </Text>
+            </View>
           </View>
-        </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.checkout, { backgroundColor: primary }]}
+            onPress={() => {
+              if (!visibleItems.length) {
+                Toast.show({ type: 'error', text1: 'Cart is empty for this division' });
+                return;
+              }
+              navigation.navigate('Checkout');
+            }}>
+            <View style={styles.checkoutRow}>
+              <Icon name="lock-check-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.checkoutText}>Proceed to Checkout</Text>
+            </View>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -231,6 +364,7 @@ const styles = StyleSheet.create({
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerTitle: { color: '#FFFFFF', fontWeight: '900', fontSize: 20 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerPill: {
     backgroundColor: 'rgba(255,255,255,0.16)',
     borderRadius: 999,
@@ -238,6 +372,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   headerPillText: { color: '#FFFFFF', fontWeight: '900' },
+  clearAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minWidth: 36,
+    justifyContent: 'center',
+  },
+  clearAllText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
   segmentWrap: {
     flexDirection: 'row',
     marginHorizontal: 14,
@@ -277,6 +423,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+  rowCardMutating: { opacity: 0.65 },
   rowInfo: { flex: 1, paddingRight: 8, flexDirection: 'row', gap: 10, alignItems: 'center' },
   rowInfoText: { flex: 1 },
   thumb: {
@@ -357,6 +504,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#1D4ED8',
     borderRadius: 14,
     paddingVertical: 14,
+  },
+  checkoutUnavailable: {
+    backgroundColor: '#94A3B8',
   },
   checkoutRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
   checkoutText: { color: '#FFFFFF', fontWeight: '900' },
