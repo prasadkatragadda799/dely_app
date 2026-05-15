@@ -43,8 +43,6 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 
 type RegisterForm = {
   name: string;
-  email: string;
-  password: string;
   phone: string;
   addressLine1: string;
   addressLine2?: string;
@@ -54,11 +52,7 @@ type RegisterForm = {
   businessName: string;
   gstNumber: string;
   fmcgNumber: string;
-  shopImageUri?: string;
-  gstCertificateUri?: string;
-  fssaiLicenseUri?: string;
-  udyamRegistrationUri?: string;
-  tradeCertificateUri?: string;
+  shopKycUri?: string;
   requestId?: string;
 };
 
@@ -76,8 +70,6 @@ const RegisterScreen = ({ navigation }: Props) => {
   const { control, handleSubmit, setValue, getValues } = useForm<RegisterForm>({
     defaultValues: {
       name: '',
-      email: '',
-      password: '',
       phone: '',
       addressLine1: '',
       addressLine2: undefined,
@@ -87,11 +79,7 @@ const RegisterScreen = ({ navigation }: Props) => {
       businessName: '',
       gstNumber: '',
       fmcgNumber: '',
-      shopImageUri: undefined,
-      gstCertificateUri: undefined,
-      fssaiLicenseUri: undefined,
-      udyamRegistrationUri: undefined,
-      tradeCertificateUri: undefined,
+      shopKycUri: undefined,
       requestId: undefined,
     },
   });
@@ -131,11 +119,7 @@ const RegisterScreen = ({ navigation }: Props) => {
     }
   };
 
-  const [shopImageUri, setShopImageUri] = useState<string | undefined>(undefined);
-  const [gstCertificateUri, setGstCertificateUri] = useState<string | undefined>(undefined);
-  const [fssaiLicenseUri, setFssaiLicenseUri] = useState<string | undefined>(undefined);
-  const [udyamRegistrationUri, setUdyamRegistrationUri] = useState<string | undefined>(undefined);
-  const [tradeCertificateUri, setTradeCertificateUri] = useState<string | undefined>(undefined);
+  const [shopKycUri, setShopKycUri] = useState<string | undefined>(undefined);
 
   const pickImage = (setter: (uri?: string) => void) => {
     launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 }, resp => {
@@ -157,33 +141,30 @@ const RegisterScreen = ({ navigation }: Props) => {
       return;
     }
     if (selectedRole === 'customer') {
-      const hasAtLeastOneDoc = gstCertificateUri || fssaiLicenseUri || udyamRegistrationUri || tradeCertificateUri || shopImageUri;
-      if (!form.addressLine1.trim() || !form.city.trim() || !form.state.trim() || !form.pincode.trim() || !form.businessName.trim() || !form.gstNumber.trim() || !form.fmcgNumber.trim() || !hasAtLeastOneDoc) {
+      if (!form.addressLine1.trim() || !form.city.trim() || !form.state.trim() || !form.pincode.trim() || !form.businessName.trim() || !form.gstNumber.trim() || !form.fmcgNumber.trim() || !shopKycUri) {
         await appAlert({
           title: 'Complete your profile',
-          message: 'Address, business name, GST number, and FMCG (FSSAI) number are required. Please upload at least one document.',
+          message: 'Address, business name, GST number, FMCG (FSSAI) number, and Shop KYC document are required.',
         });
         return;
       }
     }
-    const enrichedForm: RegisterForm = { ...form, shopImageUri, gstCertificateUri, fssaiLicenseUri, udyamRegistrationUri, tradeCertificateUri };
+    const enrichedForm: RegisterForm = { ...form, shopKycUri };
     try {
       setRegistering(true);
       const businessProfile = selectedRole === 'customer' ? {
         businessName: form.businessName,
         gstNumber: form.gstNumber,
-        gstCertificate: gstCertificateUri,
-        fssaiLicense: fssaiLicenseUri,
-        udyamRegistration: udyamRegistrationUri,
-        tradeCertificate: tradeCertificateUri,
+        shopKycDocument: shopKycUri,
         fmcgNumber: form.fmcgNumber,
-        shopImageUri,
       } : null;
+      const autoEmail = `${form.phone.replace(/\D/g, '')}@vendor.delycart.in`;
+      const autoPassword = `DC_${form.phone.replace(/\D/g, '')}_vendor`;
       const next = await registerWithRole({
         name: form.name,
-        email: form.email,
+        email: autoEmail,
         phone: form.phone,
-        password: form.password,
+        password: autoPassword,
         role: selectedRole,
         businessProfile,
         address: form.addressLine1 || form.addressLine2 ? { address_line1: form.addressLine1, address_line2: form.addressLine2 } : undefined,
@@ -250,21 +231,6 @@ const RegisterScreen = ({ navigation }: Props) => {
     </View>
   );
 
-  const DocUploadCard = ({
-    icon, label, uri, onPress,
-  }: { icon: string; label: string; uri?: string; onPress: () => void }) => (
-    <TouchableOpacity style={styles.docCard} onPress={onPress} activeOpacity={0.8}>
-      {uri ? (
-        <Image source={{ uri }} style={styles.docPreview} />
-      ) : (
-        <View style={styles.docIconWrap}>
-          <Icon name={icon} size={26} color="#1D4ED8" />
-        </View>
-      )}
-      <Text style={styles.docLabel}>{label}</Text>
-      <Text style={styles.docHint}>{uri ? 'Tap to change' : 'Tap to upload'}</Text>
-    </TouchableOpacity>
-  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -292,20 +258,6 @@ const RegisterScreen = ({ navigation }: Props) => {
             <Controller control={control} name="name" render={({ field: { onChange, value } }) => (
               <InputBox icon="account-outline">
                 <TextInput style={styles.input} placeholder="Enter your full name" placeholderTextColor="#CBD5E1" value={value} onChangeText={onChange} autoCapitalize="words" />
-              </InputBox>
-            )} />
-
-            <FieldLabel label="Email address" />
-            <Controller control={control} name="email" render={({ field: { onChange, value } }) => (
-              <InputBox icon="email-outline">
-                <TextInput style={styles.input} placeholder="you@example.com" placeholderTextColor="#CBD5E1" value={value} onChangeText={onChange} keyboardType="email-address" autoCapitalize="none" />
-              </InputBox>
-            )} />
-
-            <FieldLabel label="Password" />
-            <Controller control={control} name="password" render={({ field: { onChange, value } }) => (
-              <InputBox icon="lock-outline">
-                <TextInput style={styles.input} placeholder="Create a password" placeholderTextColor="#CBD5E1" value={value} onChangeText={onChange} secureTextEntry />
               </InputBox>
             )} />
 
@@ -457,19 +409,31 @@ const RegisterScreen = ({ navigation }: Props) => {
             </SectionCard>
           ) : null}
 
-          {/* ── Section 4: Documents (only for customer) ── */}
+          {/* ── Section 4: Shop KYC Document (only for customer) ── */}
           {selectedRole === 'customer' ? (
-            <SectionCard icon="file-document-outline" title="Certificates & Documents">
+            <SectionCard icon="file-document-outline" title="Shop KYC Document">
               <Text style={styles.docSectionHint}>
-                Upload at least one document — a clear photo of the certificate is fine.
+                Upload a single clear photo showing your shop KYC (e.g. GST certificate, FSSAI license, or any valid business document).
               </Text>
-              <View style={styles.docGrid}>
-                <DocUploadCard icon="file-certificate-outline" label="GST Certificate" uri={gstCertificateUri} onPress={() => pickImage(setGstCertificateUri)} />
-                <DocUploadCard icon="file-document-outline" label="FSSAI License" uri={fssaiLicenseUri} onPress={() => pickImage(setFssaiLicenseUri)} />
-                <DocUploadCard icon="office-building-outline" label="Udyam Reg." uri={udyamRegistrationUri} onPress={() => pickImage(setUdyamRegistrationUri)} />
-                <DocUploadCard icon="file-check-outline" label="Trade Certificate" uri={tradeCertificateUri} onPress={() => pickImage(setTradeCertificateUri)} />
-                <DocUploadCard icon="storefront-outline" label="Shop Photo" uri={shopImageUri} onPress={() => pickImage(setShopImageUri)} />
-              </View>
+              <TouchableOpacity style={styles.kycUploadCard} onPress={() => pickImage(setShopKycUri)} activeOpacity={0.8}>
+                {shopKycUri ? (
+                  <Image source={{ uri: shopKycUri }} style={styles.kycPreview} resizeMode="cover" />
+                ) : (
+                  <View style={styles.kycEmptyContent}>
+                    <View style={styles.kycIconWrap}>
+                      <Icon name="store-outline" size={36} color="#1D4ED8" />
+                    </View>
+                    <Text style={styles.kycUploadLabel}>Tap to upload Shop KYC</Text>
+                    <Text style={styles.kycUploadHint}>GST certificate / FSSAI license / Business doc</Text>
+                  </View>
+                )}
+                {shopKycUri ? (
+                  <View style={styles.kycChangeRow}>
+                    <Icon name="camera-retake-outline" size={14} color="#1D4ED8" />
+                    <Text style={styles.kycChangeText}>Tap to change photo</Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
             </SectionCard>
           ) : null}
 
@@ -692,26 +656,36 @@ const styles = StyleSheet.create({
     fontSize: 12, color: '#64748B', fontWeight: '500',
     marginBottom: 14, lineHeight: 18,
   },
-  docGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  docCard: {
-    width: '47%',
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: '#E2E8F0',
+
+  // Single Shop KYC upload card
+  kycUploadCard: {
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#BFDBFE',
     borderStyle: 'dashed',
-    backgroundColor: '#F8FAFC',
-    padding: 14,
+    backgroundColor: '#F0F7FF',
+    overflow: 'hidden',
+    minHeight: 160,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  docIconWrap: {
-    width: 52, height: 52, borderRadius: 12,
+  kycPreview: { width: '100%', height: 200 },
+  kycEmptyContent: { alignItems: 'center', paddingVertical: 28, paddingHorizontal: 20 },
+  kycIconWrap: {
+    width: 72, height: 72, borderRadius: 18,
     backgroundColor: '#EFF6FF',
     alignItems: 'center', justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 14,
+    borderWidth: 1.5, borderColor: '#BFDBFE',
   },
-  docPreview: { width: '100%', height: 72, borderRadius: 10, marginBottom: 8 },
-  docLabel: { fontSize: 12, fontWeight: '700', color: '#334155', textAlign: 'center' },
-  docHint: { fontSize: 10, color: '#94A3B8', fontWeight: '500', marginTop: 3, textAlign: 'center' },
+  kycUploadLabel: { fontSize: 15, fontWeight: '800', color: '#1D4ED8', textAlign: 'center', marginBottom: 6 },
+  kycUploadHint: { fontSize: 12, color: '#64748B', fontWeight: '500', textAlign: 'center', lineHeight: 18 },
+  kycChangeRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingVertical: 10, backgroundColor: 'rgba(255,255,255,0.85)',
+    justifyContent: 'center', width: '100%',
+  },
+  kycChangeText: { fontSize: 12, fontWeight: '700', color: '#1D4ED8' },
 
   // Footer card
   footerCard: {

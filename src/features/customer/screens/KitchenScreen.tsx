@@ -15,12 +15,11 @@ import { useCart } from '../../../hooks/useCart';
 
 const KitchenScreen = () => {
   const navigation = useNavigation<any>();
-  const { data: products = [] } = useGetProductsQuery();
+  const { data: kitchenProds = [] } = useGetProductsQuery({ category: 'kitchen' });
+  const { data: homeProds = [] } = useGetProductsQuery({ category: 'home' });
   const { add } = useCart();
 
-  const homeKitchenProducts = products.filter(
-    item => item.category === 'home' || item.category === 'kitchen',
-  );
+  const homeKitchenProducts = [...kitchenProds, ...homeProds];
 
   const onGoFmcg = () => navigation.navigate('FMCG');
   const onGoHomeKitchen = () => navigation.navigate('HomeKitchen');

@@ -79,7 +79,12 @@ const HomeScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const dispatch = useAppDispatch();
-  const { data: allProducts = [], isLoading: isProductsLoading, isError: isProductsError } = useGetProductsQuery();
+  const { data: fmcgProds = [], isLoading: isFmcgLoading, isError: isFmcgError } = useGetProductsQuery({ category: 'fmcg' });
+  const { data: kitchenProds = [], isLoading: isKitchenLoading } = useGetProductsQuery({ category: 'kitchen' });
+  const { data: homeProds = [], isLoading: isHomeLoading } = useGetProductsQuery({ category: 'home' });
+  const allProducts = useMemo(() => [...fmcgProds, ...kitchenProds, ...homeProds], [fmcgProds, kitchenProds, homeProds]);
+  const isProductsLoading = isFmcgLoading || isKitchenLoading || isHomeLoading;
+  const isProductsError = isFmcgError;
   const { data: offers = [] } = useGetOffersQuery();
   const { data: companiesEnvelope } = useGetCompaniesQuery();
   const isScreenLoading = isProductsLoading;
@@ -211,19 +216,6 @@ const HomeScreen = () => {
       .sort((a: any, b: any) => a.name.localeCompare(b.name));
   }, [companiesEnvelope]);
 
-  const companies = useMemo(() => {
-    if (apiCompanies.length > 0) {
-      return ['All', ...apiCompanies.map(c => c.name)];
-    }
-    // Fallback: derive from loaded products if API hasn't resolved yet.
-    const set = new Set<string>();
-    divisionProducts.forEach(p => {
-      const n = p.companyName?.trim();
-      if (n) set.add(n);
-    });
-    return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))];
-  }, [apiCompanies, divisionProducts]);
-
   const categoryCountMap = useMemo(() => {
     const map: Record<string, number> = {};
     divisionProducts.forEach(p => {
@@ -242,6 +234,22 @@ const HomeScreen = () => {
     });
     return map;
   }, [divisionProducts]);
+
+  const companies = useMemo(() => {
+    // Only show companies that have products in the active division
+    const divisionNames = new Set(Object.keys(companyCountMap));
+    const filtered = apiCompanies.filter(c => divisionNames.has(c.name));
+    if (filtered.length > 0) {
+      return ['All', ...filtered.map(c => c.name)];
+    }
+    // Fallback: derive from loaded products (already division-filtered)
+    const set = new Set<string>();
+    divisionProducts.forEach(p => {
+      const n = p.companyName?.trim();
+      if (n) set.add(n);
+    });
+    return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+  }, [apiCompanies, divisionProducts, companyCountMap]);
 
   const companyLogoByName = useMemo(() => {
     const map: Record<string, string> = {};

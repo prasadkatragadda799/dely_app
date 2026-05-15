@@ -272,7 +272,24 @@ const CategoryBrowseScreen = () => {
   const parentNodeId: string | undefined =
     typeof p?.parentNodeId === 'string' ? p.parentNodeId : undefined;
 
-  const { data: allProducts = [], isLoading: isProductsLoading } = useGetProductsQuery();
+  const { data: fmcgProducts = [], isLoading: isFmcgLoading } = useGetProductsQuery(
+    { category: 'fmcg' },
+    { skip: division !== 'fmcg' },
+  );
+  const { data: kitchenProducts = [], isLoading: isKitchenLoading } = useGetProductsQuery(
+    { category: 'kitchen' },
+    { skip: division !== 'homeKitchen' },
+  );
+  const { data: homeProducts = [], isLoading: isHomeLoading } = useGetProductsQuery(
+    { category: 'home' },
+    { skip: division !== 'homeKitchen' },
+  );
+
+  const allProducts = division === 'fmcg'
+    ? fmcgProducts
+    : [...kitchenProducts, ...homeProducts];
+  const isProductsLoading = division === 'fmcg' ? isFmcgLoading : (isKitchenLoading || isHomeLoading);
+
   const { data: categoryTreeRoots = [], isLoading: isCategoryLoading } = useGetCategoryTreeQuery(division, {
     skip: browseMode !== 'categories',
   });
@@ -312,13 +329,7 @@ const CategoryBrowseScreen = () => {
   const primaryText = isHomeKitchen ? '#14532D' : '#0B3B8F';
   const discountGreen = '#16A34A';
 
-  const divisionProducts = useMemo(() => {
-    return division === 'homeKitchen'
-      ? allProducts.filter(
-          p => p.category === 'home' || p.category === 'kitchen',
-        )
-      : allProducts.filter(p => p.category === 'fmcg');
-  }, [division, allProducts]);
+  const divisionProducts = allProducts;
 
   const brandCountMap = useMemo(() => {
     const map: Record<string, number> = {};
