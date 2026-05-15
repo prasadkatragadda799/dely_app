@@ -62,8 +62,8 @@ react {
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
 def enableProguardInReleaseBuilds = true
-def appVersionCode = (project.findProperty("APP_VERSION_CODE") ?: "1").toInteger()
-def appVersionName = (project.findProperty("APP_VERSION_NAME") ?: "1.0.0").toString()
+def appVersionCode = (project.findProperty("APP_VERSION_CODE") ?: "2").toInteger()
+def appVersionName = (project.findProperty("APP_VERSION_NAME") ?: "1.1.0").toString()
 def hasUploadSigning = project.hasProperty('MYAPP_UPLOAD_STORE_FILE') &&
         project.hasProperty('MYAPP_UPLOAD_STORE_PASSWORD') &&
         project.hasProperty('MYAPP_UPLOAD_KEY_ALIAS') &&

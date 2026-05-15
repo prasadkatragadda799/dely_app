@@ -1182,6 +1182,8 @@ const HomeScreen = () => {
         keyExtractor={item => item.id}
         numColumns={2}
         scrollEnabled={false}
+        style={styles.productsGrid}
+        columnWrapperStyle={styles.productsGridRow}
         renderItem={({ item }) => (
           <ProductCard
             product={item}
@@ -1541,6 +1543,8 @@ const styles = StyleSheet.create({
     color: '#B45309',
     lineHeight: 15,
   },
+  productsGrid: { marginHorizontal: 4 },
+  productsGridRow: { justifyContent: 'space-between' },
 });
 
 export default HomeScreen;
