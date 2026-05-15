@@ -651,6 +651,9 @@ export const mobileApi = createApi({
       query: body => ({ url: '/kyc/verify-gst', method: 'POST', body }),
       invalidatesTags: ['Kyc'],
     }),
+    uploadKycImage: builder.mutation<ApiEnvelope<{ url: string }>, FormData>({
+      query: body => ({ url: '/kyc/upload-image', method: 'POST', body }),
+    }),
     submitKyc: builder.mutation<ApiEnvelope<unknown>, KycSubmitBody>({
       query: body => ({ url: '/kyc/submit', method: 'POST', body }),
       invalidatesTags: ['Kyc'],
@@ -892,6 +895,7 @@ export const {
   useReadNotificationMutation,
   useDeleteNotificationMutation,
   useVerifyGstMutation,
+  useUploadKycImageMutation,
   useSubmitKycMutation,
   useSkipKycMutation,
   useGetKycStatusQuery,

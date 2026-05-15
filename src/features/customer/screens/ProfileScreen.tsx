@@ -11,6 +11,7 @@ import {
   useGetKycStatusQuery,
   useSkipKycMutation,
   useSubmitKycMutation,
+  useUploadKycImageMutation,
 } from '../../../services/api/mobileApi';
 import type { BusinessProfile } from '../businessProfileSlice';
 import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
@@ -57,6 +58,7 @@ const ProfileScreen = () => {
     isLoading: isKycLoading,
     refetch: refetchKyc,
   } = useGetKycStatusQuery(undefined, { skip: !user });
+  const [uploadKycImageApi] = useUploadKycImageMutation();
   const [submitKycApi, { isLoading: isSubmittingKyc }] = useSubmitKycMutation();
   const [skipKycApi, { isLoading: isSkippingKyc }] = useSkipKycMutation();
 
@@ -92,13 +94,25 @@ const ProfileScreen = () => {
       return;
     }
 
+    const uploadIfLocal = async (uri?: string): Promise<string | undefined> => {
+      if (!uri || !uri.startsWith('file://')) return uri;
+      const ext = uri.split('.').pop() ?? 'jpg';
+      const form = new FormData();
+      form.append('file', { uri, name: `kyc.${ext}`, type: `image/${ext}` } as any);
+      const res = await uploadKycImageApi(form).unwrap();
+      return (res as any)?.data?.url ?? uri;
+    };
+
     try {
+      const shopUrl = await uploadIfLocal(business.shopImageUri ?? undefined);
+      const fssaiUrl = await uploadIfLocal(business.fssaiLicense ?? undefined);
+
       await submitKycApi({
         business_name: business.businessName,
         gst_number: business.gstNumber,
         fssai_number: fssaiDigits,
-        shop_image_url: business.shopImageUri ?? undefined,
-        fssai_license_image_url: business.fssaiLicense ?? undefined,
+        shop_image_url: shopUrl,
+        fssai_license_image_url: fssaiUrl,
       }).unwrap();
 
       await refetchKyc();
