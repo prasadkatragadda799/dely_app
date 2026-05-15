@@ -747,6 +747,10 @@ export const mobileApi = createApi({
       providesTags: ['Delivery'],
     }),
 
+    getPaymentQr: builder.query<ApiEnvelope<{ paymentQrUrl: string | null }>, void>({
+      query: () => '/delivery/payment-qr',
+    }),
+
     getDeliveryAssignedOrders: builder.query<
       ApiEnvelope<DeliveryAssignedOrdersResponse>,
       void
@@ -909,6 +913,7 @@ export const {
   useUpdateDeliveryMeMutation,
   useToggleDeliveryAvailabilityMutation,
   useGetDeliveryDashboardSummaryQuery,
+  useGetPaymentQrQuery,
   useGetDeliveryAssignedOrdersQuery,
   useUpdateDeliveryOrderStatusMutation,
   useRevertDeliveryOrderToHubMutation,

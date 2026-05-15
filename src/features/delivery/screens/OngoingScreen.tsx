@@ -2,9 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   Linking,
+  Modal,
   PermissionsAndroid,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -22,6 +25,7 @@ import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
 import { Order } from '../../../types';
 import {
   useGetDirectionsRouteQuery,
+  useGetPaymentQrQuery,
   useLazyGeocodeAddressQuery,
   useUpdateDeliveryCurrentLocationMutation,
 } from '../../../services/api/mobileApi';
@@ -45,6 +49,10 @@ const OngoingScreen = () => {
   const { confirm } = useAppAlert();
   const { ongoing, setStatus, revertToHub, refetchOrders } = useOrders();
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
+  const [paymentOrder, setPaymentOrder] = useState<Order | null>(null);
+  const [paymentMode, setPaymentMode] = useState<'cash' | 'qr'>('cash');
+
+  const { data: paymentQrData } = useGetPaymentQrQuery();
 
   // Active = the order whose map/route is being shown. Default to the first
   // ongoing order, but allow the courier to pick a different one when they
@@ -207,23 +215,16 @@ const OngoingScreen = () => {
     }
   };
 
-  const handleMarkDelivered = async (order: Order) => {
+  const handleMarkDelivered = (order: Order) => {
     if (actionLoadingId) return;
-    const orderShortId = (order.orderNumber ?? order.id).toString().slice(-8).toUpperCase();
-    const collected = await confirm({
-      title: 'Collect Payment',
-      message: `Collect ₹${order.amount.toLocaleString('en-IN')} cash from ${order.customerName} before delivering.\n\nHave you collected the payment?`,
-      confirmLabel: 'Yes, Collected',
-      cancelLabel: 'Cancel',
-    });
-    if (!collected) return;
-    const ok = await confirm({
-      title: 'Mark as Delivered',
-      message: `Confirm delivery for Order #${orderShortId}? This cannot be undone.`,
-      confirmLabel: 'Yes, Delivered',
-      cancelLabel: 'Cancel',
-    });
-    if (!ok) return;
+    setPaymentMode('cash');
+    setPaymentOrder(order);
+  };
+
+  const confirmDelivery = async () => {
+    if (!paymentOrder) return;
+    const order = paymentOrder;
+    setPaymentOrder(null);
     setActionLoadingId(order.id);
     try {
       await setStatus(order.id, 'delivered');
@@ -483,6 +484,97 @@ const OngoingScreen = () => {
           showsVerticalScrollIndicator={false}
         />
       </View>
+
+      {/* Payment Collection Modal */}
+      <Modal
+        visible={!!paymentOrder}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPaymentOrder(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Collect Payment</Text>
+                <Text style={styles.modalSubtitle}>
+                  ₹{paymentOrder?.amount.toLocaleString('en-IN')} from {paymentOrder?.customerName}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setPaymentOrder(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Icon name="close" size={22} color="#374151" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Mode tabs */}
+            <View style={styles.modeTabs}>
+              <TouchableOpacity
+                style={[styles.modeTab, paymentMode === 'cash' && styles.modeTabActive]}
+                onPress={() => setPaymentMode('cash')}
+                activeOpacity={0.85}>
+                <Icon name="cash" size={18} color={paymentMode === 'cash' ? GREEN : '#6B7280'} />
+                <Text style={[styles.modeTabText, paymentMode === 'cash' && styles.modeTabTextActive]}>
+                  Cash
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modeTab, paymentMode === 'qr' && styles.modeTabActive]}
+                onPress={() => setPaymentMode('qr')}
+                activeOpacity={0.85}>
+                <Icon name="qrcode-scan" size={18} color={paymentMode === 'qr' ? GREEN : '#6B7280'} />
+                <Text style={[styles.modeTabText, paymentMode === 'qr' && styles.modeTabTextActive]}>
+                  QR / UPI
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Mode content */}
+            <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 8 }}>
+              {paymentMode === 'cash' ? (
+                <View style={styles.cashBox}>
+                  <Icon name="cash-multiple" size={40} color={GREEN} />
+                  <Text style={styles.cashAmount}>
+                    ₹{paymentOrder?.amount.toLocaleString('en-IN')}
+                  </Text>
+                  <Text style={styles.cashHint}>
+                    Collect exact cash from the customer before confirming delivery.
+                  </Text>
+                </View>
+              ) : paymentQrData?.data?.paymentQrUrl ? (
+                <View style={styles.qrBox}>
+                  <Text style={styles.qrHint}>Show this QR to the customer to scan & pay</Text>
+                  <Image
+                    source={{ uri: paymentQrData.data.paymentQrUrl }}
+                    style={styles.qrImage}
+                    resizeMode="contain"
+                  />
+                  <Text style={styles.qrAmount}>₹{paymentOrder?.amount.toLocaleString('en-IN')}</Text>
+                </View>
+              ) : (
+                <View style={styles.cashBox}>
+                  <Icon name="qrcode-remove" size={40} color="#9CA3AF" />
+                  <Text style={styles.cashHint}>
+                    No QR code configured yet.{'\n'}Ask your admin to upload one in Settings.
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Confirm button */}
+            <TouchableOpacity
+              style={styles.confirmBtn}
+              onPress={confirmDelivery}
+              activeOpacity={0.88}>
+              <Icon name="check-circle-outline" size={20} color={WHITE} />
+              <Text style={styles.confirmBtnText}>
+                {paymentMode === 'cash' ? 'Cash Collected — Mark Delivered' : 'Payment Done — Mark Delivered'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -707,6 +799,132 @@ const styles = StyleSheet.create({
     borderColor: WHITE,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  // Payment modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: WHITE,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 32,
+    paddingTop: 12,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#D1D5DB',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 18,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  modeTabs: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 18,
+  },
+  modeTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
+  },
+  modeTabActive: {
+    borderColor: GREEN,
+    backgroundColor: '#F0FDF4',
+  },
+  modeTabText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#6B7280',
+  },
+  modeTabTextActive: {
+    color: GREEN,
+  },
+  modalBody: {
+    maxHeight: 320,
+  },
+  cashBox: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    gap: 10,
+  },
+  cashAmount: {
+    fontSize: 36,
+    fontWeight: '900',
+    color: DARK_GREEN,
+    letterSpacing: -1,
+  },
+  cashHint: {
+    fontSize: 13,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  qrBox: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    gap: 10,
+  },
+  qrHint: {
+    fontSize: 13,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  qrImage: {
+    width: 220,
+    height: 220,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  qrAmount: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: DARK_GREEN,
+  },
+  confirmBtn: {
+    marginTop: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: GREEN,
+    borderRadius: 14,
+    paddingVertical: 14,
+  },
+  confirmBtnText: {
+    color: WHITE,
+    fontWeight: '800',
+    fontSize: 15,
   },
 });
 

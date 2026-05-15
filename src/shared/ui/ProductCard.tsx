@@ -30,7 +30,7 @@ const hexToRgba = (hex: string, alpha: number) => {
 
 type Props = {
   product: Product;
-  onAdd: (product: Product, tier: PriceOptionKey) => void;
+  onAdd: (product: Product, tier: PriceOptionKey) => Promise<void> | void;
   accentColor?: string;
   onCardPress?: (product: Product) => void;
   onNamePress?: (product: Product) => void;
@@ -46,6 +46,8 @@ const ProductCard = ({
   const { items, increment, decrement } = useCart();
   const [mutating, setMutating] = useState(false);
   const [imageError, setImageError] = useState(false);
+  // Optimistic local quantity: updated immediately on tap, reset when server responds.
+  const [localQty, setLocalQty] = useState<number | null>(null);
   const { isWishlisted, toggle } = useWishlist();
   const isFavorite = isWishlisted(product.id);
   const favBg = useMemo(() => hexToRgba(accentColor, 0.35), [accentColor]);
@@ -91,6 +93,16 @@ const ProductCard = ({
   }, [items, product, tierKey]);
 
   const rawLineQty = cartLineForCard?.quantity ?? 0;
+
+  // When the server cart updates, clear local optimistic override.
+  useEffect(() => {
+    setLocalQty(null);
+    setMutating(false);
+  }, [rawLineQty]);
+
+  // Optimistic display quantity: local override while API is in flight.
+  const displayQty = localQty !== null ? localQty : rawLineQty;
+
   const totalQtyAllTiers = useMemo(
     () =>
       items
@@ -244,20 +256,40 @@ const ProductCard = ({
         </View>
       ) : null}
       <View style={styles.actionRow}>
-        {rawLineQty <= 0 ? (
+        {displayQty <= 0 ? (
           <TouchableOpacity
-            style={[styles.addButton, { backgroundColor: accentColor }]}
+            style={[styles.addButton, { backgroundColor: mutating ? hexToRgba(accentColor, 0.6) : accentColor }]}
+            disabled={mutating}
             onPress={e => {
               e.stopPropagation?.();
+              if (mutating) return;
               if (multiTier && totalQtyAllTiers === 0) {
                 setTierModalVisible(true);
               } else {
-                onAdd(product, tierKey);
+                // Optimistic: compute the same safeQuantity logic as useCart.add
+                const minOrder = Math.max(1, Math.trunc(Number(product.minOrderQuantity) || 1));
+                const pcs = Math.max(1, product.piecesPerSet ?? 1);
+                const minLineQty =
+                  tierKey === 'set'
+                    ? Math.max(1, Math.ceil(minOrder / pcs))
+                    : tierKey === 'remaining'
+                      ? 1
+                      : minOrder;
+                setLocalQty(minLineQty);
+                setMutating(true);
+                Promise.resolve(onAdd(product, tierKey)).catch(() => {
+                  setLocalQty(null);
+                  setMutating(false);
+                });
               }
             }}
             activeOpacity={0.92}>
-            <Icon name="cart-plus" size={16} color="#FFFFFF" />
-            <Text style={styles.addButtonText}>Add</Text>
+            {mutating ? (
+              <Icon name="loading" size={16} color="#FFFFFF" />
+            ) : (
+              <Icon name="cart-plus" size={16} color="#FFFFFF" />
+            )}
+            <Text style={styles.addButtonText}>{mutating ? '...' : 'Add'}</Text>
           </TouchableOpacity>
         ) : (
           <View
@@ -271,17 +303,28 @@ const ProductCard = ({
             <View style={styles.stepSideCol}>
               <TouchableOpacity
                 style={styles.stepSideHit}
-                disabled={mutating}
+                disabled={mutating || !cartLineForCard}
                 onPress={e => {
                   e.stopPropagation?.();
                   if (mutating || !cartLineForCard) return;
+                  const dPcs = Math.max(1, product.piecesPerSet ?? 1);
+                  const dMinO = Math.max(1, Math.trunc(Number(product.minOrderQuantity) || 1));
+                  const tier = cartLineForCard.priceOptionKey;
+                  const dStep =
+                    tier === 'set' || tier === 'remaining'
+                      ? 1
+                      : dPcs > 1 ? dPcs
+                        : dMinO > 1 && productImpliesSetPurchase(product) ? dMinO : 1;
+                  const nextQty = Math.max(0, displayQty - dStep);
+                  setLocalQty(nextQty);
                   setMutating(true);
                   decrement(product.id, cartLineForCard.priceOptionKey)
+                    .catch(() => setLocalQty(rawLineQty))
                     .finally(() => setMutating(false));
                 }}
                 activeOpacity={0.85}
                 hitSlop={{ top: 6, bottom: 6, left: 8, right: 4 }}>
-                <Icon name="minus" size={16} color={mutating ? '#CBD5E1' : accentColor} />
+                <Icon name="minus" size={16} color={(mutating || !cartLineForCard) ? '#CBD5E1' : accentColor} />
               </TouchableOpacity>
             </View>
             <View style={styles.stepQtySlot}>
@@ -293,26 +336,40 @@ const ProductCard = ({
                 {cartLineForCard
                   ? stepperQuantityCaptionForCartLine(
                       product,
-                      cartLineForCard.quantity,
+                      displayQty,
                       cartLineForCard.priceOptionKey,
                     )
-                  : ''}
+                  : stepperQuantityCaptionForCartLine(product, displayQty, tierKey)}
               </Text>
             </View>
             <View style={styles.stepSideCol}>
               <TouchableOpacity
                 style={styles.stepSideHit}
-                disabled={mutating}
+                disabled={mutating || !cartLineForCard}
                 onPress={e => {
                   e.stopPropagation?.();
-                  if (mutating) return;
+                  if (mutating || !cartLineForCard) return;
+                  const tPcs = Math.max(1, product.piecesPerSet ?? 1);
+                  const tMinO = Math.max(1, Math.trunc(Number(product.minOrderQuantity) || 1));
+                  const tier = cartLineForCard.priceOptionKey;
+                  const step =
+                    tier === 'set' || tier === 'remaining'
+                      ? 1
+                      : tPcs > 1 ? tPcs
+                        : tMinO > 1 && productImpliesSetPurchase(product) ? tMinO : 1;
+                  const stock = product.stockQuantity;
+                  const maxQty = stock !== undefined && stock > 0 ? stock : 99;
+                  const nextQty = Math.min(displayQty + step, maxQty);
+                  if (nextQty === displayQty) return;
+                  setLocalQty(nextQty);
                   setMutating(true);
-                  increment(product.id, cartLineForCard?.priceOptionKey ?? tierKey)
+                  increment(product.id, tier)
+                    .catch(() => setLocalQty(rawLineQty))
                     .finally(() => setMutating(false));
                 }}
                 activeOpacity={0.85}
                 hitSlop={{ top: 6, bottom: 6, left: 4, right: 8 }}>
-                <Text style={[styles.stepPlusGlyph, { color: mutating ? '#CBD5E1' : accentColor }]}>+</Text>
+                <Text style={[styles.stepPlusGlyph, { color: (mutating || !cartLineForCard) ? '#CBD5E1' : accentColor }]}>+</Text>
               </TouchableOpacity>
             </View>
           </View>

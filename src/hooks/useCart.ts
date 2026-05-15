@@ -180,7 +180,7 @@ export const useCart = () => {
     () => ({
       items,
       total,
-      add: (product: Product, quantity = 1, priceOptionKey?: PriceOptionKey) => {
+      add: (product: Product, quantity = 1, priceOptionKey?: PriceOptionKey): Promise<void> => {
         const tier = priceOptionKey ?? defaultPriceTier(product);
         const minOrder = Math.max(
           1,
@@ -204,19 +204,21 @@ export const useCart = () => {
         const safeQuantity = alreadyInCart
           ? requested
           : Math.max(minLineQty, requested);
-        addToCartApi({
+        return addToCartApi({
           product_id: product.id,
           quantity: safeQuantity,
           price_option_key: tier,
           cartDivision: homeDivision,
         })
           .unwrap()
+          .then(() => {})
           .catch((e: any) => {
             Toast.show({
               type: 'error',
               text1: 'Could not add to cart',
               text2: e?.data?.message ?? e?.message ?? 'Please try again.',
             });
+            throw e;
           });
       },
       remove: (cartItemId: string) => {
