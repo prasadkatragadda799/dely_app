@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { PriceOptionKey, Product } from '../../types';
 import { useCart } from '../../hooks/useCart';
@@ -46,6 +46,19 @@ const ProductCard = ({
   const { items, increment, decrement } = useCart();
   const [mutating, setMutating] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [imageLoading, setImageLoading] = useState(true);
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(shimmerAnim, { toValue: 0, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [shimmerAnim]);
   // Optimistic local quantity: updated immediately on tap, reset when server responds.
   const [localQty, setLocalQty] = useState<number | null>(null);
   const { isWishlisted, toggle } = useWishlist();
@@ -135,11 +148,25 @@ const ProductCard = ({
             <Icon name="image-off-outline" size={28} color="#CBD5E1" />
           </View>
         ) : (
-          <Image
-            source={{ uri: product.image }}
-            style={styles.image}
-            onError={() => setImageError(true)}
-          />
+          <>
+            {imageLoading && (
+              <Animated.View
+                style={[
+                  styles.image,
+                  styles.skeleton,
+                  { opacity: shimmerAnim.interpolate({ inputRange: [0, 1], outputRange: [0.4, 0.9] }) },
+                ]}
+              />
+            )}
+            <Image
+              source={{ uri: product.image }}
+              style={[styles.image, imageLoading && styles.imageHidden]}
+              onLoadStart={() => setImageLoading(true)}
+              onLoad={() => setImageLoading(false)}
+              onError={() => { setImageError(true); setImageLoading(false); }}
+              fadeDuration={150}
+            />
+          </>
         )}
         {discountPct > 0 ? (
           <View style={[styles.discountPill, { backgroundColor: accentColor }]}>
@@ -417,6 +444,16 @@ const styles = StyleSheet.create({
   imageFallback: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  skeleton: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#E2E8F0',
+  },
+  imageHidden: {
+    opacity: 0,
   },
   discountPill: {
     position: 'absolute',

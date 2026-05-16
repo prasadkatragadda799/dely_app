@@ -459,6 +459,8 @@ export const mapProductFromApi = (
       : variantSetPieces,
     variants:
       mappedVariants && mappedVariants.length > 0 ? mappedVariants : undefined,
+    cancelPolicy: item.cancelPolicy || item.cancel_policy || undefined,
+    returnPolicy: item.returnPolicy || item.return_policy || undefined,
   };
 };
 

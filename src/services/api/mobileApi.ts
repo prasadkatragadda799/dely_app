@@ -16,13 +16,13 @@ type NotificationIdParam = { notificationId: string };
 type DeliveryLocationIdParam = { locationId: string };
 type CartItemIdParam = { cartItemId: string };
 
-type LoginBody = { email: string; password: string };
+type LoginBody = { phone: string; password: string };
 type DeliveryLoginBody = { phone: string; password: string };
 type SendOtpBody = { phone: string };
 type SendOtpData = { request_id: string };
 type VerifyOtpBody = { phone: string; requestId: string; otp: string };
 type VerifyOtpData = {
-  user: { id: string; name: string; email: string; phone?: string };
+  user: { id: string; name: string; phone: string };
   token: string;
   refresh_token: string;
 };
@@ -34,7 +34,6 @@ type RegisterData = {
 };
 type RegisterBody = {
   name: string;
-  email: string;
   phone: string;
   business_name: string;
   password: string;
@@ -50,7 +49,6 @@ type RegisterBody = {
   state?: string;
   pincode?: string;
 };
-type ForgotPasswordBody = { email: string };
 type ResetPasswordBody = { token: string; new_password: string };
 type RefreshTokenBody = { refreshToken: string };
 type ChangePasswordBody = {

@@ -3,7 +3,7 @@ export type UserRole = 'customer' | 'delivery';
 export interface User {
   id: string;
   name: string;
-  email: string;
+  email?: string;
   role: UserRole;
   token: string;
   // Needed for seamless session refresh without forcing a relogin.
@@ -69,6 +69,8 @@ export interface Product {
   isVeg?: boolean;
   rating?: number;
   reviewCount?: number;
+  cancelPolicy?: string;
+  returnPolicy?: string;
   /** From backend `minOrderQuantity`; cart API requires at least this many per line. */
   minOrderQuantity?: number;
   /** Sale unit from admin: piece, pack, set, kg, … */

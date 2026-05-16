@@ -1377,6 +1377,30 @@ const ProductOverviewScreen = () => {
                     </Text>
                   </View>
 
+                  {selectedProduct.cancelPolicy ? (
+                    <View style={styles.detailSubsection}>
+                      <View style={styles.policyHeader}>
+                        <Icon name="close-circle-outline" size={16} color={primary} />
+                        <Text style={[styles.detailSectionHeading, { color: primaryText, marginBottom: 0 }]}>
+                          Cancellation Policy
+                        </Text>
+                      </View>
+                      <Text style={styles.policyText}>{selectedProduct.cancelPolicy}</Text>
+                    </View>
+                  ) : null}
+
+                  {selectedProduct.returnPolicy ? (
+                    <View style={styles.detailSubsection}>
+                      <View style={styles.policyHeader}>
+                        <Icon name="arrow-u-left-top" size={16} color={primary} />
+                        <Text style={[styles.detailSectionHeading, { color: primaryText, marginBottom: 0 }]}>
+                          Return Policy
+                        </Text>
+                      </View>
+                      <Text style={styles.policyText}>{selectedProduct.returnPolicy}</Text>
+                    </View>
+                  ) : null}
+
                   <View style={styles.assuranceRow}>
                     <Icon name="shield-check-outline" size={17} color={primary} />
                     <Text style={styles.assuranceText}>
@@ -2082,6 +2106,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     color: '#64748B',
+  },
+  policyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  policyText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#475569',
+    fontWeight: '500',
   },
   detailFooterBar: {
     position: 'absolute',

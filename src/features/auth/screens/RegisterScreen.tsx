@@ -182,11 +182,9 @@ const RegisterScreen = ({ navigation }: Props) => {
         udyamRegistration: udyamRegUri,
         tradeCertificate: tradeCertUri,
       } : null;
-      const autoEmail = `${form.phone.replace(/\D/g, '')}@vendor.delycart.in`;
       const autoPassword = `DC_${form.phone.replace(/\D/g, '')}_vendor`;
       const next = await registerWithRole({
         name: form.name,
-        email: autoEmail,
         phone: form.phone,
         password: autoPassword,
         role: selectedRole,

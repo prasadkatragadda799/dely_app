@@ -150,10 +150,10 @@ export const useAuth = () => {
   return useMemo(
     () => ({
       user,
-      loginAsCustomer: async (values: { email: string; password: string }) => {
+      loginAsCustomer: async (values: { phone: string; password: string }) => {
         const res = await loginApi(values).unwrap();
         const data = res?.data as
-          | { user: { id: string; name: string; email: string }; token: string; refresh_token: string }
+          | { user: { id: string; name: string; phone: string }; token: string; refresh_token: string }
           | undefined;
 
         if (!res?.success || !data?.user?.id || !data?.token || !data?.refresh_token) {
@@ -164,7 +164,6 @@ export const useAuth = () => {
           loginSuccess({
             id: data.user.id,
             name: data.user.name,
-            email: data.user.email,
             role: 'customer',
             token: data.token,
             refreshToken: data.refresh_token,
@@ -211,7 +210,7 @@ export const useAuth = () => {
       },
       registerWithRole: (input: {
         name: string;
-        email: string;
+        email?: string;
         phone: string;
         password: string;
         role: UserRole;
@@ -233,7 +232,6 @@ export const useAuth = () => {
                   const bp = input.businessProfile!;
                   const form = new FormData();
                   form.append('name', input.name);
-                  form.append('email', input.email);
                   form.append('phone', input.phone);
                   form.append('password', input.password);
                   form.append('confirm_password', input.password);
@@ -275,7 +273,6 @@ export const useAuth = () => {
                 })()
               : await registerApi({
                   name: input.name,
-                  email: input.email,
                   phone: input.phone,
                   business_name:
                     input.businessProfile?.businessName ?? 'Business',
@@ -374,7 +371,7 @@ export const useAuth = () => {
           const res = await verifyOtpApi({ phone, requestId, otp }).unwrap();
           const data = res?.data as
             | {
-                user: { id: string; name: string; email: string; phone?: string };
+                user: { id: string; name: string; phone: string };
                 token: string;
                 refresh_token: string;
               }
@@ -392,7 +389,6 @@ export const useAuth = () => {
             loginSuccess({
               id: data.user.id,
               name: data.user.name,
-              email: data.user.email,
               role: role ?? 'customer',
               token: data.token,
               refreshToken: data.refresh_token,
