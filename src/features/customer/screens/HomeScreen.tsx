@@ -58,9 +58,9 @@ const divisions: Array<{
 }> = [
   {
     key: 'fmcg',
-    label: 'FMCG & Groceries',
-    shortLabel: 'FMCG',
-    segmentLabel: 'FMCG',
+    label: 'Food-FMCG & Groceries',
+    shortLabel: 'Food-FMCG',
+    segmentLabel: 'Food-FMCG',
     icon: 'basket-outline',
     tagline: 'Food, snacks & daily essentials',
   },
@@ -284,7 +284,7 @@ const HomeScreen = () => {
     return [
       {
         id: 'placeholder-hero',
-        title: isHomeKitchen ? 'Home & Kitchen' : 'FMCG & Groceries',
+        title: isHomeKitchen ? 'Home & Kitchen' : 'Food-FMCG & Groceries',
         subtitle: 'Offers will appear here soon',
         color: primary,
       },
@@ -575,7 +575,7 @@ const HomeScreen = () => {
               <Text
                 style={[styles.paperShopForValue, { color: primaryText }]}
                 numberOfLines={2}>
-                {activeDivisionMeta?.label ?? 'FMCG & Groceries'}
+                {activeDivisionMeta?.label ?? 'Food-FMCG & Groceries'}
               </Text>
             </View>
           </View>
@@ -983,7 +983,6 @@ const HomeScreen = () => {
                           numberOfLines={2}>
                           {c}
                         </Text>
-                        <Text style={styles.gridCellCount}>{count} items</Text>
                       </TouchableOpacity>
                     );
                   })}
@@ -1145,9 +1144,6 @@ const HomeScreen = () => {
                           style={[styles.gridCellName, { color: primaryText }]}
                           numberOfLines={2}>
                           {cat.name}
-                        </Text>
-                        <Text style={styles.gridCellCount}>
-                          {cat.count} items
                         </Text>
                       </TouchableOpacity>
                     );

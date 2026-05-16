@@ -120,6 +120,10 @@ const RegisterScreen = ({ navigation }: Props) => {
   };
 
   const [shopKycUri, setShopKycUri] = useState<string | undefined>(undefined);
+  const [gstCertUri, setGstCertUri] = useState<string | undefined>(undefined);
+  const [fssaiLicenseUri, setFssaiLicenseUri] = useState<string | undefined>(undefined);
+  const [udyamRegUri, setUdyamRegUri] = useState<string | undefined>(undefined);
+  const [tradeCertUri, setTradeCertUri] = useState<string | undefined>(undefined);
 
   const pickImage = (setter: (uri?: string) => void) => {
     launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 }, resp => {
@@ -127,6 +131,8 @@ const RegisterScreen = ({ navigation }: Props) => {
       setter(asset?.uri);
     });
   };
+
+  const hasAtLeastOneDoc = !!(gstCertUri || fssaiLicenseUri || udyamRegUri || tradeCertUri);
 
   const onSubmit = async (form: RegisterForm) => {
     if (!acceptedTerms) {
@@ -141,10 +147,24 @@ const RegisterScreen = ({ navigation }: Props) => {
       return;
     }
     if (selectedRole === 'customer') {
-      if (!form.addressLine1.trim() || !form.city.trim() || !form.state.trim() || !form.pincode.trim() || !form.businessName.trim() || !form.gstNumber.trim() || !form.fmcgNumber.trim() || !shopKycUri) {
+      if (!form.addressLine1.trim() || !form.city.trim() || !form.state.trim() || !form.pincode.trim() || !form.businessName.trim() || !form.fmcgNumber.trim()) {
         await appAlert({
           title: 'Complete your profile',
-          message: 'Address, business name, GST number, FMCG (FSSAI) number, and Shop KYC document are required.',
+          message: 'Address, business name, and FMCG (FSSAI) number are required.',
+        });
+        return;
+      }
+      if (!shopKycUri) {
+        await appAlert({
+          title: 'Shop photo required',
+          message: 'Please upload a photo of your shop.',
+        });
+        return;
+      }
+      if (!hasAtLeastOneDoc) {
+        await appAlert({
+          title: 'Supporting document required',
+          message: 'Please upload at least one supporting document (GST certificate, FSSAI license, Udyam registration, or trade certificate).',
         });
         return;
       }
@@ -155,8 +175,12 @@ const RegisterScreen = ({ navigation }: Props) => {
       const businessProfile = selectedRole === 'customer' ? {
         businessName: form.businessName,
         gstNumber: form.gstNumber,
-        shopKycDocument: shopKycUri,
         fmcgNumber: form.fmcgNumber,
+        shopImageUri: shopKycUri,
+        gstCertificate: gstCertUri,
+        fssaiLicense: fssaiLicenseUri,
+        udyamRegistration: udyamRegUri,
+        tradeCertificate: tradeCertUri,
       } : null;
       const autoEmail = `${form.phone.replace(/\D/g, '')}@vendor.delycart.in`;
       const autoPassword = `DC_${form.phone.replace(/\D/g, '')}_vendor`;
@@ -409,12 +433,12 @@ const RegisterScreen = ({ navigation }: Props) => {
             </SectionCard>
           ) : null}
 
-          {/* ── Section 4: Shop KYC Document (only for customer) ── */}
+          {/* ── Section 4: Documents (only for customer) ── */}
           {selectedRole === 'customer' ? (
-            <SectionCard icon="file-document-outline" title="Shop KYC Document">
-              <Text style={styles.docSectionHint}>
-                Upload a single clear photo showing your shop KYC (e.g. GST certificate, FSSAI license, or any valid business document).
-              </Text>
+            <SectionCard icon="file-document-outline" title="Documents">
+              {/* Shop Photo - required */}
+              <Text style={styles.fieldLabel}>Shop Photo <Text style={{ color: '#DC2626' }}>*</Text></Text>
+              <Text style={styles.docSectionHint}>A clear photo of your shop front (required).</Text>
               <TouchableOpacity style={styles.kycUploadCard} onPress={() => pickImage(setShopKycUri)} activeOpacity={0.8}>
                 {shopKycUri ? (
                   <Image source={{ uri: shopKycUri }} style={styles.kycPreview} resizeMode="cover" />
@@ -423,8 +447,8 @@ const RegisterScreen = ({ navigation }: Props) => {
                     <View style={styles.kycIconWrap}>
                       <Icon name="store-outline" size={36} color="#1D4ED8" />
                     </View>
-                    <Text style={styles.kycUploadLabel}>Tap to upload Shop KYC</Text>
-                    <Text style={styles.kycUploadHint}>GST certificate / FSSAI license / Business doc</Text>
+                    <Text style={styles.kycUploadLabel}>Tap to upload Shop Photo</Text>
+                    <Text style={styles.kycUploadHint}>Required</Text>
                   </View>
                 )}
                 {shopKycUri ? (
@@ -434,6 +458,41 @@ const RegisterScreen = ({ navigation }: Props) => {
                   </View>
                 ) : null}
               </TouchableOpacity>
+
+              {/* Supporting Documents - at least one required */}
+              <Text style={[styles.fieldLabel, { marginTop: 20 }]}>
+                Supporting Documents <Text style={{ color: '#DC2626' }}>*</Text>
+              </Text>
+              <Text style={styles.docSectionHint}>Upload at least one of the following business documents.</Text>
+
+              {[
+                { label: 'GST Certificate', icon: 'receipt-outline', uri: gstCertUri, setter: setGstCertUri },
+                { label: 'FSSAI License', icon: 'shield-check-outline', uri: fssaiLicenseUri, setter: setFssaiLicenseUri },
+                { label: 'Udyam Registration', icon: 'briefcase-outline', uri: udyamRegUri, setter: setUdyamRegUri },
+                { label: 'Trade Certificate', icon: 'certificate-outline', uri: tradeCertUri, setter: setTradeCertUri },
+              ].map(({ label, icon, uri, setter }) => (
+                <TouchableOpacity key={label} style={styles.docPickerRow} onPress={() => pickImage(setter)} activeOpacity={0.8}>
+                  <View style={[styles.docPickerThumb, uri ? styles.docPickerThumbDone : null]}>
+                    {uri
+                      ? <Image source={{ uri }} style={styles.docPickerImage} resizeMode="cover" />
+                      : <Icon name={icon} size={24} color={uri ? '#1D4ED8' : '#94A3B8'} />}
+                  </View>
+                  <View style={styles.docPickerInfo}>
+                    <Text style={styles.docPickerLabel}>{label}</Text>
+                    <Text style={styles.docPickerStatus}>
+                      {uri ? 'Uploaded — tap to change' : 'Tap to upload (optional)'}
+                    </Text>
+                  </View>
+                  {uri ? <Icon name="check-circle" size={20} color="#16A34A" /> : <Icon name="upload-outline" size={20} color="#94A3B8" />}
+                </TouchableOpacity>
+              ))}
+
+              {!hasAtLeastOneDoc ? (
+                <View style={styles.errorRow}>
+                  <Icon name="information-outline" size={13} color="#D97706" />
+                  <Text style={[styles.errorText, { color: '#D97706' }]}>At least one supporting document is required</Text>
+                </View>
+              ) : null}
             </SectionCard>
           ) : null}
 
@@ -744,6 +803,35 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontSize: 20, fontWeight: '800', color: '#0F172A', textAlign: 'center' },
   modalSubtitle: { color: '#64748B', textAlign: 'center', marginTop: 6, fontSize: 14 },
+
+  // Document picker rows
+  docPickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  docPickerThumb: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  docPickerThumbDone: {
+    borderColor: '#BFDBFE',
+    backgroundColor: '#EFF6FF',
+  },
+  docPickerImage: { width: '100%', height: '100%' },
+  docPickerInfo: { flex: 1 },
+  docPickerLabel: { fontSize: 13, fontWeight: '700', color: '#0F172A' },
+  docPickerStatus: { fontSize: 11, color: '#94A3B8', marginTop: 2, fontWeight: '500' },
 });
 
 export default RegisterScreen;
