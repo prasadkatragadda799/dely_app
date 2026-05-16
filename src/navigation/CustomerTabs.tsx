@@ -190,9 +190,9 @@ function CustomerStyledTabBar(props: BottomTabBarProps) {
   const onHeightChange = React.useContext(BottomTabBarHeightCallbackContext);
   const keyboardOpen = useTabKeyboardOpen();
   const isHomeKitchen = useAppSelector(
-    s => s.homeDivision.division === 'homeKitchen',
+    s => (s.homeDivision?.division ?? 'fmcg') === 'homeKitchen',
   );
-  const cartItems = useAppSelector(s => s.cart.items);
+  const cartItems = useAppSelector(s => s.cart?.items ?? []);
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
   const accent = isHomeKitchen ? '#16A34A' : '#2563EB';
   const accentWash = isHomeKitchen

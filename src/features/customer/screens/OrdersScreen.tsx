@@ -105,7 +105,7 @@ const formatDate = (iso?: string) => {
 const OrdersScreen = () => {
   const navigation = useNavigation();
   const { alert: appAlert, confirm } = useAppAlert();
-  const homeDivision = useAppSelector(state => state.homeDivision.division);
+  const homeDivision = useAppSelector(state => state.homeDivision?.division ?? 'fmcg');
   const isHomeKitchen = homeDivision === 'homeKitchen';
   const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
   const tabBarHeight = useBottomTabBarHeight();

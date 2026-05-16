@@ -7,7 +7,7 @@ import { useAppSelector } from '../../../hooks/redux';
 const OrderSuccessScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const homeDivision = useAppSelector(state => state.homeDivision.division);
+  const homeDivision = useAppSelector(state => state.homeDivision?.division ?? 'fmcg');
   const isHomeKitchen = homeDivision === 'homeKitchen';
   const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
   const primaryText = isHomeKitchen ? '#14532D' : '#0B3B8F';

@@ -47,11 +47,11 @@ const ProfileScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation =
     useNavigation<NativeStackNavigationProp<CustomerProfileStackParamList>>();
-  const homeDivision = useAppSelector(state => state.homeDivision.division);
+  const homeDivision = useAppSelector(state => state.homeDivision?.division ?? 'fmcg');
   const isHomeKitchen = homeDivision === 'homeKitchen';
   const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
   const primarySoft = isHomeKitchen ? 'rgba(22,163,74,0.12)' : 'rgba(29,78,216,0.12)';
-  const business = useAppSelector(state => state.businessProfile.profile);
+  const business = useAppSelector(state => state.businessProfile?.profile ?? null);
 
   const {
     data: kycEnvelope,
@@ -83,13 +83,12 @@ const ProfileScreen = () => {
       return;
     }
 
-    // Backend expects 14 digits for FSSAI; app currently collects this as `fmcgNumber`.
+    // FSSAI is optional; only validate format when provided.
     const fssaiDigits = (business.fmcgNumber ?? '').toString().replace(/\D/g, '');
-    if (fssaiDigits.length !== 14) {
+    if (fssaiDigits.length > 0 && fssaiDigits.length !== 14) {
       await appAlert({
         title: 'Invalid FSSAI number',
-        message:
-          'FSSAI must be exactly 14 digits. Please check your “FMCG number” field.',
+        message: 'FSSAI must be exactly 14 digits. Please correct your FSSAI number.',
       });
       return;
     }
@@ -106,13 +105,21 @@ const ProfileScreen = () => {
     try {
       const shopUrl = await uploadIfLocal(business.shopImageUri ?? undefined);
       const fssaiUrl = await uploadIfLocal(business.fssaiLicense ?? undefined);
+      const gstCertUrl = await uploadIfLocal(business.gstCertificate ?? undefined);
+      const udyamUrl = await uploadIfLocal(business.udyamRegistration ?? undefined);
+      const tradeCertUrl = await uploadIfLocal(business.tradeCertificate ?? undefined);
 
       await submitKycApi({
         business_name: business.businessName,
-        gst_number: business.gstNumber,
-        fssai_number: fssaiDigits,
+        gst_number: business.gstNumber || undefined,
+        fssai_number: fssaiDigits.length === 14 ? fssaiDigits : undefined,
         shop_image_url: shopUrl,
         fssai_license_image_url: fssaiUrl,
+        documents: {
+          ...(gstCertUrl ? { gst_certificate: gstCertUrl } : {}),
+          ...(udyamUrl ? { udyam_registration: udyamUrl } : {}),
+          ...(tradeCertUrl ? { trade_certificate: tradeCertUrl } : {}),
+        },
       }).unwrap();
 
       await refetchKyc();
@@ -293,22 +300,33 @@ const ProfileScreen = () => {
                 <Text style={styles.value}>{business.fmcgNumber}</Text>
               </View>
 
-              <Text style={[styles.label, { marginTop: 14 }]}>Certificates & documents</Text>
-              <Text style={styles.docHint}>
-                Uploaded documents (GST, FSSAI, Udyam, trade, shop).
-              </Text>
-              <View style={styles.docRow}>
-                <KycDocTile uri={business.gstCertificate} label="GST certificate" />
-                <KycDocTile uri={business.fssaiLicense} label="FSSAI license" />
-              </View>
-              <View style={styles.docRow}>
-                <KycDocTile uri={business.udyamRegistration} label="Udyam registration" />
-                <KycDocTile uri={business.tradeCertificate} label="Trade certificate" />
-              </View>
-              <View style={styles.docRow}>
-                <KycDocTile uri={business.shopImageUri} label="Shop photo" />
-                <View style={{ flex: 1 }} />
-              </View>
+              {(() => {
+                const uploadedDocs = [
+                  { uri: business.shopImageUri, label: 'Shop photo' },
+                  { uri: business.gstCertificate, label: 'GST certificate' },
+                  { uri: business.fssaiLicense, label: 'FSSAI license' },
+                  { uri: business.udyamRegistration, label: 'Udyam registration' },
+                  { uri: business.tradeCertificate, label: 'Trade certificate' },
+                ].filter(d => !!d.uri);
+                if (uploadedDocs.length === 0) return null;
+                const rows: typeof uploadedDocs[] = [];
+                for (let i = 0; i < uploadedDocs.length; i += 2) {
+                  rows.push(uploadedDocs.slice(i, i + 2));
+                }
+                return (
+                  <>
+                    <Text style={[styles.label, { marginTop: 14 }]}>Certificates & documents</Text>
+                    {rows.map((row, ri) => (
+                      <View key={ri} style={styles.docRow}>
+                        {row.map(doc => (
+                          <KycDocTile key={doc.label} uri={doc.uri} label={doc.label} />
+                        ))}
+                        {row.length === 1 && <View style={{ flex: 1 }} />}
+                      </View>
+                    ))}
+                  </>
+                );
+              })()}
 
               <View style={{ marginTop: 18 }}>
                 <Text style={[styles.label, { marginTop: 6 }]}>KYC verification</Text>

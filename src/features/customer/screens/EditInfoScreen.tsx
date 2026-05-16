@@ -48,8 +48,8 @@ const EditInfoScreen = () => {
   const { user } = useAuth();
   const dispatch = useAppDispatch();
   const navigation = useNavigation();
-  const business = useAppSelector(state => state.businessProfile.profile);
-  const homeDivision = useAppSelector(state => state.homeDivision.division);
+  const business = useAppSelector(state => state.businessProfile?.profile ?? null);
+  const homeDivision = useAppSelector(state => state.homeDivision?.division ?? 'fmcg');
   const isHomeKitchen = homeDivision === 'homeKitchen';
   const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
 

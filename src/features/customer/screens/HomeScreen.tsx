@@ -31,6 +31,7 @@ import { API_V1_BASE_URL } from '../../../services/api/config';
 import { useCart } from '../../../hooks/useCart';
 import ProductCard from '../../../shared/ui/ProductCard';
 import { useAppDispatch } from '../../../hooks/redux';
+import { useAuth } from '../../../hooks/useAuth';
 import { setHomeDivision } from '../homeDivisionSlice';
 import Voice, {
   isVoiceSearchAvailable,
@@ -41,6 +42,7 @@ import {
   useGetDeliveryLocationsQuery,
   useCheckServiceLocationQuery,
   useGetCompaniesQuery,
+  useGetKycStatusQuery,
 } from '../../../services/api/mobileApi';
 import type { Deal } from '../../../types';
 
@@ -79,6 +81,14 @@ const HomeScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const dispatch = useAppDispatch();
+  const { user } = useAuth();
+  const { data: kycEnvelope } = useGetKycStatusQuery(undefined, { skip: !user });
+  const kycStatus: string | null = useMemo(() => {
+    const d: any = kycEnvelope?.data;
+    return d?.kyc_status ?? d?.kycStatus ?? null;
+  }, [kycEnvelope]);
+  const isKycVerified = kycStatus === 'verified';
+  const isKycLoaded = kycStatus !== null;
   const { data: fmcgProds = [], isLoading: isFmcgLoading, isError: isFmcgError } = useGetProductsQuery({ category: 'fmcg' });
   const { data: kitchenProds = [], isLoading: isKitchenLoading } = useGetProductsQuery({ category: 'kitchen' });
   const { data: homeProds = [], isLoading: isHomeLoading } = useGetProductsQuery({ category: 'home' });
@@ -557,6 +567,41 @@ const HomeScreen = () => {
         </View>
       )}
 
+      {/* KYC verification banner */}
+      {isKycLoaded && !isKycVerified && (
+        <View style={[
+          styles.kycPendingBanner,
+          kycStatus === 'rejected' && { backgroundColor: '#FEE2E2', borderColor: '#FCA5A5' },
+        ]}>
+          <Icon
+            name={kycStatus === 'rejected' ? 'shield-remove-outline' : 'shield-alert-outline'}
+            size={20}
+            color={kycStatus === 'rejected' ? '#991B1B' : '#92400E'}
+            style={{ marginRight: 10 }}
+          />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.kycPendingTitle, kycStatus === 'rejected' && { color: '#991B1B' }]}>
+              {kycStatus === 'pending' ? 'KYC Under Review' : kycStatus === 'rejected' ? 'KYC Rejected' : 'KYC Verification Pending'}
+            </Text>
+            <Text style={[styles.kycPendingSubtitle, kycStatus === 'rejected' && { color: '#B91C1C' }]}>
+              {kycStatus === 'pending'
+                ? 'Your documents are being reviewed. Shopping is enabled once verified.'
+                : kycStatus === 'rejected'
+                ? 'Your KYC was rejected. Please update and resubmit your documents.'
+                : 'Complete KYC to unlock browsing and shopping.'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => navigation.getParent?.()?.navigate('Profile')}
+            style={styles.kycPendingBtn}
+            activeOpacity={0.85}>
+            <Text style={[styles.kycPendingBtnText, kycStatus === 'rejected' && { color: '#991B1B' }]}>
+              {kycStatus === 'rejected' ? 'Resubmit' : kycStatus === 'pending' ? 'View' : 'Complete'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.paperHeader}>
         <View style={styles.paperHeaderTop}>
           <View style={styles.paperBrandBlock}>
@@ -683,9 +728,6 @@ const HomeScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <Text style={[styles.divisionSectionLabel, { color: primaryText }]}>
-        What are you shopping for?
-      </Text>
       <View
         style={[
           styles.divisionTrackOuter,
@@ -765,6 +807,24 @@ const HomeScreen = () => {
         </View>
       ) : null}
 
+      {isKycLoaded && !isKycVerified ? (
+        <View style={styles.kycWall}>
+          <Icon name="shield-lock-outline" size={52} color="#CBD5E1" />
+          <Text style={styles.kycWallTitle}>Catalog locked</Text>
+          <Text style={styles.kycWallSubtitle}>
+            Complete your KYC verification to browse products and place orders.
+          </Text>
+          <TouchableOpacity
+            style={[styles.kycWallBtn, { backgroundColor: primary }]}
+            onPress={() => navigation.getParent?.()?.navigate('Profile')}
+            activeOpacity={0.88}>
+            <Text style={styles.kycWallBtnText}>
+              {kycStatus === 'pending' ? 'View KYC status' : kycStatus === 'rejected' ? 'Resubmit KYC' : 'Complete KYC'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <>
       <Text style={[styles.paperSectionTitle, { color: primaryText }]}>
         Featured offers
       </Text>
@@ -1202,6 +1262,8 @@ const HomeScreen = () => {
           />
         )}
       />
+        </>
+      )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -1549,6 +1611,77 @@ const styles = StyleSheet.create({
   },
   productsGrid: { marginHorizontal: 4 },
   productsGridRow: { justifyContent: 'space-between' },
+
+  // KYC pending banner
+  kycPendingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginHorizontal: 14,
+    marginBottom: 12,
+    gap: 4,
+  },
+  kycPendingTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#92400E',
+    marginBottom: 2,
+  },
+  kycPendingSubtitle: {
+    fontSize: 11,
+    color: '#B45309',
+    lineHeight: 15,
+    flexShrink: 1,
+  },
+  kycPendingBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#FDE68A',
+    marginLeft: 8,
+  },
+  kycPendingBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+
+  // KYC catalog gate
+  kycWall: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 64,
+    paddingHorizontal: 32,
+    gap: 12,
+  },
+  kycWallTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginTop: 8,
+  },
+  kycWallSubtitle: {
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  kycWallBtn: {
+    marginTop: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  kycWallBtnText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
 });
 
 export default HomeScreen;

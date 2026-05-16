@@ -60,7 +60,7 @@ const CartScreen = () => {
   const navigation = useNavigation<any>();
   const dispatch = useAppDispatch();
   const { items, increment, decrement, clear } = useCart();
-  const homeDivision = useAppSelector(state => state.homeDivision.division);
+  const homeDivision = useAppSelector(state => state.homeDivision?.division ?? 'fmcg');
   const tabBarHeight = useBottomTabBarHeight();
   const insets = useSafeAreaInsets();
 

@@ -15,7 +15,7 @@ const WishlistScreen = () => {
   const { data: products = [], isLoading: isProductsLoading } = useGetProductsQuery();
   const { productIds, toggle } = useWishlist();
   const { add } = useCart();
-  const homeDivision = useAppSelector(state => state.homeDivision.division);
+  const homeDivision = useAppSelector(state => state.homeDivision?.division ?? 'fmcg');
 
   const isHomeKitchen = homeDivision === 'homeKitchen';
   const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';

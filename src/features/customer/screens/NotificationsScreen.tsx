@@ -92,7 +92,7 @@ function normalizeList(envelope: unknown): {
 const NotificationsScreen = () => {
   const navigation = useNavigation<any>();
   const { alert: appAlert, confirm } = useAppAlert();
-  const homeDivision = useAppSelector(s => s.homeDivision.division);
+  const homeDivision = useAppSelector(s => s.homeDivision?.division ?? 'fmcg');
   const isHomeKitchen = homeDivision === 'homeKitchen';
   const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
   const primarySoft = isHomeKitchen

@@ -50,8 +50,32 @@ function mapServerProfileToBusinessProfile(
   const state = str(p.state) ?? str(p.businessState) ?? str(p.business_state);
   const pincode =
     str(p.pincode) ?? str(p.pin_code) ?? str(p.businessPincode) ?? str(p.business_pincode);
+  // address may be a nested dict {address_line1, address_line2} from older registrations
+  const _addrRaw = p.address;
+  const _addrLine1FromDict =
+    _addrRaw && typeof _addrRaw === 'object' && !Array.isArray(_addrRaw)
+      ? str((_addrRaw as Record<string, unknown>).address_line1) ??
+        str((_addrRaw as Record<string, unknown>).addressLine1)
+      : undefined;
   const addressLine1 =
-    str(p.address) ?? str(p.businessAddress) ?? str(p.business_address);
+    str(p.address_line1) ??
+    str(p.addressLine1) ??
+    str(p.businessAddress) ??
+    str(p.business_address) ??
+    _addrLine1FromDict ??
+    (!_addrLine1FromDict ? str(p.address as unknown) : undefined);
+
+  const _addrLine2FromDict =
+    _addrRaw && typeof _addrRaw === 'object' && !Array.isArray(_addrRaw)
+      ? str((_addrRaw as Record<string, unknown>).address_line2) ??
+        str((_addrRaw as Record<string, unknown>).addressLine2)
+      : undefined;
+  const addressLine2 =
+    str(p.address_line2) ??
+    str(p.addressLine2) ??
+    str(p.businessAddressLine2) ??
+    str(p.business_address_line2) ??
+    _addrLine2FromDict;
 
   const hasAny =
     businessName ||
@@ -79,7 +103,7 @@ function mapServerProfileToBusinessProfile(
     tradeCertificate,
     shopImageUri,
     addressLine1,
-    addressLine2: undefined,
+    addressLine2,
     city,
     state,
     pincode,
@@ -113,7 +137,7 @@ async function refreshBusinessProfileFromServer(dispatch: AppDispatch) {
 
 export const useAuth = () => {
   const dispatch = useAppDispatch();
-  const { user } = useAppSelector(state => state.auth);
+  const user = useAppSelector(state => state.auth?.user ?? null);
   const [loginApi] = useLoginMutation();
   const [logoutApi] = useLogoutApiMutation();
   const [deliveryLoginApi] = useDeliveryLoginMutation();
