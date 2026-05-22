@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -69,8 +69,12 @@ const CartScreen = () => {
 
   const [mutatingIds, setMutatingIds] = useState<Set<string>>(new Set());
   const [clearing, setClearing] = useState(false);
-  // Optimistic quantities: applied immediately on tap, cleared once API settles.
+  // Optimistic quantities: applied immediately on tap, cleared once server data arrives.
   const [pendingQtys, setPendingQtys] = useState<Record<string, number>>({});
+  // Tracks cart item ids whose mutations have resolved but whose server data (visibleItems)
+  // hasn't propagated yet. Cleared inside the useEffect below to avoid the flicker window
+  // between mutation resolve and RTK Query refetch completing.
+  const settledIdsRef = useRef<Set<string>>(new Set());
 
   const { data: deliveryLocationsEnvelope } = useGetDeliveryLocationsQuery();
   const deliveryLocations = (deliveryLocationsEnvelope?.data as any[]) ?? [];
@@ -125,6 +129,32 @@ const CartScreen = () => {
   }, [clear, items.length]);
 
   const visibleItems = useMemo(() => items, [items]);
+
+  // When visibleItems updates (RTK Query refetch complete), clear pending quantities
+  // for any mutation that has already settled. This prevents the one-frame flicker
+  // caused by clearing pendingQty in .finally() before the cache has refreshed.
+  useEffect(() => {
+    const settled = settledIdsRef.current;
+    if (settled.size === 0) return;
+    setPendingQtys(prev => {
+      const ids = Object.keys(prev);
+      if (ids.length === 0) {
+        settled.clear();
+        return prev;
+      }
+      const next = { ...prev };
+      let changed = false;
+      const existingIds = new Set(visibleItems.map(i => i.cartItemId));
+      for (const id of ids) {
+        if (!existingIds.has(id) || settled.has(id)) {
+          delete next[id];
+          settled.delete(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [visibleItems]);
 
   // Use pending (optimistic) quantity when available; integer paise math avoids
   // floating-point drift that accumulates when summing many line prices.
@@ -251,8 +281,8 @@ const CartScreen = () => {
                         setMutating(item.cartItemId, true);
                         decrement(item.product.id, item.priceOptionKey)
                           .finally(() => {
+                            settledIdsRef.current.add(item.cartItemId);
                             setMutating(item.cartItemId, false);
-                            setPendingQty(item.cartItemId, null);
                           });
                       }}
                       activeOpacity={0.85}
@@ -285,8 +315,8 @@ const CartScreen = () => {
                         setMutating(item.cartItemId, true);
                         increment(item.product.id, item.priceOptionKey)
                           .finally(() => {
+                            settledIdsRef.current.add(item.cartItemId);
                             setMutating(item.cartItemId, false);
-                            setPendingQty(item.cartItemId, null);
                           });
                       }}
                       activeOpacity={0.85}

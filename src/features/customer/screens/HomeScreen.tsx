@@ -60,7 +60,7 @@ const divisions: Array<{
 }> = [
   {
     key: 'fmcg',
-    label: 'Food-FMCG & Groceries',
+    label: 'Food-FMCG',
     shortLabel: 'Food-FMCG',
     segmentLabel: 'Food-FMCG',
     icon: 'basket-outline',
@@ -294,7 +294,7 @@ const HomeScreen = () => {
     return [
       {
         id: 'placeholder-hero',
-        title: isHomeKitchen ? 'Home & Kitchen' : 'Food-FMCG & Groceries',
+        title: isHomeKitchen ? 'Home & Kitchen' : 'Food-FMCG',
         subtitle: 'Offers will appear here soon',
         color: primary,
       },
@@ -620,7 +620,7 @@ const HomeScreen = () => {
               <Text
                 style={[styles.paperShopForValue, { color: primaryText }]}
                 numberOfLines={2}>
-                {activeDivisionMeta?.label ?? 'Food-FMCG & Groceries'}
+                {activeDivisionMeta?.label ?? 'Food-FMCG'}
               </Text>
             </View>
           </View>

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -90,6 +90,7 @@ const CheckoutScreen = () => {
   const {
     data: savedAddressesEnvelope,
     refetch: refetchSavedAddresses,
+    isLoading: isLoadingSavedAddresses,
   } = useGetDeliveryLocationsQuery();
   const savedAddresses = useMemo<SavedAddress[]>(
     () => ((savedAddressesEnvelope?.data as SavedAddress[]) ?? []) || [],
@@ -113,6 +114,44 @@ const CheckoutScreen = () => {
     const def = savedAddresses.find(a => a.is_default) ?? savedAddresses[0];
     setSelectedAddressId(String(def.id));
   }, [savedAddresses, selectedAddressId]);
+
+  // Auto-seed the first delivery location from the registration address the very
+  // first time this user hits checkout with no saved addresses. After seeding,
+  // the address is pre-selected so checkout works without any manual input.
+  const hasSeededRef = useRef(false);
+  useEffect(() => {
+    if (
+      hasSeededRef.current ||
+      isLoadingSavedAddresses ||
+      savedAddresses.length > 0 ||
+      !addressLine1.trim() ||
+      !city.trim() ||
+      !state.trim() ||
+      pincode.trim().length !== 6
+    ) {
+      return;
+    }
+    hasSeededRef.current = true;
+    createDeliveryLocation({
+      address_line1: addressLine1.trim(),
+      address_line2: addressLine2.trim() || undefined,
+      city: city.trim(),
+      state: state.trim(),
+      pincode: pincode.trim(),
+      type: 'home',
+      is_default: true,
+    } as any)
+      .unwrap()
+      .then(res => {
+        const created = (res?.data as SavedAddress | undefined) ?? null;
+        refetchSavedAddresses();
+        if (created?.id) setSelectedAddressId(String(created.id));
+      })
+      .catch(() => {
+        // Silently fail — the user can still add an address manually.
+        hasSeededRef.current = false;
+      });
+  }, [isLoadingSavedAddresses, savedAddresses.length, addressLine1, city, state, pincode]);
 
   const selectedAddress = useMemo(
     () =>
