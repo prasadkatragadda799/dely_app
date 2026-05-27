@@ -14,12 +14,21 @@ export type ProductCategory = 'fmcg' | 'kitchen' | 'home';
 
 export type PriceOptionKey = 'unit' | 'set' | 'remaining';
 
-/** Admin-defined SKU variants (packaging / set composition). */
+/** Admin-defined SKU variants (packaging / set composition). Purchasable: each
+ *  variant carries its own price, MRP, discount and image gallery. */
 export interface ProductVariant {
+  /** Backend variant id; sent to the cart so the customer buys this exact SKU. */
+  id?: string;
   packagingLabel?: string;
   packagingLabelType?: string;
   setPieces?: string;
   weight?: string;
+  mrp?: number;
+  specialPrice?: number;
+  discountPercentage?: number;
+  freeItem?: string;
+  /** Variant's own gallery (primary first). Selecting the variant swaps the product gallery. */
+  images?: string[];
 }
 
 export interface ProductPriceOption {
@@ -107,6 +116,10 @@ export interface CartItem {
 export interface CartLineItem extends CartItem {
   cartItemId: string;
   priceOptionKey: PriceOptionKey;
+  /** Set when the line is a purchasable variant SKU. */
+  variantId?: string;
+  /** Human-readable packaging label of the chosen variant (e.g. "2 x 300 ml"). */
+  variantLabel?: string;
 }
 
 export type OrderStatus =

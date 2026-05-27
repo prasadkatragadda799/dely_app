@@ -250,7 +250,7 @@ const CartScreen = () => {
                   <Text style={styles.name}>{item.product.name}</Text>
                   <Text style={styles.brand}>{item.product.brand}</Text>
                   <Text style={styles.meta}>
-                    {priceTierLabel(item.priceOptionKey)} · Rs {formatInrAmount(item.product.price)} ×{' '}
+                    {(item.variantLabel || priceTierLabel(item.priceOptionKey))} · Rs {formatInrAmount(item.product.price)} ×{' '}
                     {cartLineQuantityCaption(
                       item.product,
                       effectiveQty,
@@ -279,7 +279,7 @@ const CartScreen = () => {
                         const nextQty = Math.max(0, effectiveQty - step);
                         setPendingQty(item.cartItemId, nextQty);
                         setMutating(item.cartItemId, true);
-                        decrement(item.product.id, item.priceOptionKey)
+                        decrement(item.product.id, item.priceOptionKey, item.variantId)
                           .finally(() => {
                             settledIdsRef.current.add(item.cartItemId);
                             setMutating(item.cartItemId, false);
@@ -313,7 +313,7 @@ const CartScreen = () => {
                         const nextQty = Math.min(effectiveQty + step, maxQty);
                         setPendingQty(item.cartItemId, nextQty);
                         setMutating(item.cartItemId, true);
-                        increment(item.product.id, item.priceOptionKey)
+                        increment(item.product.id, item.priceOptionKey, item.variantId)
                           .finally(() => {
                             settledIdsRef.current.add(item.cartItemId);
                             setMutating(item.cartItemId, false);

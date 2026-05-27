@@ -62,6 +62,8 @@ type CartAddBody = {
   quantity: number;
   price_option_key?: string;
   priceOptionKey?: string;
+  /** Purchasable variant SKU; charges the variant's own price. */
+  variant_id?: string;
   /** When set, POST response matches GET /cart for that tab (fmcg vs homeKitchen). */
   cartDivision?: 'fmcg' | 'homeKitchen';
 };
@@ -72,6 +74,7 @@ type OrderItemCreateBody = {
   quantity: number;
   price_option_key?: string;
   priceOptionKey?: string;
+  variant_id?: string;
 };
 
 type DeliveryAddressBody = Record<string, unknown>;

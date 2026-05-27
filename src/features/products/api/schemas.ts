@@ -68,6 +68,7 @@ type ProductApiEntity = {
   pieces_per_set?: number | string | null;
   variantSetPieces?: string | null;
   variants?: Array<{
+    id?: string | null;
     packagingLabel?: string | null;
     packaging_label?: string | null;
     packagingLabelType?: string | null;
@@ -75,6 +76,13 @@ type ProductApiEntity = {
     setPieces?: string | null;
     set_pcs?: string | null;
     weight?: string | null;
+    mrp?: number | string | null;
+    specialPrice?: number | string | null;
+    special_price?: number | string | null;
+    discountPercentage?: number | string | null;
+    freeItem?: string | null;
+    free_item?: string | null;
+    images?: Array<string | { url?: string | null; image_url?: string | null }> | null;
   }> | null;
   priceOptions?: Array<{
     key?: string;
@@ -383,6 +391,10 @@ export const mapProductFromApi = (
             const sp = v.setPieces ?? v.set_pcs;
             const w = v.weight;
             const row: ProductVariant = {};
+            const vid = v.id;
+            if (vid != null && String(vid).trim()) {
+              row.id = String(vid).trim();
+            }
             if (pl != null && String(pl).trim()) {
               row.packagingLabel = String(pl).trim();
             }
@@ -395,10 +407,43 @@ export const mapProductFromApi = (
             if (w != null && String(w).trim()) {
               row.weight = String(w).trim();
             }
+            const mrp = maybeAsNumber(v.mrp);
+            if (mrp != null) {
+              row.mrp = mrp;
+            }
+            const specialPrice = maybeAsNumber(v.specialPrice ?? v.special_price);
+            if (specialPrice != null) {
+              row.specialPrice = specialPrice;
+            }
+            const discountPct = maybeAsNumber(v.discountPercentage);
+            if (discountPct != null) {
+              row.discountPercentage = discountPct;
+            }
+            const fi = v.freeItem ?? v.free_item;
+            if (fi != null && String(fi).trim()) {
+              row.freeItem = String(fi).trim();
+            }
+            const rawImgs = Array.isArray(v.images) ? v.images : [];
+            const imgs = rawImgs
+              .map((im: unknown) => {
+                if (typeof im === 'string') {
+                  return im.trim();
+                }
+                if (im && typeof im === 'object') {
+                  const o = im as { url?: unknown; image_url?: unknown };
+                  return String(o.url ?? o.image_url ?? '').trim();
+                }
+                return '';
+              })
+              .filter((u: string) => u.length > 0);
+            if (imgs.length > 0) {
+              row.images = imgs;
+            }
             return row;
           })
           .filter(
             r =>
+              r.id ||
               r.packagingLabel ||
               r.packagingLabelType ||
               r.setPieces ||

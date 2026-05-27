@@ -35,7 +35,7 @@ import Voice, {
   isVoiceSearchAvailable,
   VOICE_NOT_AVAILABLE_MESSAGE,
 } from '../../../utils/voice';
-import { PriceOptionKey, Product } from '../../../types';
+import { PriceOptionKey, Product, ProductVariant } from '../../../types';
 import {
   defaultPriceTier,
   selectedPriceOption,
@@ -105,6 +105,49 @@ const getProductImages = (product: Product): string[] => {
   const primary = String(product.image || '').trim();
   if (primary) return [primary, ...fromGallery.filter((u) => u !== primary)];
   return fromGallery;
+};
+
+/** Short label for a variant card (e.g. "2 x 300 ml", "Set: 6×100g · 500ml"). */
+const variantCardLabel = (v: ProductVariant): string => {
+  const composed = composeVariantPackagingFromApi(v as any);
+  if (composed && composed.trim()) return composed.trim();
+  if (v.weight && v.weight.trim()) return v.weight.trim();
+  if (v.packagingLabel && v.packagingLabel.trim()) return v.packagingLabel.trim();
+  return 'Option';
+};
+
+/**
+ * Per-unit price line for a variant (e.g. "₹0.7/ml") by parsing a quantity + unit
+ * out of the variant's weight/label. Multipliers like "2 x 300 ml" → 600 ml.
+ * Returns null when no quantity can be parsed.
+ */
+const variantPerUnitText = (v: ProductVariant, price: number): string | null => {
+  if (!price || price <= 0) return null;
+  const raw = `${v.weight ?? ''} ${v.setPieces ?? ''} ${v.packagingLabel ?? ''}`
+    .toLowerCase()
+    .replace(/×/g, 'x');
+  // Capture an optional multiplier and a quantity+unit, e.g. "2 x 300 ml" or "1kg".
+  const m = raw.match(/(?:(\d+(?:\.\d+)?)\s*x\s*)?(\d+(?:\.\d+)?)\s*(ml|l|kg|g|gm|gram|grams|litre|liter|pc|pcs|piece|pieces)/);
+  if (!m) return null;
+  const mult = m[1] ? parseFloat(m[1]) : 1;
+  let qty = parseFloat(m[2]) * mult;
+  let unit = m[3];
+  // Normalize to a base unit so "1 kg" reads as ₹/g-scale sensibly.
+  if (unit === 'l' || unit === 'litre' || unit === 'liter') {
+    qty *= 1000;
+    unit = 'ml';
+  } else if (unit === 'kg') {
+    qty *= 1000;
+    unit = 'g';
+  } else if (unit === 'gm' || unit === 'gram' || unit === 'grams') {
+    unit = 'g';
+  } else if (unit === 'pcs' || unit === 'piece' || unit === 'pieces') {
+    unit = 'pc';
+  }
+  if (!qty || qty <= 0) return null;
+  const per = price / qty;
+  const rounded = per >= 1 ? per.toFixed(1) : per.toFixed(2);
+  return `₹${rounded}/${unit}`;
 };
 
 const ProductDetailCard = ({
@@ -327,6 +370,9 @@ const ProductOverviewScreen = () => {
   const [isListening, setIsListening] = useState(false);
   const [selectedSets, setSelectedSets] = useState(1);
   const [detailTierKey, setDetailTierKey] = useState<PriceOptionKey>('unit');
+  // Selected purchasable variant SKU (Swiggy-style cards). Null when the product
+  // has no variants (falls back to the unit/set/remaining tier flow).
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [addTierModalVisible, setAddTierModalVisible] = useState(false);
   const buyNowAfterAddRef = useRef(false);
   const [selectedDetailImageIndex, setSelectedDetailImageIndex] = useState(0);
@@ -525,15 +571,45 @@ const ProductOverviewScreen = () => {
     }, []),
   );
 
+  // Purchasable variants (each a SKU with its own price + image gallery).
+  const purchasableVariants = useMemo(
+    () =>
+      (selectedProduct?.variants ?? []).filter(
+        v => v.id && (v.specialPrice != null || v.mrp != null),
+      ),
+    [selectedProduct],
+  );
+  const hasVariants = purchasableVariants.length > 0;
+  const selectedVariant = useMemo(
+    () => purchasableVariants.find(v => v.id === selectedVariantId) ?? null,
+    [purchasableVariants, selectedVariantId],
+  );
+
   React.useEffect(() => {
     if (!selectedProduct) return;
     setDetailTierKey(defaultPriceTier(selectedProduct));
+    const firstVariant = (selectedProduct.variants ?? []).find(
+      v => v.id && (v.specialPrice != null || v.mrp != null),
+    );
+    setSelectedVariantId(firstVariant?.id ?? null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-default when id or tier list changes, not when other merged fields refresh (would reset pack-size choice).
   }, [selectedProduct?.id, priceOptionsKeySig]);
 
   const detailPrice = useMemo(() => {
     if (!selectedProduct) {
       return { sell: 0, disc: 0, mrp: 0, savings: 0 };
+    }
+    // A selected variant is its own SKU → price comes from the variant.
+    if (selectedVariant) {
+      const sellRaw = selectedVariant.specialPrice ?? selectedVariant.mrp ?? 0;
+      const mrpRaw = selectedVariant.mrp ?? sellRaw;
+      const sell = Math.round(sellRaw * 100) / 100;
+      const mrp = Math.round(mrpRaw * 100) / 100;
+      const disc =
+        selectedVariant.discountPercentage ??
+        (mrp > sell ? ((mrp - sell) / mrp) * 100 : 0);
+      const savings = Math.max(0, Math.round((mrp - sell) * 100) / 100);
+      return { sell, disc, mrp, savings };
     }
     const active = selectedPriceOption(selectedProduct, detailTierKey);
     const sellRaw = active?.sellingPrice ?? selectedProduct.price;
@@ -544,11 +620,33 @@ const ProductOverviewScreen = () => {
     const mrp = Math.round(mrpRaw * 100) / 100;
     const savings = Math.max(0, Math.round((mrp - sell) * 100) / 100);
     return { sell, disc, mrp, savings };
-  }, [selectedProduct, detailTierKey]);
-  const detailImages = useMemo(
-    () => (selectedProduct ? getProductImages(selectedProduct) : []),
-    [selectedProduct],
-  );
+  }, [selectedProduct, detailTierKey, selectedVariant]);
+  const detailImages = useMemo(() => {
+    // Swap the gallery to the selected variant's own images when present.
+    if (selectedVariant?.images && selectedVariant.images.length > 0) {
+      return selectedVariant.images;
+    }
+    return selectedProduct ? getProductImages(selectedProduct) : [];
+  }, [selectedProduct, selectedVariant]);
+
+  // Reset gallery to the first image whenever the selected variant changes.
+  React.useEffect(() => {
+    setSelectedDetailImageIndex(0);
+    try {
+      galleryRef.current?.scrollToOffset({ offset: 0, animated: false });
+    } catch {
+      // ignore — list may not be mounted yet
+    }
+  }, [selectedVariantId]);
+
+  const selectedVariantCartQty = useMemo(() => {
+    if (!selectedProduct || !selectedVariantId) return 0;
+    return cartItems
+      .filter(
+        i => i.product.id === selectedProduct.id && i.variantId === selectedVariantId,
+      )
+      .reduce((s, i) => s + i.quantity, 0);
+  }, [cartItems, selectedProduct?.id, selectedVariantId]);
   const specEntries = useMemo(
     () =>
       selectedProduct?.specifications
@@ -768,8 +866,22 @@ const ProductOverviewScreen = () => {
     navigation.navigate('Cart');
   };
 
+  const addSelectedVariantToCart = (item: Product, variant: ProductVariant) => {
+    if (!variant.id) return;
+    add(item, 1, 'unit', variant.id);
+    const label = variantCardLabel(variant) || item.name;
+    showUiAlert('Added to cart', `${label} added.`, 'success');
+  };
+
   const onPressDetailAddToCart = () => {
     if (!selectedProduct || !canPurchase) return;
+    // Variant products: add the selected SKU directly (its own price/images).
+    if (hasVariants) {
+      if (selectedVariant) {
+        addSelectedVariantToCart(selectedProduct, selectedVariant);
+      }
+      return;
+    }
     if (detailMultiTier && detailProductCartTotal === 0) {
       buyNowAfterAddRef.current = false;
       setAddTierModalVisible(true);
@@ -780,6 +892,13 @@ const ProductOverviewScreen = () => {
 
   const onPressDetailBuyNow = () => {
     if (!selectedProduct || !canPurchase) return;
+    if (hasVariants) {
+      if (selectedVariant) {
+        addSelectedVariantToCart(selectedProduct, selectedVariant);
+        navigation.navigate('Cart');
+      }
+      return;
+    }
     if (detailMultiTier && detailProductCartTotal === 0) {
       buyNowAfterAddRef.current = true;
       setAddTierModalVisible(true);
@@ -1225,6 +1344,97 @@ const ProductOverviewScreen = () => {
                 <View style={styles.detailSectionRule} />
 
                 <View style={styles.detailBodyStack}>
+                  {hasVariants ? (
+                    <View style={styles.detailSubsection}>
+                      <Text style={[styles.detailSectionHeading, { color: primaryText }]}>
+                        Select a pack
+                      </Text>
+                      {selectedVariant ? (
+                        <Text style={styles.detailSectionSub}>
+                          {`Quantity: ${variantCardLabel(selectedVariant)}`}
+                        </Text>
+                      ) : null}
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.variantCardRow}>
+                        {purchasableVariants.map(v => {
+                          const selected = v.id === selectedVariantId;
+                          const sell = v.specialPrice ?? v.mrp ?? 0;
+                          const mrp = v.mrp ?? sell;
+                          const disc =
+                            v.discountPercentage ??
+                            (mrp > sell ? ((mrp - sell) / mrp) * 100 : 0);
+                          const perUnit = variantPerUnitText(v, sell);
+                          const thumb =
+                            v.images && v.images.length > 0
+                              ? v.images[0]
+                              : selectedProduct.image;
+                          return (
+                            <TouchableOpacity
+                              key={v.id}
+                              style={[
+                                styles.variantCard,
+                                {
+                                  borderColor: selected ? primary : '#E2E8F0',
+                                  backgroundColor: selected ? `${primary}0D` : '#FFFFFF',
+                                },
+                                selected && styles.variantCardSelected,
+                              ]}
+                              activeOpacity={0.9}
+                              onPress={() => setSelectedVariantId(v.id ?? null)}>
+                              {disc > 0 ? (
+                                <View
+                                  style={[
+                                    styles.variantCardBadge,
+                                    { backgroundColor: primary },
+                                  ]}>
+                                  <Text style={styles.variantCardBadgeText}>
+                                    {Math.round(disc)}% OFF
+                                  </Text>
+                                </View>
+                              ) : null}
+                              {thumb ? (
+                                <Image
+                                  source={{ uri: thumb }}
+                                  style={styles.variantCardImage}
+                                  resizeMode="contain"
+                                />
+                              ) : (
+                                <View
+                                  style={[
+                                    styles.variantCardImage,
+                                    styles.variantCardImagePlaceholder,
+                                  ]}>
+                                  <Icon name="image-off-outline" size={20} color="#CBD5E1" />
+                                </View>
+                              )}
+                              <Text
+                                style={[styles.variantCardLabel, { color: primaryText }]}
+                                numberOfLines={2}>
+                                {variantCardLabel(v)}
+                              </Text>
+                              <View style={styles.variantCardPriceRow}>
+                                <Text
+                                  style={[styles.variantCardPrice, { color: primaryText }]}>
+                                  Rs {formatRs(sell)}
+                                </Text>
+                                {mrp > sell ? (
+                                  <Text style={styles.variantCardMrp}>
+                                    {formatRs(mrp)}
+                                  </Text>
+                                ) : null}
+                              </View>
+                              {perUnit ? (
+                                <Text style={styles.variantCardPerUnit}>{perUnit}</Text>
+                              ) : null}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  ) : null}
+
                   {detailShowPackChips ? (
                     <View style={styles.detailSubsection}>
                       <Text style={[styles.detailSectionHeading, { color: primaryText }]}>
@@ -1282,7 +1492,7 @@ const ProductOverviewScreen = () => {
                     </Text>
                   </View>
 
-                  {selectedProduct.variants && selectedProduct.variants.length > 0 ? (
+                  {!hasVariants && selectedProduct.variants && selectedProduct.variants.length > 0 ? (
                     <View style={styles.detailSubsection}>
                       <Text style={[styles.detailSectionHeading, { color: primaryText }]}>
                         Variants
@@ -1496,16 +1706,14 @@ const ProductOverviewScreen = () => {
         <View
           style={[styles.detailFooterBar, !canPurchase && styles.detailFooterDisabled]}>
           <View style={styles.detailFooterAddCol}>
-            {detailTierCartBinding.displayQty > 0 &&
-            canPurchase &&
-            detailTierCartBinding.decrementTier ? (
+            {(hasVariants ? selectedVariantCartQty > 0 && !!selectedVariantId : detailTierCartBinding.displayQty > 0 && !!detailTierCartBinding.decrementTier) &&
+            canPurchase ? (
               <TouchableOpacity
                 style={[styles.detailFooterMinus, { borderColor: primary }]}
                 onPress={() =>
-                  decrement(
-                    selectedProduct.id,
-                    detailTierCartBinding.decrementTier!,
-                  )
+                  hasVariants
+                    ? decrement(selectedProduct.id, undefined, selectedVariantId ?? undefined)
+                    : decrement(selectedProduct.id, detailTierCartBinding.decrementTier!)
                 }
                 activeOpacity={0.9}
                 hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
@@ -1515,28 +1723,30 @@ const ProductOverviewScreen = () => {
             <TouchableOpacity
               style={[
                 styles.detailAddBtn,
-                { borderColor: primary },
+                {
+                  backgroundColor: canPurchase ? primary : '#CBD5E1',
+                  borderColor: canPurchase ? primary : '#CBD5E1',
+                },
                 !canPurchase && styles.detailFooterBtnDisabled,
               ]}
               disabled={!canPurchase}
               onPress={onPressDetailAddToCart}
               activeOpacity={0.9}>
-              <Icon name="cart-plus" size={17} color={canPurchase ? primary : '#94A3B8'} />
+              <Icon name="cart-plus" size={17} color="#FFFFFF" />
               <View style={styles.detailAddTextCol}>
-                <Text
-                  style={[
-                    styles.detailAddText,
-                    { color: canPurchase ? primary : '#94A3B8' },
-                  ]}>
-                  {detailTierCartBinding.displayQty > 0 ? 'Add more' : 'Add to Cart'}
+                <Text style={[styles.detailAddText, { color: '#FFFFFF' }]}>
+                  {(hasVariants ? selectedVariantCartQty : detailTierCartBinding.displayQty) > 0
+                    ? 'Add more'
+                    : 'ADD'}
                 </Text>
-                {detailProductCartTotal > 0 ? (
-                  <Text
-                    style={[
-                      styles.detailAddSub,
-                      { color: canPurchase ? primaryText : '#94A3B8' },
-                    ]}
-                    numberOfLines={2}>
+                {hasVariants ? (
+                  selectedVariantCartQty > 0 ? (
+                    <Text style={[styles.detailAddSub, { color: '#E0ECFF' }]} numberOfLines={2}>
+                      In cart: {selectedVariantCartQty}
+                    </Text>
+                  ) : null
+                ) : detailProductCartTotal > 0 ? (
+                  <Text style={[styles.detailAddSub, { color: '#E0ECFF' }]} numberOfLines={2}>
                     In cart: {detailCartSummaryText}
                   </Text>
                 ) : null}
@@ -2412,6 +2622,76 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 14,
     fontWeight: '900',
+  },
+  variantCardRow: {
+    marginTop: 10,
+    paddingVertical: 2,
+    paddingRight: 14,
+    gap: 10,
+    flexDirection: 'row',
+  },
+  variantCard: {
+    width: 132,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    padding: 10,
+    backgroundColor: '#FFFFFF',
+  },
+  variantCardSelected: {
+    shadowColor: '#1D4ED8',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  variantCardBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginBottom: 6,
+  },
+  variantCardBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  variantCardImage: {
+    width: '100%',
+    height: 64,
+    marginBottom: 8,
+  },
+  variantCardImagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+  },
+  variantCardLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    minHeight: 32,
+  },
+  variantCardPriceRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+  },
+  variantCardPrice: {
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  variantCardMrp: {
+    fontSize: 12,
+    color: '#94A3B8',
+    textDecorationLine: 'line-through',
+  },
+  variantCardPerUnit: {
+    marginTop: 2,
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
   },
   browsePriceActions: {
     marginTop: 10,

@@ -346,6 +346,7 @@ const CheckoutScreen = () => {
           product_id: i.product.id,
           quantity: i.quantity,
           price_option_key: i.priceOptionKey,
+          variant_id: i.variantId,
         })),
         delivery_location_id: selectedAddress.id,
         delivery_address: deliveryAddress,

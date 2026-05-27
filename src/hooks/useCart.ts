@@ -162,11 +162,20 @@ export const useCart = () => {
         variants: mappedVariants && mappedVariants.length > 0 ? mappedVariants : undefined,
       };
 
+      const variantId =
+        it.variant_id ?? it.variantId ?? p.variantId ?? undefined;
+      const variantLabel =
+        typeof p.variantLabel === 'string' && p.variantLabel.trim()
+          ? p.variantLabel.trim()
+          : undefined;
+
       return {
         cartItemId: String(it.id),
         product: mappedProduct,
         quantity: Number(it.quantity ?? 0),
         priceOptionKey,
+        variantId: variantId ? String(variantId) : undefined,
+        variantLabel,
       };
     });
   }, [data, isHomeKitchen]);
@@ -180,7 +189,12 @@ export const useCart = () => {
     () => ({
       items,
       total,
-      add: (product: Product, quantity = 1, priceOptionKey?: PriceOptionKey): Promise<void> => {
+      add: (
+        product: Product,
+        quantity = 1,
+        priceOptionKey?: PriceOptionKey,
+        variantId?: string,
+      ): Promise<void> => {
         const tier = priceOptionKey ?? defaultPriceTier(product);
         const minOrder = Math.max(
           1,
@@ -190,13 +204,18 @@ export const useCart = () => {
           ? Math.max(1, Math.trunc(quantity))
           : 1;
         const alreadyInCart = items.some(
-          i => i.product.id === product.id && i.priceOptionKey === tier,
+          i =>
+            i.product.id === product.id &&
+            i.priceOptionKey === tier &&
+            (variantId ? i.variantId === variantId : !i.variantId),
         );
         const pcs = Math.max(1, product.piecesPerSet ?? 1);
+        // A variant is an individual SKU → minimum of 1 per line.
         // 'set' price-tier: qty is in set units, minOrder is in pieces → convert.
         // All other tiers: qty and minOrder share the same unit; use minOrder directly.
-        const minLineQty =
-          tier === 'set'
+        const minLineQty = variantId
+          ? 1
+          : tier === 'set'
             ? Math.max(1, Math.ceil(minOrder / pcs))
             : tier === 'remaining'
               ? 1
@@ -208,6 +227,7 @@ export const useCart = () => {
           product_id: product.id,
           quantity: safeQuantity,
           price_option_key: tier,
+          variant_id: variantId,
           cartDivision: homeDivision,
         })
           .unwrap()
@@ -255,23 +275,30 @@ export const useCart = () => {
             // Silent; checkout already handles errors.
           });
       },
-      increment: (productId: string, priceOptionKey?: PriceOptionKey): Promise<void> => {
-        const target = items.find(
-          i =>
-            i.product.id === productId &&
-            (priceOptionKey === undefined || i.priceOptionKey === priceOptionKey),
+      increment: (
+        productId: string,
+        priceOptionKey?: PriceOptionKey,
+        variantId?: string,
+      ): Promise<void> => {
+        const target = items.find(i =>
+          variantId
+            ? i.product.id === productId && i.variantId === variantId
+            : i.product.id === productId &&
+              (priceOptionKey === undefined || i.priceOptionKey === priceOptionKey),
         );
         if (!target?.cartItemId) return Promise.resolve();
         const stock = target.product.stockQuantity;
         const maxQty = stock !== undefined && stock > 0 ? stock : 99;
         const tPcs = Math.max(1, target.product.piecesPerSet ?? 1);
         const tMinO = Math.max(1, Math.trunc(Number(target.product.minOrderQuantity) || 1));
+        // Variant lines are individual SKUs → step 1.
         // 'set'/'remaining' tiers: qty already in bundle units → step 1.
         // 'unit' tier with pcs>1: step by pack size (works for both unit='piece' and
         //   unit='set' — the backend counts raw units and pcs drives the step size).
         // 'unit' tier implied-set (pcs=1, minO>1): step by minOrder.
-        const step =
-          target.priceOptionKey === 'set' || target.priceOptionKey === 'remaining'
+        const step = variantId
+          ? 1
+          : target.priceOptionKey === 'set' || target.priceOptionKey === 'remaining'
             ? 1
             : tPcs > 1
               ? tPcs
@@ -291,19 +318,26 @@ export const useCart = () => {
             });
           });
       },
-      decrement: (productId: string, priceOptionKey?: PriceOptionKey): Promise<void> => {
-        const target = items.find(
-          i =>
-            i.product.id === productId &&
-            (priceOptionKey === undefined ||
-              i.priceOptionKey === priceOptionKey),
+      decrement: (
+        productId: string,
+        priceOptionKey?: PriceOptionKey,
+        variantId?: string,
+      ): Promise<void> => {
+        const target = items.find(i =>
+          variantId
+            ? i.product.id === productId && i.variantId === variantId
+            : i.product.id === productId &&
+              (priceOptionKey === undefined ||
+                i.priceOptionKey === priceOptionKey),
         );
         if (!target?.cartItemId) return Promise.resolve();
         const dPcs = Math.max(1, target.product.piecesPerSet ?? 1);
         const dMinO = Math.max(1, Math.trunc(Number(target.product.minOrderQuantity) || 1));
         const tier = target.priceOptionKey;
-        const dStep =
-          tier === 'set' || tier === 'remaining'
+        // Variant lines are individual SKUs: step 1, minimum 1.
+        const dStep = variantId
+          ? 1
+          : tier === 'set' || tier === 'remaining'
             ? 1
             : dPcs > 1
               ? dPcs
@@ -316,8 +350,9 @@ export const useCart = () => {
           Math.trunc(Number(target.product.minOrderQuantity) || 1),
         );
         const pcs = Math.max(1, target.product.piecesPerSet ?? 1);
-        const minLineQty =
-          tier === 'set'
+        const minLineQty = variantId
+          ? 1
+          : tier === 'set'
             ? Math.max(1, Math.ceil(minOrder / pcs))
             : tier === 'remaining'
               ? 1
