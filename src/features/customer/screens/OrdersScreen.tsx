@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -19,6 +20,7 @@ import {
   useCancelOrderApiMutation,
   useGetOrderInvoiceQuery,
   useGetOrdersQuery,
+  useInitiateReturnMutation,
 } from '../../../services/api/mobileApi';
 import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
 
@@ -114,6 +116,17 @@ const OrdersScreen = () => {
   const [cancellingOrderId, setCancellingOrderId] = React.useState<string | null>(null);
   const confirmingRef = useRef<Set<string>>(new Set());
 
+  // Return flow
+  const [returnOrderId, setReturnOrderId] = React.useState<string | null>(null);
+  const [returnOrderNumber, setReturnOrderNumber] = React.useState<string>('');
+  const [returnOrderIsCod, setReturnOrderIsCod] = React.useState(false);
+  const [returnReason, setReturnReason] = React.useState('');
+  const [returnBankAccount, setReturnBankAccount] = React.useState('');
+  const [returnBankIfsc, setReturnBankIfsc] = React.useState('');
+  const [returnBankHolder, setReturnBankHolder] = React.useState('');
+  const [returnBankName, setReturnBankName] = React.useState('');
+  const [initiateReturn, { isLoading: isSubmittingReturn }] = useInitiateReturnMutation();
+
   const { data, isFetching, isLoading, refetch } = useGetOrdersQuery();
   const [cancelOrder] = useCancelOrderApiMutation();
   const {
@@ -162,6 +175,59 @@ const OrdersScreen = () => {
   const invoiceDate = invoice?.invoice_date
     ? formatDate(invoice.invoice_date)
     : 'Date not available';
+
+  const RETURN_WINDOW_DAYS = 7;
+
+  const canRequestReturn = (order: UiOrder) => {
+    if (!['delivered', 'completed'].includes(order.status)) return false;
+    if (!order.createdAt) return true;
+    const diff = (Date.now() - new Date(order.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+    return diff <= RETURN_WINDOW_DAYS;
+  };
+
+  const openReturnModal = (order: UiOrder) => {
+    setReturnOrderId(order.id);
+    setReturnOrderNumber((order.orderNumber ?? order.id).slice(-12));
+    setReturnOrderIsCod(true); // always show bank fields; backend knows payment method
+    setReturnReason('');
+    setReturnBankAccount('');
+    setReturnBankIfsc('');
+    setReturnBankHolder('');
+    setReturnBankName('');
+  };
+
+  const closeReturnModal = () => {
+    setReturnOrderId(null);
+  };
+
+  const submitReturn = async () => {
+    if (!returnOrderId) return;
+    if (returnReason.trim().length < 5) {
+      await appAlert({ title: 'Reason required', message: 'Please describe the return reason (min 5 chars).' });
+      return;
+    }
+    const fd = new FormData();
+    fd.append('reason', returnReason.trim());
+    if (returnBankAccount.trim()) fd.append('bank_account_number', returnBankAccount.trim());
+    if (returnBankIfsc.trim()) fd.append('bank_ifsc_code', returnBankIfsc.trim().toUpperCase());
+    if (returnBankHolder.trim()) fd.append('bank_account_holder', returnBankHolder.trim());
+    if (returnBankName.trim()) fd.append('bank_name', returnBankName.trim());
+    try {
+      await initiateReturn({ orderId: returnOrderId, formData: fd }).unwrap();
+      closeReturnModal();
+      await appAlert({
+        title: 'Return request submitted',
+        message: 'We will review your request and arrange a pickup. Refund for COD orders is credited within 10 working days.',
+      });
+    } catch (err: unknown) {
+      const msg =
+        typeof err === 'object' && err !== null && 'data' in err &&
+        typeof (err as { data?: { detail?: string } }).data?.detail === 'string'
+          ? (err as { data: { detail: string } }).data.detail
+          : 'Could not submit return request. Please try again.';
+      await appAlert({ title: 'Error', message: msg });
+    }
+  };
 
   const confirmCancelOrder = async (order: UiOrder) => {
     if (confirmingRef.current.has(order.id)) return;
@@ -280,6 +346,15 @@ const OrdersScreen = () => {
                         activeOpacity={0.9}>
                         <Icon name="file-document-outline" size={14} color={primary} />
                         <Text style={[styles.invoiceBtnText, { color: primary }]}>View invoice</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    {canRequestReturn(order) ? (
+                      <TouchableOpacity
+                        style={styles.returnBtn}
+                        onPress={() => openReturnModal(order)}
+                        activeOpacity={0.9}>
+                        <Icon name="package-variant-remove" size={14} color="#7C3AED" />
+                        <Text style={styles.returnBtnText}>Return</Text>
                       </TouchableOpacity>
                     ) : null}
                   </View>
@@ -427,6 +502,91 @@ const OrdersScreen = () => {
           </View>
         </View>
       </Modal>
+      {/* Return Request Modal */}
+      <Modal
+        visible={!!returnOrderId}
+        animationType="slide"
+        transparent
+        onRequestClose={closeReturnModal}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { maxHeight: '90%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Request Return</Text>
+              <TouchableOpacity onPress={closeReturnModal} activeOpacity={0.9}>
+                <Icon name="close" size={20} color="#334155" />
+              </TouchableOpacity>
+            </View>
+            <Text style={{ color: '#475569', fontWeight: '600', fontSize: 12, marginBottom: 4 }}>
+              Order #{returnOrderNumber} · Refund within 10 working days
+            </Text>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+              <Text style={styles.returnModalLabel}>Reason for return *</Text>
+              <TextInput
+                style={[styles.returnModalInput, { height: 72, textAlignVertical: 'top' }]}
+                placeholder="Describe the issue (damaged, wrong item, etc.)"
+                placeholderTextColor="#94A3B8"
+                multiline
+                value={returnReason}
+                onChangeText={setReturnReason}
+              />
+
+              <Text style={styles.returnModalSection}>Bank Details (for COD refund)</Text>
+              <Text style={{ color: '#64748B', fontSize: 11, fontWeight: '600' }}>
+                Required only if you paid cash on delivery
+              </Text>
+
+              <Text style={styles.returnModalLabel}>Account holder name</Text>
+              <TextInput
+                style={styles.returnModalInput}
+                placeholder="Full name as on bank account"
+                placeholderTextColor="#94A3B8"
+                value={returnBankHolder}
+                onChangeText={setReturnBankHolder}
+              />
+
+              <Text style={styles.returnModalLabel}>Account number</Text>
+              <TextInput
+                style={styles.returnModalInput}
+                placeholder="e.g. 1234567890"
+                placeholderTextColor="#94A3B8"
+                keyboardType="numeric"
+                value={returnBankAccount}
+                onChangeText={setReturnBankAccount}
+              />
+
+              <Text style={styles.returnModalLabel}>IFSC code</Text>
+              <TextInput
+                style={styles.returnModalInput}
+                placeholder="e.g. SBIN0001234"
+                placeholderTextColor="#94A3B8"
+                autoCapitalize="characters"
+                value={returnBankIfsc}
+                onChangeText={setReturnBankIfsc}
+              />
+
+              <Text style={styles.returnModalLabel}>Bank name</Text>
+              <TextInput
+                style={styles.returnModalInput}
+                placeholder="e.g. State Bank of India"
+                placeholderTextColor="#94A3B8"
+                value={returnBankName}
+                onChangeText={setReturnBankName}
+              />
+
+              <TouchableOpacity
+                style={[styles.returnSubmitBtn, isSubmittingReturn && styles.returnSubmitBtnDisabled]}
+                onPress={submitReturn}
+                disabled={isSubmittingReturn}
+                activeOpacity={0.85}>
+                {isSubmittingReturn
+                  ? <ActivityIndicator color="#FFFFFF" />
+                  : <Text style={styles.returnSubmitBtnText}>Submit Return Request</Text>
+                }
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -566,6 +726,40 @@ const styles = StyleSheet.create({
   orderedLogoImage: { width: 44, height: 44, borderRadius: 8, resizeMode: 'contain' },
   orderedThroughSub: { marginTop: 4, fontSize: 11, color: '#475569', fontWeight: '700' },
   orderedThroughBrand: { color: '#DC2626', fontWeight: '900', fontSize: 15 },
+  returnBtn: {
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F3FF',
+  },
+  returnBtnText: { fontWeight: '800', fontSize: 12, marginLeft: 5, color: '#7C3AED' },
+  returnModalInput: {
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    color: '#0F172A',
+    fontWeight: '600',
+    fontSize: 13,
+    marginTop: 6,
+    backgroundColor: '#F8FAFC',
+  },
+  returnModalLabel: { color: '#334155', fontWeight: '800', fontSize: 12, marginTop: 12 },
+  returnModalSection: { color: '#7C3AED', fontWeight: '900', fontSize: 13, marginTop: 14, marginBottom: 2 },
+  returnSubmitBtn: {
+    marginTop: 18,
+    backgroundColor: '#7C3AED',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  returnSubmitBtnText: { color: '#FFFFFF', fontWeight: '900', fontSize: 15 },
+  returnSubmitBtnDisabled: { opacity: 0.6 },
 });
 
 export default OrdersScreen;

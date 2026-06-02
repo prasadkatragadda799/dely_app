@@ -1280,10 +1280,11 @@ const ProductOverviewScreen = () => {
                           text: (() => {
                             const rc = selectedProduct.reviewCount;
                             const r = selectedProduct.rating;
-                            if (rc != null && rc > 0 && r != null) {
+                            // Treat 0/missing rating as a brand-new product — friendlier than "0.0 rating".
+                            if (rc != null && rc > 0 && r != null && r > 0) {
                               return `${Number(r).toFixed(1)} · ${rc} reviews`;
                             }
-                            if (r != null) {
+                            if (r != null && r > 0) {
                               return `${Number(r).toFixed(1)} rating`;
                             }
                             return 'New on Dely';
@@ -1345,26 +1346,31 @@ const ProductOverviewScreen = () => {
 
                 <View style={styles.detailBodyStack}>
                   {hasVariants ? (
-                    <View style={styles.detailSubsection}>
-                      <Text style={[styles.detailSectionHeading, { color: primaryText }]}>
-                        Select a pack
-                      </Text>
-                      {selectedVariant ? (
-                        <Text style={styles.detailSectionSub}>
-                          {`Quantity: ${variantCardLabel(selectedVariant)}`}
+                    <View style={styles.variantSection}>
+                      <View style={styles.variantSectionHead}>
+                        <Text style={[styles.variantSectionTitle, { color: primaryText }]}>
+                          Select a pack
                         </Text>
-                      ) : null}
+                        {selectedVariant ? (
+                          <Text style={styles.variantSectionTitleSub} numberOfLines={1}>
+                            {variantCardLabel(selectedVariant)}
+                          </Text>
+                        ) : null}
+                      </View>
+
                       <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.variantCardRow}>
-                        {purchasableVariants.map(v => {
+                        contentContainerStyle={styles.variantCardRow}
+                        style={styles.variantCardRowOuter}>
+                        {purchasableVariants.map((v, idx) => {
                           const selected = v.id === selectedVariantId;
-                          const sell = v.specialPrice ?? v.mrp ?? 0;
-                          const mrp = v.mrp ?? sell;
-                          const disc =
+                          const sell = Number(v.specialPrice ?? v.mrp ?? 0);
+                          const mrp = Number(v.mrp ?? sell);
+                          const disc = Number(
                             v.discountPercentage ??
-                            (mrp > sell ? ((mrp - sell) / mrp) * 100 : 0);
+                              (mrp > sell ? ((mrp - sell) / mrp) * 100 : 0),
+                          );
                           const perUnit = variantPerUnitText(v, sell);
                           const thumb =
                             v.images && v.images.length > 0
@@ -1372,61 +1378,84 @@ const ProductOverviewScreen = () => {
                               : selectedProduct.image;
                           return (
                             <TouchableOpacity
-                              key={v.id}
+                              key={v.id ?? `v-${idx}`}
                               style={[
                                 styles.variantCard,
-                                {
-                                  borderColor: selected ? primary : '#E2E8F0',
-                                  backgroundColor: selected ? `${primary}0D` : '#FFFFFF',
-                                },
+                                selected
+                                  ? {
+                                      borderColor: primary,
+                                      backgroundColor: `${primary}0F`,
+                                    }
+                                  : { borderColor: '#E2E8F0', backgroundColor: '#FFFFFF' },
                                 selected && styles.variantCardSelected,
                               ]}
-                              activeOpacity={0.9}
+                              activeOpacity={0.85}
                               onPress={() => setSelectedVariantId(v.id ?? null)}>
                               {disc > 0 ? (
                                 <View
                                   style={[
                                     styles.variantCardBadge,
-                                    { backgroundColor: primary },
+                                    { backgroundColor: '#16A34A' },
                                   ]}>
                                   <Text style={styles.variantCardBadgeText}>
                                     {Math.round(disc)}% OFF
                                   </Text>
                                 </View>
-                              ) : null}
-                              {thumb ? (
-                                <Image
-                                  source={{ uri: thumb }}
-                                  style={styles.variantCardImage}
-                                  resizeMode="contain"
-                                />
                               ) : (
-                                <View
-                                  style={[
-                                    styles.variantCardImage,
-                                    styles.variantCardImagePlaceholder,
-                                  ]}>
-                                  <Icon name="image-off-outline" size={20} color="#CBD5E1" />
-                                </View>
+                                <View style={styles.variantCardBadgeSpacer} />
                               )}
+
+                              <View style={styles.variantCardImageWrap}>
+                                {thumb ? (
+                                  <Image
+                                    source={{ uri: thumb }}
+                                    style={styles.variantCardImage}
+                                    resizeMode="contain"
+                                  />
+                                ) : (
+                                  <View style={styles.variantCardImagePlaceholder}>
+                                    <Icon
+                                      name="image-off-outline"
+                                      size={22}
+                                      color="#CBD5E1"
+                                    />
+                                  </View>
+                                )}
+                              </View>
+
                               <Text
                                 style={[styles.variantCardLabel, { color: primaryText }]}
                                 numberOfLines={2}>
-                                {variantCardLabel(v)}
+                                {variantCardLabel(v) || `Option ${idx + 1}`}
                               </Text>
                               <View style={styles.variantCardPriceRow}>
                                 <Text
-                                  style={[styles.variantCardPrice, { color: primaryText }]}>
-                                  Rs {formatRs(sell)}
+                                  style={[styles.variantCardPrice, { color: primaryText }]}
+                                  numberOfLines={1}>
+                                  ₹{formatRs(sell)}
                                 </Text>
                                 {mrp > sell ? (
-                                  <Text style={styles.variantCardMrp}>
-                                    {formatRs(mrp)}
+                                  <Text style={styles.variantCardMrp} numberOfLines={1}>
+                                    ₹{formatRs(mrp)}
                                   </Text>
                                 ) : null}
                               </View>
                               {perUnit ? (
-                                <Text style={styles.variantCardPerUnit}>{perUnit}</Text>
+                                <Text style={styles.variantCardPerUnit} numberOfLines={1}>
+                                  {perUnit}
+                                </Text>
+                              ) : (
+                                <View style={styles.variantCardPerUnitSpacer} />
+                              )}
+
+                              {selected ? (
+                                <View
+                                  style={[
+                                    styles.variantCardSelectedTick,
+                                    { backgroundColor: primary },
+                                  ]}>
+                                  <Icon name="check" size={12} color="#FFFFFF" />
+                                </View>
                               ) : null}
                             </TouchableOpacity>
                           );
@@ -2415,14 +2444,19 @@ const styles = StyleSheet.create({
   uiAlertMessage: { color: '#FFFFFF', fontWeight: '600', marginTop: 1, fontSize: 12 },
   detailAddBtn: {
     flex: 1,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 4,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     backgroundColor: 'transparent',
+    shadowColor: '#1D4ED8',
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
   detailAddTextCol: {
     marginLeft: 6,
@@ -2623,30 +2657,60 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
   },
-  variantCardRow: {
+  variantSection: {
+    marginTop: 18,
+    marginBottom: 6,
+  },
+  variantSectionHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    paddingHorizontal: 2,
+    gap: 8,
+  },
+  variantSectionTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  variantSectionTitleSub: {
+    flexShrink: 1,
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  variantCardRowOuter: {
     marginTop: 10,
-    paddingVertical: 2,
+    marginHorizontal: -14,
+    paddingHorizontal: 14,
+    minHeight: 200,
+  },
+  variantCardRow: {
+    paddingVertical: 4,
     paddingRight: 14,
     gap: 10,
     flexDirection: 'row',
   },
   variantCard: {
-    width: 132,
+    width: 138,
+    minHeight: 188,
     borderWidth: 1.5,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 10,
     backgroundColor: '#FFFFFF',
+    position: 'relative',
+    overflow: 'hidden',
   },
   variantCardSelected: {
     shadowColor: '#1D4ED8',
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   variantCardBadge: {
     alignSelf: 'flex-start',
-    borderRadius: 5,
+    borderRadius: 4,
     paddingHorizontal: 6,
     paddingVertical: 2,
     marginBottom: 6,
@@ -2655,27 +2719,43 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '900',
+    letterSpacing: 0.3,
+  },
+  variantCardBadgeSpacer: {
+    height: 18,
+    marginBottom: 6,
+  },
+  variantCardImageWrap: {
+    width: '100%',
+    height: 76,
+    marginBottom: 8,
+    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   variantCardImage: {
     width: '100%',
-    height: 64,
-    marginBottom: 8,
+    height: '100%',
   },
   variantCardImagePlaceholder: {
+    width: '100%',
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 8,
   },
   variantCardLabel: {
     fontSize: 12,
     fontWeight: '800',
-    minHeight: 32,
+    minHeight: 30,
+    lineHeight: 15,
   },
   variantCardPriceRow: {
     marginTop: 6,
     flexDirection: 'row',
     alignItems: 'baseline',
+    flexWrap: 'wrap',
     gap: 6,
   },
   variantCardPrice: {
@@ -2692,6 +2772,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#64748B',
     fontWeight: '600',
+  },
+  variantCardPerUnitSpacer: {
+    height: 13,
+    marginTop: 2,
+  },
+  variantCardSelectedTick: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   browsePriceActions: {
     marginTop: 10,

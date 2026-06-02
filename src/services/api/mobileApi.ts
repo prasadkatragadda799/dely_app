@@ -49,6 +49,7 @@ type RegisterBody = {
   state?: string;
   pincode?: string;
 };
+type ForgotPasswordBody = { email: string };
 type ResetPasswordBody = { token: string; new_password: string };
 type RefreshTokenBody = { refreshToken: string };
 type ChangePasswordBody = {
@@ -509,11 +510,25 @@ export const mobileApi = createApi({
       query: ({ orderId }) => ({
         url: `/orders/${orderId}/cancel`,
         method: 'POST',
-        // Empty object: some stacks send JSON `null` or omit body and FastAPI then
-        // reports body as missing; `{}` always validates as OrderCancel.
         body: {},
       }),
       invalidatesTags: ['Orders'],
+    }),
+
+    initiateReturn: builder.mutation<ApiEnvelope<unknown>, { orderId: string; formData: FormData }>({
+      query: ({ orderId, formData }) => ({
+        url: `/orders/${orderId}/return`,
+        method: 'POST',
+        body: formData,
+        // Let fetch set Content-Type boundary automatically for multipart
+        formData: true,
+      }),
+      invalidatesTags: ['Orders'],
+    }),
+
+    getReturnStatus: builder.query<ApiEnvelope<unknown>, OrderIdParam>({
+      query: ({ orderId }) => `/orders/${orderId}/return`,
+      providesTags: ['Orders'],
     }),
 
     getProfile: builder.query<ApiEnvelope<unknown>, void>({
@@ -759,6 +774,23 @@ export const mobileApi = createApi({
       query: () => '/delivery/orders/assigned',
       providesTags: ['Delivery'],
     }),
+
+    getDeliveryReturnPickups: builder.query<ApiEnvelope<unknown>, void>({
+      query: () => '/delivery/orders/returns/assigned',
+      providesTags: ['Delivery'],
+    }),
+
+    updateDeliveryReturnStatus: builder.mutation<
+      ApiEnvelope<unknown>,
+      { returnId: string; status: 'picked_up' | 'received_at_hub' }
+    >({
+      query: ({ returnId, status }) => ({
+        url: `/delivery/orders/returns/${returnId}/status`,
+        method: 'PUT',
+        body: { status },
+      }),
+      invalidatesTags: ['Delivery'],
+    }),
     getDirectionsRoute: builder.query<
       ApiEnvelope<DirectionsResponse>,
       GetDirectionsQuery
@@ -877,6 +909,8 @@ export const {
   useGetOrderInvoiceQuery,
   useTrackOrderQuery,
   useCancelOrderApiMutation,
+  useInitiateReturnMutation,
+  useGetReturnStatusQuery,
   useGetProfileQuery,
   useUpdateProfileMutation,
   useChangePasswordMutation,
@@ -916,7 +950,9 @@ export const {
   useGetDeliveryDashboardSummaryQuery,
   useGetPaymentQrQuery,
   useGetDeliveryAssignedOrdersQuery,
+  useGetDeliveryReturnPickupsQuery,
   useUpdateDeliveryOrderStatusMutation,
+  useUpdateDeliveryReturnStatusMutation,
   useRevertDeliveryOrderToHubMutation,
   useUpdateDeliveryCurrentLocationMutation,
   useGetDirectionsRouteQuery,

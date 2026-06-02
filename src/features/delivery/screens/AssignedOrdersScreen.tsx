@@ -17,8 +17,10 @@ import { useOrders } from '../../../hooks/useOrders';
 import { DeliveryTabParamList } from '../../../navigation/types';
 import {
   useGetDeliveryMeQuery,
+  useGetDeliveryReturnPickupsQuery,
   useUpdateDeliveryMeMutation,
   useToggleDeliveryAvailabilityMutation,
+  useUpdateDeliveryReturnStatusMutation,
 } from '../../../services/api/mobileApi';
 import { Order } from '../../../types';
 
@@ -40,10 +42,41 @@ const isUrgent = (iso: string): boolean => {
   return mins >= 5;
 };
 
+type ReturnPickup = {
+  returnId: string;
+  orderId: string;
+  orderNumber?: string;
+  status: string;
+  reason: string;
+  customerName: string;
+  customerPhone?: string;
+  deliveryAddress: Record<string, unknown>;
+  orderTotal: number;
+  paymentMethod?: string;
+  createdAt: string;
+};
+
+const PURPLE = '#7C3AED';
+
 const AssignedOrdersScreen = () => {
   const { assigned, ongoing, history, setStatus, isLoading } = useOrders();
   const navigation = useNavigation<BottomTabNavigationProp<DeliveryTabParamList>>();
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [updatingReturnId, setUpdatingReturnId] = useState<string | null>(null);
+
+  const { data: returnPickupsRes, refetch: refetchReturns } = useGetDeliveryReturnPickupsQuery();
+  const [updateReturnStatus] = useUpdateDeliveryReturnStatusMutation();
+  const returnPickups: ReturnPickup[] = ((returnPickupsRes?.data as any)?.returns ?? []) as ReturnPickup[];
+
+  const handleReturnPickup = async (returnId: string, nextStatus: 'picked_up' | 'received_at_hub') => {
+    setUpdatingReturnId(returnId);
+    try {
+      await updateReturnStatus({ returnId, status: nextStatus }).unwrap();
+      await refetchReturns();
+    } finally {
+      setUpdatingReturnId(null);
+    }
+  };
 
   const { data: meRes } = useGetDeliveryMeQuery();
   // Kept import for other future uses; availability uses its own mutation.
@@ -210,6 +243,57 @@ const AssignedOrdersScreen = () => {
         </View>
       </View>
 
+      {/* Return pickup cards */}
+      {returnPickups.length > 0 && (
+        <View style={styles.listContent}>
+          {returnPickups.map(ret => {
+            const isUpdating = updatingReturnId === ret.returnId;
+            const nextStatus = ret.status === 'pickup_assigned' ? 'picked_up' : 'received_at_hub';
+            const actionLabel = ret.status === 'pickup_assigned' ? 'Picked Up' : 'Received at Hub';
+            const addr = ret.deliveryAddress;
+            const addressStr = typeof addr === 'object' && addr
+              ? [(addr as any).address_line1, (addr as any).city, (addr as any).pincode].filter(Boolean).join(', ')
+              : 'Address not available';
+            return (
+              <View key={ret.returnId} style={styles.returnCard}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardHeaderLeft}>
+                    <Text style={styles.returnCustomerName}>{ret.customerName}</Text>
+                    <Text style={styles.returnOrderId}>#{(ret.orderNumber ?? ret.orderId).slice(-8).toUpperCase()}</Text>
+                  </View>
+                  <View style={styles.returnBadge}>
+                    <Icon name="package-variant-remove" size={11} color={PURPLE} />
+                    <Text style={styles.returnBadgeText}>Return</Text>
+                  </View>
+                </View>
+                <View style={styles.infoRow}>
+                  <Icon name="map-marker-outline" size={15} color={PURPLE} />
+                  <Text style={styles.infoText} numberOfLines={2}>{addressStr}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Icon name="text-box-outline" size={15} color={PURPLE} />
+                  <Text style={styles.infoText} numberOfLines={2}>{ret.reason}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Icon name="currency-inr" size={15} color={PURPLE} />
+                  <Text style={[styles.amountText, { color: PURPLE }]}>₹{ret.orderTotal.toLocaleString('en-IN')}</Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.returnActionBtn, isUpdating && styles.acceptButtonDisabled]}
+                  onPress={() => handleReturnPickup(ret.returnId, nextStatus as 'picked_up' | 'received_at_hub')}
+                  disabled={isUpdating}
+                  activeOpacity={0.85}>
+                  {isUpdating
+                    ? <ActivityIndicator size="small" color={WHITE} />
+                    : <><Icon name="check-circle-outline" size={14} color={WHITE} /><Text style={styles.returnActionBtnText}>{actionLabel}</Text></>
+                  }
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+        </View>
+      )}
+
       <FlatList
         data={assigned}
         keyExtractor={item => item.id}
@@ -227,24 +311,26 @@ const AssignedOrdersScreen = () => {
           />
         }
         ListEmptyComponent={
-          <View style={styles.emptyCard}>
-            <Icon name="clipboard-check-outline" size={40} color="#BBF7D0" />
-            <Text style={styles.emptyTitle}>All caught up!</Text>
-            <Text style={styles.emptyMeta}>
-              {isAvailable
-                ? 'No new orders assigned yet. Pull down to refresh.'
-                : 'You are offline. Go online to receive orders.'}
-            </Text>
-            {!isAvailable && (
-              <TouchableOpacity
-                style={styles.goOnlineButton}
-                onPress={handleToggleOnline}
-                activeOpacity={0.85}>
-                <Icon name="wifi" size={16} color={WHITE} />
-                <Text style={styles.goOnlineText}>Go Online</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          returnPickups.length > 0 ? null : (
+            <View style={styles.emptyCard}>
+              <Icon name="clipboard-check-outline" size={40} color="#BBF7D0" />
+              <Text style={styles.emptyTitle}>All caught up!</Text>
+              <Text style={styles.emptyMeta}>
+                {isAvailable
+                  ? 'No new orders assigned yet. Pull down to refresh.'
+                  : 'You are offline. Go online to receive orders.'}
+              </Text>
+              {!isAvailable && (
+                <TouchableOpacity
+                  style={styles.goOnlineButton}
+                  onPress={handleToggleOnline}
+                  activeOpacity={0.85}>
+                  <Icon name="wifi" size={16} color={WHITE} />
+                  <Text style={styles.goOnlineText}>Go Online</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )
         }
       />
     </SafeAreaView>
@@ -414,6 +500,46 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   goOnlineText: { color: WHITE, fontWeight: '900', fontSize: 14 },
+
+  // Return pickup card
+  returnCard: {
+    backgroundColor: '#FAF5FF',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: '#C4B5FD',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  returnCustomerName: { fontWeight: '900', fontSize: 16, color: '#4C1D95' },
+  returnOrderId: { color: '#7C3AED', marginTop: 2, fontWeight: '600', fontSize: 12 },
+  returnBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EDE9FE',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#C4B5FD',
+  },
+  returnBadgeText: { color: '#7C3AED', fontSize: 11, fontWeight: '800' },
+  returnActionBtn: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#7C3AED',
+    paddingVertical: 11,
+    borderRadius: 10,
+  },
+  returnActionBtnText: { color: WHITE, fontWeight: '900', fontSize: 13 },
 });
 
 export default AssignedOrdersScreen;
