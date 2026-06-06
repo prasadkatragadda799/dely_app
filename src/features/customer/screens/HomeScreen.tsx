@@ -45,6 +45,8 @@ import {
   useGetKycStatusQuery,
 } from '../../../services/api/mobileApi';
 import type { Deal } from '../../../types';
+import { palette, shadow, getDivision } from '../../../utils/theme';
+import AppImage, { prefetchImages } from '../../../shared/ui/AppImage';
 
 type DivisionKey = 'fmcg' | 'homeKitchen';
 
@@ -89,9 +91,15 @@ const HomeScreen = () => {
   }, [kycEnvelope]);
   const isKycVerified = kycStatus === 'verified';
   const isKycLoaded = kycStatus !== null;
-  const { data: fmcgProds = [], isLoading: isFmcgLoading, isError: isFmcgError } = useGetProductsQuery({ category: 'fmcg' });
-  const { data: kitchenProds = [], isLoading: isKitchenLoading } = useGetProductsQuery({ category: 'kitchen' });
-  const { data: homeProds = [], isLoading: isHomeLoading } = useGetProductsQuery({ category: 'home' });
+  // Customer's default delivery pincode — drives zone serviceability (show-all, mark-unavailable).
+  const { data: deliveryLocationsEnvelope } = useGetDeliveryLocationsQuery();
+  const deliveryLocations = (deliveryLocationsEnvelope?.data as any[]) ?? [];
+  const defaultLocation = deliveryLocations.find((l: any) => l.is_default) ?? deliveryLocations[0];
+  const defaultPincode: string = defaultLocation?.pincode ?? '';
+  const deliverTo = defaultPincode || undefined;
+  const { data: fmcgProds = [], isLoading: isFmcgLoading, isError: isFmcgError } = useGetProductsQuery({ category: 'fmcg', deliverTo });
+  const { data: kitchenProds = [], isLoading: isKitchenLoading } = useGetProductsQuery({ category: 'kitchen', deliverTo });
+  const { data: homeProds = [], isLoading: isHomeLoading } = useGetProductsQuery({ category: 'home', deliverTo });
   const allProducts = useMemo(() => [...fmcgProds, ...kitchenProds, ...homeProds], [fmcgProds, kitchenProds, homeProds]);
   const isProductsLoading = isFmcgLoading || isKitchenLoading || isHomeLoading;
   const isProductsError = isFmcgError;
@@ -105,10 +113,6 @@ const HomeScreen = () => {
   const manualLocationSet = useRef(false);
 
   // Location availability check
-  const { data: deliveryLocationsEnvelope } = useGetDeliveryLocationsQuery();
-  const deliveryLocations = (deliveryLocationsEnvelope?.data as any[]) ?? [];
-  const defaultLocation = deliveryLocations.find((l: any) => l.is_default) ?? deliveryLocations[0];
-  const defaultPincode: string = defaultLocation?.pincode ?? '';
   const { data: locationCheckEnvelope } = useCheckServiceLocationQuery(defaultPincode, {
     skip: !defaultPincode,
   });
@@ -120,7 +124,6 @@ const HomeScreen = () => {
   const [isListening, setIsListening] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [heroDealIndex, setHeroDealIndex] = useState(0);
-  const [stripDealIndex, setStripDealIndex] = useState(0);
   const tabBarHeight = useBottomTabBarHeight();
 
   const { width: windowWidth } = useWindowDimensions();
@@ -129,20 +132,14 @@ const HomeScreen = () => {
   const heroPageWidth = Math.max(320, windowWidth);
   const heroCardWidth = Math.max(260, windowWidth - contentPad * 2);
   const gridGap = 8;
-  const gridCellWidth = (windowWidth - contentPad * 2 - gridGap * 2) / 3;
+  const gridCellWidth = Math.floor((windowWidth - contentPad * 2 - gridGap * 2) / 3);
   const gridCellWidthFour = (windowWidth - contentPad * 2 - gridGap * 3) / 4;
-  const stripCardWidth = Math.min(200, windowWidth * 0.52);
 
   const isHomeKitchen = activeDivision === 'homeKitchen';
-  const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
-  const primarySoft = isHomeKitchen
-    ? 'rgba(22,163,74,0.12)'
-    : 'rgba(29,78,216,0.12)';
-  const primaryBorder = isHomeKitchen
-    ? 'rgba(22,163,74,0.25)'
-    : 'rgba(29,78,216,0.25)';
-  const primaryText = isHomeKitchen ? '#14532D' : '#0B3B8F';
-  const secondary = isHomeKitchen ? '#22C55E' : '#2563EB';
+  const dz = getDivision(activeDivision);
+  const primary = dz.primary;
+  const primaryBorder = dz.border;
+  const primaryText = dz.primaryDeep;
 
   const selectDivision = useCallback(
     (key: DivisionKey) => {
@@ -281,7 +278,7 @@ const HomeScreen = () => {
   }, [divisionProducts, apiCompanies]);
 
   const dealsForDivision = useMemo(() => {
-    const color = isHomeKitchen ? '#16A34A' : '#1D4ED8';
+    const color = isHomeKitchen ? '#22C55E' : '#3B82F6';
     return offers.map(d => ({
       ...d,
       color,
@@ -354,7 +351,16 @@ const HomeScreen = () => {
       }));
   }, [categoryTreeRoots, categories, categoryCountMap]);
 
-  const visibleProducts = filteredProducts.slice(0, 4);
+  const visibleProducts = filteredProducts.slice(0, 6);
+
+  // Warm the image cache for everything visible on this screen so it appears
+  // instantly instead of fetching lazily as the user scrolls.
+  useEffect(() => {
+    prefetchImages(heroDeals.map(d => d.image), heroCardWidth);
+    prefetchImages(categoryGridItems.map(c => c.imageUrl), 90);
+    prefetchImages(companyGridItems.map(c => companyLogoByName[c]), 90);
+    prefetchImages(visibleProducts.map(p => p.image), 220);
+  }, [heroDeals, categoryGridItems, companyGridItems, companyLogoByName, visibleProducts, heroCardWidth]);
 
   const onHeroMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const x = e.nativeEvent.contentOffset.x;
@@ -364,13 +370,6 @@ const HomeScreen = () => {
     );
   };
 
-  const onStripMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const x = e.nativeEvent.contentOffset.x;
-    const idx = Math.round(x / (stripCardWidth + 10));
-    setStripDealIndex(
-      Math.max(0, Math.min(heroDeals.length - 1, idx)),
-    );
-  };
   React.useEffect(() => {
     Voice.onSpeechResults = e => {
       const value = e.value?.[0] ?? '';
@@ -521,149 +520,75 @@ const HomeScreen = () => {
 
   React.useEffect(() => {
     setHeroDealIndex(0);
-    setStripDealIndex(0);
   }, [activeDivision, heroDeals.length]);
-
-  const activeDivisionMeta = divisions.find(d => d.key === activeDivision);
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      {/* Gradient-like backdrop (simulated with translucent layers) */}
-      <View
-        style={[
-          styles.gradientLeft,
-          { backgroundColor: primary, opacity: 0.22 },
-        ]}
-      />
-      <View
-        style={[
-          styles.gradientRight,
-          { backgroundColor: secondary, opacity: 0.18 },
-        ]}
-      />
       <ScrollView
-        style={[styles.container, { backgroundColor: 'transparent' }]}
+        style={styles.container}
         contentContainerStyle={[
           styles.content,
-          {
-            paddingTop: 10,
-            paddingBottom: Math.max(tabBarHeight + 28, 100),
-          },
+          { paddingBottom: Math.max(tabBarHeight + 28, 100) },
         ]}
         nestedScrollEnabled
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled">
 
-      {/* Location unavailability banner */}
-      {isLocationUnavailable && (
-        <View style={styles.locationUnavailableBanner}>
-          <Icon name="map-marker-off" size={20} color="#92400E" style={{ marginRight: 8 }} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.locationUnavailableTitle}>Products not available in your location</Text>
-            <Text style={styles.locationUnavailableSubtitle}>
-              We don't deliver to pincode {defaultPincode} yet. Update your delivery address to check availability.
-            </Text>
-          </View>
-        </View>
-      )}
-
-      {/* KYC verification banner */}
-      {isKycLoaded && !isKycVerified && (
-        <View style={[
-          styles.kycPendingBanner,
-          kycStatus === 'rejected' && { backgroundColor: '#FEE2E2', borderColor: '#FCA5A5' },
-        ]}>
-          <Icon
-            name={kycStatus === 'rejected' ? 'shield-remove-outline' : 'shield-alert-outline'}
-            size={20}
-            color={kycStatus === 'rejected' ? '#991B1B' : '#92400E'}
-            style={{ marginRight: 10 }}
-          />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.kycPendingTitle, kycStatus === 'rejected' && { color: '#991B1B' }]}>
-              {kycStatus === 'pending' ? 'KYC Under Review' : kycStatus === 'rejected' ? 'KYC Rejected' : 'KYC Verification Pending'}
-            </Text>
-            <Text style={[styles.kycPendingSubtitle, kycStatus === 'rejected' && { color: '#B91C1C' }]}>
-              {kycStatus === 'pending'
-                ? 'Your documents are being reviewed. Shopping is enabled once verified.'
-                : kycStatus === 'rejected'
-                ? 'Your KYC was rejected. Please update and resubmit your documents.'
-                : 'Complete KYC to unlock browsing and shopping.'}
-            </Text>
-          </View>
+      {/* ─── Colored hero header: delivery location + quick actions ─── */}
+      <View style={[styles.headerHero, { backgroundColor: primary }]}>
+        <View style={styles.headerTopRow}>
           <TouchableOpacity
-            onPress={() => navigation.getParent?.()?.navigate('Profile')}
-            style={styles.kycPendingBtn}
+            style={styles.headerLocBtn}
+            onPress={() => navigation.navigate('LocationPicker')}
+            disabled={isLocating}
             activeOpacity={0.85}>
-            <Text style={[styles.kycPendingBtnText, kycStatus === 'rejected' && { color: '#991B1B' }]}>
-              {kycStatus === 'rejected' ? 'Resubmit' : kycStatus === 'pending' ? 'View' : 'Complete'}
-            </Text>
+            <View style={styles.headerLocPin}>
+              <Icon name="map-marker" size={18} color="#FFFFFF" />
+            </View>
+            <View style={styles.headerLocTextWrap}>
+              <Text style={styles.headerLocLabel}>Delivery to</Text>
+              <View style={styles.headerLocCityRow}>
+                <Text style={styles.headerLocCity} numberOfLines={1}>
+                  {isLocating ? 'Locating…' : currentLocationText}
+                </Text>
+                <Icon name="chevron-down" size={18} color="#FFFFFF" />
+              </View>
+            </View>
           </TouchableOpacity>
-        </View>
-      )}
-
-      <View style={styles.paperHeader}>
-        <View style={styles.paperHeaderTop}>
-          <View style={styles.paperBrandBlock}>
-            <View style={[styles.paperLogoMark, { backgroundColor: primarySoft }]}>
-              <Image
-                source={require('../../../../assets/logo.png')}
-                style={styles.paperLogoImage}
-                resizeMode="contain"
-                accessibilityLabel="Dely"
-              />
-            </View>
-            <View style={styles.paperShopFor}>
-              <Text style={[styles.paperShopForLabel, { color: '#64748B' }]}>
-                Shop for
-              </Text>
-              <Text
-                style={[styles.paperShopForValue, { color: primaryText }]}
-                numberOfLines={2}>
-                {activeDivisionMeta?.label ?? 'Food-FMCG'}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.paperHeaderActions}>
+          <View style={styles.headerActions}>
             <TouchableOpacity
               onPress={() => navigation.navigate('Notifications')}
-              style={[styles.paperIconBtn, { borderColor: primaryBorder }]}
-              activeOpacity={0.9}>
-              <Icon name="bell-outline" size={22} color={primary} />
+              style={styles.headerIconBtn}
+              activeOpacity={0.85}>
+              <Icon name="bell-outline" size={20} color="#FFFFFF" />
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => navigation.getParent?.()?.navigate('Cart')}
-              style={[styles.paperIconBtn, { borderColor: primaryBorder }]}
-              activeOpacity={0.9}>
-              <Icon name="cart-outline" size={22} color={primary} />
+              style={styles.headerIconBtn}
+              activeOpacity={0.85}>
+              <Icon name="cart-outline" size={20} color="#FFFFFF" />
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.paperIconBtn, { borderColor: primaryBorder }]}
               onPress={() => navigation.getParent?.()?.navigate('Profile')}
-              activeOpacity={0.9}>
-              <Icon name="account-outline" size={22} color={primary} />
+              style={styles.headerIconBtn}
+              activeOpacity={0.85}>
+              <Icon name="account-outline" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         </View>
       </View>
 
-      <View
-        style={[
-          styles.searchWrap,
-          {
-            backgroundColor: '#FFFFFF',
-            borderColor: primaryBorder,
-          },
-        ]}>
+      {/* Elevated search bar overlapping the header's bottom edge */}
+      <View style={styles.searchWrap}>
         <Icon name="magnify" size={20} color={primary} />
         <TextInput
-          style={[styles.search, { color: primaryText }]}
+          style={[styles.search, { color: palette.ink }]}
           placeholder={
             isHomeKitchen
               ? 'Search kitchen & home essentials...'
               : 'Search groceries & daily needs...'
           }
-          placeholderTextColor="#94A3B8"
+          placeholderTextColor={palette.faint}
           value={query}
           onChangeText={setQuery}
           returnKeyType="search"
@@ -728,11 +653,9 @@ const HomeScreen = () => {
         </TouchableOpacity>
       </View>
 
+      {/* Division segmented toggle */}
       <View
-        style={[
-          styles.divisionTrackOuter,
-          { borderColor: primaryBorder, backgroundColor: '#E8EEF4' },
-        ]}
+        style={[styles.divisionTrackOuter, { borderColor: primaryBorder }]}
         onLayout={onDivisionTrackLayout}>
         <Animated.View
           pointerEvents="none"
@@ -758,12 +681,12 @@ const HomeScreen = () => {
                 <Icon
                   name={item.icon}
                   size={22}
-                  color={isActive ? '#FFFFFF' : '#64748B'}
+                  color={isActive ? '#FFFFFF' : palette.muted}
                 />
                 <Text
                   style={[
                     styles.divisionTrackLabel,
-                    { color: isActive ? '#FFFFFF' : '#475569' },
+                    { color: isActive ? '#FFFFFF' : palette.body },
                   ]}
                   numberOfLines={1}>
                   {item.segmentLabel}
@@ -773,33 +696,57 @@ const HomeScreen = () => {
           })}
         </View>
       </View>
-      <Text
-        style={[styles.divisionTaglineCaption, { color: '#64748B' }]}
-        numberOfLines={2}>
+      <Text style={styles.divisionTaglineCaption} numberOfLines={2}>
         {divisions.find(d => d.key === activeDivision)?.tagline}
       </Text>
 
-      <TouchableOpacity
-        style={[
-          styles.locationPill,
-          { borderColor: primaryBorder, backgroundColor: '#FFFFFF' },
-        ]}
-        onPress={() => navigation.navigate('LocationPicker')}
-        disabled={isLocating}
-        activeOpacity={0.9}>
-        <Icon name="map-marker-outline" size={20} color={primary} />
-        <View style={styles.locationPillTextWrap}>
-          <Text style={[styles.locationPillTitle, { color: primaryText }]}>
-            Delivery location
-          </Text>
-          <Text
-            style={[styles.locationPillSub, { color: '#64748B' }]}
-            numberOfLines={1}>
-            {isLocating ? 'Locating…' : currentLocationText}
-          </Text>
+      {/* Location unavailability banner */}
+      {isLocationUnavailable && (
+        <View style={styles.locationUnavailableBanner}>
+          <Icon name="map-marker-off" size={20} color="#92400E" style={{ marginRight: 8 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.locationUnavailableTitle}>Products not available in your location</Text>
+            <Text style={styles.locationUnavailableSubtitle}>
+              We don't deliver to pincode {defaultPincode} yet. Update your delivery address to check availability.
+            </Text>
+          </View>
         </View>
-        <Icon name="chevron-right" size={22} color="#94A3B8" />
-      </TouchableOpacity>
+      )}
+
+      {/* KYC verification banner */}
+      {isKycLoaded && !isKycVerified && (
+        <View style={[
+          styles.kycPendingBanner,
+          kycStatus === 'rejected' && { backgroundColor: '#FEE2E2', borderColor: '#FCA5A5' },
+        ]}>
+          <Icon
+            name={kycStatus === 'rejected' ? 'shield-remove-outline' : 'shield-alert-outline'}
+            size={20}
+            color={kycStatus === 'rejected' ? '#991B1B' : '#92400E'}
+            style={{ marginRight: 10 }}
+          />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.kycPendingTitle, kycStatus === 'rejected' && { color: '#991B1B' }]}>
+              {kycStatus === 'pending' ? 'KYC Under Review' : kycStatus === 'rejected' ? 'KYC Rejected' : 'KYC Verification Pending'}
+            </Text>
+            <Text style={[styles.kycPendingSubtitle, kycStatus === 'rejected' && { color: '#B91C1C' }]}>
+              {kycStatus === 'pending'
+                ? 'Your documents are being reviewed. Shopping is enabled once verified.'
+                : kycStatus === 'rejected'
+                ? 'Your KYC was rejected. Please update and resubmit your documents.'
+                : 'Complete KYC to unlock browsing and shopping.'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => navigation.getParent?.()?.navigate('Profile')}
+            style={styles.kycPendingBtn}
+            activeOpacity={0.85}>
+            <Text style={[styles.kycPendingBtnText, kycStatus === 'rejected' && { color: '#991B1B' }]}>
+              {kycStatus === 'rejected' ? 'Resubmit' : kycStatus === 'pending' ? 'View' : 'Complete'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {isScreenLoading ? (
         <View style={styles.screenLoaderWrap}>
@@ -848,27 +795,50 @@ const HomeScreen = () => {
               alignItems: 'center',
               justifyContent: 'center',
             }}>
-            <View
+            <TouchableOpacity
+              activeOpacity={0.92}
+              onPress={() =>
+                navigation.navigate('ProductOverview', { division: activeDivision })
+              }
               style={[
                 styles.heroSlideCard,
-                {
-                  width: heroCardWidth,
-                  backgroundColor: item.color,
-                },
+                { width: heroCardWidth },
+                !item.image && { backgroundColor: item.color },
               ]}>
               {item.image ? (
-                <Image
-                  source={{ uri: item.image }}
+                <AppImage
+                  uri={item.image}
+                  width={heroCardWidth}
                   style={StyleSheet.absoluteFillObject}
                   resizeMode="cover"
+                  backgroundColor="transparent"
                 />
               ) : null}
-              <View style={styles.heroSlideOverlay} />
+              <View style={styles.heroScrimSoft} pointerEvents="none" />
+              <View style={styles.heroScrimStrong} pointerEvents="none" />
+              {item.id !== 'placeholder-hero' ? (
+                <View style={styles.heroBadge}>
+                  <Icon name="sale" size={12} color="#FFFFFF" />
+                  <Text style={styles.heroBadgeText}>OFFER</Text>
+                </View>
+              ) : null}
               <View style={styles.heroSlideTextBlock}>
-                <Text style={styles.heroSlideTitle}>{item.title}</Text>
-                <Text style={styles.heroSlideSubtitle}>{item.subtitle}</Text>
+                <Text style={styles.heroSlideTitle} numberOfLines={1}>
+                  {item.title}
+                </Text>
+                <Text style={styles.heroSlideSubtitle} numberOfLines={2}>
+                  {item.subtitle}
+                </Text>
+                {item.id !== 'placeholder-hero' ? (
+                  <View style={styles.heroCta}>
+                    <Text style={[styles.heroCtaText, { color: item.color }]}>
+                      Shop now
+                    </Text>
+                    <Icon name="arrow-right" size={14} color={item.color} />
+                  </View>
+                ) : null}
               </View>
-            </View>
+            </TouchableOpacity>
           </View>
         )}
       />
@@ -897,12 +867,13 @@ const HomeScreen = () => {
         <Text style={[styles.paperSectionTitle, { color: primaryText }]}>
           Quick links
         </Text>
-        <View style={[styles.quickGrid, { gap: gridGap }]}>
+        <View style={styles.quickGrid}>
           {(
             [
               {
                 label: 'Top offers',
-                icon: 'fire' as const,
+                icon: 'sale' as const,
+                tint: '#F97316',
                 onPress: () =>
                   navigation.navigate('ProductOverview', {
                     division: activeDivision,
@@ -911,6 +882,7 @@ const HomeScreen = () => {
               {
                 label: 'Brands',
                 icon: 'storefront-outline' as const,
+                tint: '#2563EB',
                 onPress: () =>
                   navigation.navigate('CategoryBrowse', {
                     division: activeDivision,
@@ -920,6 +892,7 @@ const HomeScreen = () => {
               {
                 label: 'Categories',
                 icon: 'view-grid-outline' as const,
+                tint: '#7C3AED',
                 onPress: () =>
                   navigation.navigate('CategoryBrowse', {
                     division: activeDivision,
@@ -928,16 +901,19 @@ const HomeScreen = () => {
               {
                 label: 'Orders',
                 icon: 'truck-outline' as const,
+                tint: '#0EA5E9',
                 onPress: () => navigation.navigate('Orders'),
               },
               {
                 label: 'Wishlist',
                 icon: 'heart-outline' as const,
+                tint: '#EC4899',
                 onPress: () => navigation.navigate('Wishlist'),
               },
               {
                 label: 'Browse all',
                 icon: 'text-search' as const,
+                tint: '#14B8A6',
                 onPress: () =>
                   navigation.navigate('ProductOverview', {
                     division: activeDivision,
@@ -947,25 +923,18 @@ const HomeScreen = () => {
           ).map(cell => (
             <TouchableOpacity
               key={cell.label}
-              style={[
-                styles.quickCell,
-                {
-                  width: gridCellWidth,
-                  borderColor: primaryBorder,
-                  backgroundColor: '#FFFFFF',
-                },
-              ]}
+              style={[styles.quickCell, { width: gridCellWidth }]}
               onPress={cell.onPress}
-              activeOpacity={0.92}>
+              activeOpacity={0.9}>
               <View
                 style={[
                   styles.quickCellIconWrap,
-                  { backgroundColor: primarySoft },
+                  { backgroundColor: `${cell.tint}1A` },
                 ]}>
-                <Icon name={cell.icon} size={22} color={primary} />
+                <Icon name={cell.icon} size={24} color={cell.tint} />
               </View>
               <Text
-                style={[styles.quickCellLabel, { color: primaryText }]}
+                style={[styles.quickCellLabel, { color: palette.ink }]}
                 numberOfLines={2}>
                 {cell.label}
               </Text>
@@ -1069,60 +1038,6 @@ const HomeScreen = () => {
         )}
       </View>
 
-      <Text style={[styles.paperSectionTitle, { color: primaryText }]}>
-        More offers
-      </Text>
-      <FlatList
-        data={heroDeals}
-        keyExtractor={item => `strip-${item.id}`}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        snapToInterval={stripCardWidth + 10}
-        decelerationRate="fast"
-        onMomentumScrollEnd={onStripMomentumEnd}
-        style={styles.stripCarouselList}
-        contentContainerStyle={styles.stripCarouselContent}
-        renderItem={({ item }) => (
-          <View
-            style={[
-              styles.stripCard,
-              {
-                width: stripCardWidth,
-                backgroundColor: item.color,
-              },
-            ]}>
-            {item.image ? (
-              <Image
-                source={{ uri: item.image }}
-                style={StyleSheet.absoluteFillObject}
-                resizeMode="cover"
-              />
-            ) : null}
-            <View style={styles.stripOverlay} />
-            <Text style={styles.stripTitle} numberOfLines={2}>
-              {item.title}
-            </Text>
-            <Text style={styles.stripSubtitle} numberOfLines={2}>
-              {item.subtitle}
-            </Text>
-          </View>
-        )}
-      />
-      <View style={styles.carouselDots}>
-        {heroDeals.map((d, i) => (
-          <View
-            key={`strip-dot-${d.id}`}
-            style={[
-              styles.carouselDot,
-              i === stripDealIndex && {
-                backgroundColor: primary,
-                width: 20,
-              },
-            ]}
-          />
-        ))}
-      </View>
-
       <View style={styles.paperSection}>
         <View style={styles.paperSectionHeaderRow}>
           <Text style={[styles.paperSectionTitle, { color: primaryText, marginBottom: 0 }]}>
@@ -1185,8 +1100,9 @@ const HomeScreen = () => {
                             { borderColor: primaryBorder, height: 64 },
                           ]}>
                           {cat.imageUrl ? (
-                            <Image
-                              source={{ uri: cat.imageUrl }}
+                            <AppImage
+                              uri={cat.imageUrl}
+                              width={90}
                               style={styles.gridCellPhoto}
                               resizeMode="cover"
                             />
@@ -1261,6 +1177,11 @@ const HomeScreen = () => {
             }
           />
         )}
+        ListEmptyComponent={
+          <Text style={styles.gridEmptyHint}>
+            No recommendations yet — explore categories above.
+          </Text>
+        }
       />
         </>
       )}
@@ -1270,68 +1191,62 @@ const HomeScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
-  gradientLeft: {
-    position: 'absolute',
-    width: 280,
-    height: 280,
-    left: -120,
-    top: 30,
-    borderRadius: 140,
-  },
-  gradientRight: {
-    position: 'absolute',
-    width: 320,
-    height: 320,
-    right: -140,
-    bottom: 50,
-    borderRadius: 160,
-  },
+  root: { flex: 1, backgroundColor: palette.bg },
   container: { flex: 1 },
   content: { paddingHorizontal: 14 },
-  paperHeader: { marginBottom: 2 },
-  paperHeaderTop: {
+  headerHero: {
+    marginHorizontal: -14,
+    paddingTop: 6,
+    paddingHorizontal: 16,
+    paddingBottom: 30,
+    borderBottomLeftRadius: 26,
+    borderBottomRightRadius: 26,
+    ...shadow.md,
+  },
+  headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  paperBrandBlock: {
+  headerLocBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
     flex: 1,
     minWidth: 0,
     paddingRight: 8,
   },
-  paperLogoMark: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-    overflow: 'hidden',
-  },
-  paperLogoImage: {
+  headerLocPin: {
     width: 34,
     height: 34,
-  },
-  paperShopFor: { flex: 1, minWidth: 0 },
-  paperShopForLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  paperShopForValue: { fontSize: 16, fontWeight: '900', marginTop: 2 },
-  paperHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  paperIconBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  headerLocTextWrap: { flex: 1, minWidth: 0 },
+  headerLocLabel: {
+    color: 'rgba(255,255,255,0.82)',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  headerLocCityRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  headerLocCity: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    flexShrink: 1,
+  },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.16)',
   },
   divisionSectionLabel: {
     marginTop: 12,
@@ -1341,11 +1256,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   divisionTrackOuter: {
+    marginTop: 16,
     borderRadius: 999,
     borderWidth: 1,
     padding: DIVISION_TRACK_PAD,
     position: 'relative',
     overflow: 'hidden',
+    backgroundColor: palette.lineSoft,
   },
   divisionPillThumb: {
     position: 'absolute',
@@ -1379,6 +1296,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     lineHeight: 16,
     textAlign: 'center',
+    color: palette.muted,
   },
   locationPill: {
     marginTop: 12,
@@ -1389,25 +1307,26 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     gap: 12,
+    ...shadow.xs,
   },
   locationPillTextWrap: { flex: 1, minWidth: 0 },
   locationPillTitle: { fontSize: 13, fontWeight: '800' },
   locationPillSub: { marginTop: 2, fontSize: 12, fontWeight: '600' },
   searchWrap: {
-    marginTop: 14,
-    backgroundColor: 'rgba(255,255,255,0.65)',
-    borderRadius: 14,
-    paddingHorizontal: 12,
+    marginTop: -24,
+    backgroundColor: palette.surface,
+    borderRadius: 16,
+    paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
+    ...shadow.md,
   },
   search: {
     flex: 1,
     paddingHorizontal: 10,
-    paddingVertical: 12,
-    color: '#0B3B8F',
+    paddingVertical: 13,
+    fontSize: 14,
+    fontWeight: '600',
   },
   micBtn: { paddingLeft: 8, paddingVertical: 8 },
   paperSectionTitle: {
@@ -1420,14 +1339,44 @@ const styles = StyleSheet.create({
   screenLoaderWrap: { alignItems: 'center', paddingVertical: 32 },
   heroSlideCard: {
     position: 'relative',
-    height: 168,
-    borderRadius: 16,
+    height: 182,
+    borderRadius: 20,
     overflow: 'hidden',
     justifyContent: 'flex-end',
   },
-  heroSlideOverlay: {
-    ...StyleSheet.absoluteFillObject,
+  heroScrimSoft: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '62%',
+    backgroundColor: 'rgba(0,0,0,0.28)',
+  },
+  heroScrimStrong: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: '34%',
+    backgroundColor: 'rgba(0,0,0,0.42)',
+  },
+  heroBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: 'rgba(0,0,0,0.35)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  heroBadgeText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 10,
+    letterSpacing: 0.6,
   },
   heroSlideTextBlock: {
     padding: 16,
@@ -1440,6 +1389,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 13,
   },
+  heroCta: {
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  heroCtaText: { fontWeight: '900', fontSize: 12 },
   carouselDots: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -1471,17 +1432,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   quickCell: {
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingVertical: 14,
+    borderRadius: 16,
+    paddingVertical: 16,
     paddingHorizontal: 8,
     alignItems: 'center',
     marginBottom: 8,
+    backgroundColor: palette.surface,
+    ...shadow.sm,
   },
   quickCellIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 50,
+    height: 50,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1516,6 +1478,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 6,
     alignItems: 'center',
+    ...shadow.xs,
   },
   gridCellLogoBox: {
     width: '100%',

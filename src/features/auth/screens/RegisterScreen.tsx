@@ -27,6 +27,9 @@ import {
 } from 'react-native-image-picker';
 import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
 import { API_V1_BASE_URL } from '../../../services/api/config';
+import { palette, radius, shadow, divisionTheme } from '../../../utils/theme';
+
+const ACCENT = divisionTheme.fmcg;
 
 type GstData = {
   gst_number: string;
@@ -230,7 +233,7 @@ const RegisterScreen = ({ navigation }: Props) => {
     <View style={styles.sectionCard}>
       <View style={styles.sectionHeader}>
         <View style={styles.sectionIconBadge}>
-          <Icon name={icon} size={14} color="#1D4ED8" />
+          <Icon name={icon} size={15} color={ACCENT.primary} />
         </View>
         <Text style={styles.sectionTitle}>{title}</Text>
       </View>
@@ -262,10 +265,12 @@ const RegisterScreen = ({ navigation }: Props) => {
           {/* Top bar */}
           <View style={styles.topBar}>
             <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} activeOpacity={0.9}>
-              <Icon name="arrow-left" size={22} color="#FFFFFF" />
+              <Icon name="arrow-left" size={20} color={palette.ink} />
             </TouchableOpacity>
-            <Image source={require('../../../../assets/logo.png')} style={styles.topBarLogo} resizeMode="contain" />
-            <View style={{ width: 38 }} />
+            <View style={styles.topBarLogoMark}>
+              <Image source={require('../../../../assets/logo.png')} style={styles.topBarLogo} resizeMode="contain" />
+            </View>
+            <View style={{ width: 42 }} />
           </View>
 
           {/* Page heading */}
@@ -589,7 +594,7 @@ const RegisterScreen = ({ navigation }: Props) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0B2D71' },
+  container: { flex: 1, backgroundColor: palette.bg },
   flex1: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingBottom: 36 },
 
@@ -601,38 +606,45 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   backBtn: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    width: 42, height: 42, borderRadius: radius.md,
+    backgroundColor: palette.surface,
+    borderWidth: 1, borderColor: palette.line,
     alignItems: 'center', justifyContent: 'center',
+    ...shadow.xs,
   },
-  topBarLogo: { width: 110, height: 32 },
+  topBarLogoMark: {
+    width: 42, height: 42, borderRadius: radius.md,
+    backgroundColor: palette.surface,
+    borderWidth: 1, borderColor: palette.line,
+    alignItems: 'center', justifyContent: 'center',
+    ...shadow.xs,
+  },
+  topBarLogo: { width: 30, height: 30 },
 
-  // Page heading (on blue background)
-  pageHeading: { paddingHorizontal: 4, marginBottom: 20, marginTop: 4 },
-  pageTitle: { fontSize: 30, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.5 },
-  pageSubtitle: { color: 'rgba(255,255,255,0.65)', fontSize: 14, marginTop: 4, fontWeight: '500' },
+  // Page heading
+  pageHeading: { paddingHorizontal: 4, marginBottom: 20, marginTop: 8 },
+  pageTitle: { fontSize: 28, fontWeight: '800', color: palette.ink, letterSpacing: -0.5 },
+  pageSubtitle: { color: palette.muted, fontSize: 14, marginTop: 4, fontWeight: '500' },
 
   // Section cards
   sectionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    backgroundColor: palette.surface,
+    borderRadius: radius.xl,
     padding: 18,
     marginBottom: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: palette.line,
+    ...shadow.sm,
   },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   sectionIconBadge: {
-    width: 26, height: 26, borderRadius: 8,
-    backgroundColor: '#EFF6FF',
+    width: 28, height: 28, borderRadius: 9,
+    backgroundColor: ACCENT.soft,
     alignItems: 'center', justifyContent: 'center',
     marginRight: 10,
   },
-  sectionTitle: { fontSize: 15, fontWeight: '800', color: '#0F172A' },
-  sectionDivider: { height: 1, backgroundColor: '#F1F5F9', marginBottom: 14 },
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: palette.ink },
+  sectionDivider: { height: 1, backgroundColor: palette.lineSoft, marginBottom: 14 },
 
   // Field label
   fieldLabel: {
@@ -777,9 +789,9 @@ const styles = StyleSheet.create({
   registerBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 16 },
 
   // Login link
-  loginLinkWrap: { alignItems: 'center', paddingVertical: 8 },
-  loginLink: { color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: '500' },
-  loginLinkBold: { color: '#93C5FD', fontWeight: '800' },
+  loginLinkWrap: { alignItems: 'center', paddingVertical: 10 },
+  loginLink: { color: palette.muted, fontSize: 13, fontWeight: '500' },
+  loginLinkBold: { color: ACCENT.primary, fontWeight: '800' },
 
   // OTP Modal
   modalOverlay: {

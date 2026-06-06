@@ -15,6 +15,7 @@ import { useAppDispatch, useAppSelector } from '../../../hooks/redux';
 import { setBusinessProfile } from '../businessProfileSlice';
 import { launchImageLibrary, type Asset } from 'react-native-image-picker';
 import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
+import { palette, shadow, getDivision } from '../../../utils/theme';
 
 function KycDocPickCard({
   uri,
@@ -51,7 +52,7 @@ const EditInfoScreen = () => {
   const business = useAppSelector(state => state.businessProfile?.profile ?? null);
   const homeDivision = useAppSelector(state => state.homeDivision?.division ?? 'fmcg');
   const isHomeKitchen = homeDivision === 'homeKitchen';
-  const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
+  const primary = getDivision(homeDivision).primary;
 
   const [addressLine1, setAddressLine1] = useState(business?.addressLine1 ?? '');
   const [addressLine2, setAddressLine2] = useState(business?.addressLine2 ?? '');
@@ -391,17 +392,18 @@ const editStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F8FBFF' },
+  root: { flex: 1, backgroundColor: palette.bg },
   content: { padding: 16, paddingBottom: 36 },
-  title: { fontSize: 24, fontWeight: '900', color: '#0B3B8F' },
-  subtitle: { marginTop: 8, color: '#64748B', fontWeight: '700', lineHeight: 20 },
+  title: { fontSize: 24, fontWeight: '900', color: palette.ink },
+  subtitle: { marginTop: 8, color: palette.muted, fontWeight: '700', lineHeight: 20 },
   card: {
     marginTop: 16,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#DBEAFE',
-    backgroundColor: '#FFFFFF',
-    padding: 14,
+    borderColor: palette.line,
+    backgroundColor: palette.surface,
+    padding: 16,
+    ...shadow.sm,
   },
   sectionLabel: {
     marginTop: 14,
@@ -457,12 +459,12 @@ const styles = StyleSheet.create({
   saveButton: {
     marginTop: 18,
     borderRadius: 14,
-    paddingVertical: 12,
+    paddingVertical: 15,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  saveButtonFmcg: { backgroundColor: '#1D4ED8' },
-  saveButtonKitchen: { backgroundColor: '#16A34A' },
+  saveButtonFmcg: { backgroundColor: '#3B82F6' },
+  saveButtonKitchen: { backgroundColor: '#22C55E' },
   saveButtonMuted: { backgroundColor: '#CBD5E1' },
   saveButtonText: { color: '#FFFFFF', fontWeight: '900' },
 });

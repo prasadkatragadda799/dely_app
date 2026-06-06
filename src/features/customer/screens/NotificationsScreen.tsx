@@ -19,6 +19,7 @@ import {
   useReadNotificationMutation,
 } from '../../../services/api/mobileApi';
 import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
+import { palette, shadow, getDivision } from '../../../utils/theme';
 
 type NotificationRow = {
   id: string;
@@ -93,15 +94,11 @@ const NotificationsScreen = () => {
   const navigation = useNavigation<any>();
   const { alert: appAlert, confirm } = useAppAlert();
   const homeDivision = useAppSelector(s => s.homeDivision?.division ?? 'fmcg');
-  const isHomeKitchen = homeDivision === 'homeKitchen';
-  const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
-  const primarySoft = isHomeKitchen
-    ? 'rgba(22,163,74,0.12)'
-    : 'rgba(29,78,216,0.12)';
-  const primaryBorder = isHomeKitchen
-    ? 'rgba(22,163,74,0.25)'
-    : 'rgba(29,78,216,0.25)';
-  const primaryText = isHomeKitchen ? '#14532D' : '#0B3B8F';
+  const dz = getDivision(homeDivision);
+  const primary = dz.primary;
+  const primarySoft = dz.soft;
+  const primaryBorder = dz.border;
+  const primaryText = dz.primaryDeep;
 
   const { data, isLoading, isFetching, refetch, error } =
     useGetNotificationsQuery();
@@ -317,7 +314,7 @@ const NotificationsScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F8FAFC' },
+  root: { flex: 1, backgroundColor: palette.bg },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -373,10 +370,11 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     padding: 12,
     marginBottom: 10,
+    ...shadow.sm,
   },
   iconCircle: {
     width: 44,

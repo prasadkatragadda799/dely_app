@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { getDivision, shadow } from '../utils/theme';
 import { useAppSelector } from '../hooks/redux';
 import CartScreen from '../features/customer/screens/CartScreen';
 import CheckoutScreen from '../features/customer/screens/CheckoutScreen';
@@ -194,13 +195,9 @@ function CustomerStyledTabBar(props: BottomTabBarProps) {
   );
   const cartItems = useAppSelector(s => s.cart?.items ?? []);
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
-  const accent = isHomeKitchen ? '#16A34A' : '#2563EB';
-  const accentWash = isHomeKitchen
-    ? 'rgba(22,163,74,0.09)'
-    : 'rgba(37,99,235,0.09)';
-  const accentSoft = isHomeKitchen
-    ? 'rgba(22,163,74,0.16)'
-    : 'rgba(37,99,235,0.14)';
+  const division = getDivision(isHomeKitchen ? 'homeKitchen' : 'fmcg');
+  const accent = division.primary;
+  const accentSoft = division.soft;
 
   const { state, descriptors, navigation } = props;
   const activeRoute = state.routes[state.index];
@@ -254,94 +251,36 @@ function CustomerStyledTabBar(props: BottomTabBarProps) {
       });
     };
 
-    const inactiveMount = {
-      backgroundColor: '#FFFFFF',
-      borderColor: 'rgba(15,23,42,0.08)',
-    } as const;
-    const activeMount = {
-      backgroundColor: accentSoft,
-      borderColor: `${accent}50`,
-    } as const;
-
-    if (name === 'Cart') {
-      return (
-        <TouchableOpacity
-          key={route.key}
-          accessibilityRole="button"
-          accessibilityState={{ selected: focused }}
-          accessibilityLabel={options.title ?? label}
-          activeOpacity={0.9}
-          onPress={onPress}
-          onLongPress={onLongPress}
-          style={styles.tabColumn}>
-          <View style={{ position: 'relative' }}>
-            <View
-              style={[
-                styles.tabIconMount,
-                focused
-                  ? {
-                      backgroundColor: accent,
-                      borderColor: `${accent}CC`,
-                      shadowColor: accent,
-                      shadowOpacity: 0.28,
-                      shadowRadius: 10,
-                      shadowOffset: { width: 0, height: 3 },
-                      elevation: 4,
-                    }
-                  : inactiveMount,
-              ]}>
-              <Icon
-                name={focused ? icons.solid : icons.outline}
-                size={19}
-                color={focused ? '#FFFFFF' : '#64748B'}
-              />
-            </View>
-            {cartCount > 0 && (
-              <View style={styles.cartBadge}>
-                <Text style={styles.cartBadgeText}>
-                  {cartCount > 99 ? '99+' : cartCount}
-                </Text>
-              </View>
-            )}
-          </View>
-          <Text
-            style={[
-              styles.tabLabelUnder,
-              { color: focused ? accent : '#64748B' },
-            ]}
-            numberOfLines={1}>
-            {label}
-          </Text>
-        </TouchableOpacity>
-      );
-    }
-
     return (
       <TouchableOpacity
         key={route.key}
         accessibilityRole="button"
         accessibilityState={{ selected: focused }}
         accessibilityLabel={options.title ?? label}
-        activeOpacity={0.88}
+        activeOpacity={0.85}
         onPress={onPress}
         onLongPress={onLongPress}
         style={styles.tabColumn}>
         <View
           style={[
-            styles.tabIconMount,
-            focused ? activeMount : inactiveMount,
+            styles.tabIconPill,
+            focused && { backgroundColor: accentSoft },
           ]}>
           <Icon
             name={focused ? icons.solid : icons.outline}
-            size={19}
-            color={focused ? accent : '#64748B'}
+            size={22}
+            color={focused ? accent : '#94A3B8'}
           />
+          {name === 'Cart' && cartCount > 0 && (
+            <View style={styles.cartBadge}>
+              <Text style={styles.cartBadgeText}>
+                {cartCount > 99 ? '99+' : cartCount}
+              </Text>
+            </View>
+          )}
         </View>
         <Text
-          style={[
-            styles.tabLabelUnder,
-            { color: focused ? accent : '#64748B' },
-          ]}
+          style={[styles.tabLabel, { color: focused ? accent : '#94A3B8' }]}
           numberOfLines={1}>
           {label}
         </Text>
@@ -357,16 +296,9 @@ function CustomerStyledTabBar(props: BottomTabBarProps) {
         styles.barRoot,
         { paddingBottom: Math.max(insets.bottom, 6) },
       ]}>
-      <View style={styles.barOuter}>
-        <View style={styles.barFace}>
-          <View
-            pointerEvents="none"
-            style={[styles.barWash, { backgroundColor: accentWash }]}
-          />
-          <View style={styles.barInnerHighlight} />
-          <View style={styles.barRow}>
-            {state.routes.map((route, index) => renderTab(route, index))}
-          </View>
+      <View style={styles.barFace}>
+        <View style={styles.barRow}>
+          {state.routes.map((route, index) => renderTab(route, index))}
         </View>
       </View>
     </View>
@@ -445,84 +377,48 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'transparent',
-    paddingHorizontal: 18,
-  },
-  /** Soft “lift” under the capsule */
-  barOuter: {
-    borderRadius: 18,
-    backgroundColor: '#E2E8F0',
-    padding: 1,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.14,
-    shadowRadius: 20,
-    elevation: 14,
-    overflow: 'visible',
-  },
-  /** Subtle division-tinted veil (top of capsule only) */
-  barWash: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 26,
-    borderTopLeftRadius: 17,
-    borderTopRightRadius: 17,
+    paddingHorizontal: 16,
   },
   barFace: {
-    borderRadius: 17,
-    backgroundColor: '#F8FAFC',
-    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 26,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(15,23,42,0.08)',
-  },
-  barInnerHighlight: {
-    position: 'absolute',
-    top: 1,
-    left: 14,
-    right: 14,
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.75)',
-    zIndex: 2,
+    borderColor: 'rgba(15,23,42,0.06)',
+    ...shadow.lg,
   },
   barRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingTop: 6,
-    paddingBottom: 5,
-    gap: 4,
-    zIndex: 1,
+    alignItems: 'center',
+    justifyContent: 'space-around',
   },
   /** Equal thirds: same icon-over-label rhythm for Home, Cart, Account */
   tabColumn: {
     flex: 1,
     minWidth: 0,
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
+    gap: 3,
   },
-  tabIconMount: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    borderWidth: 1,
+  tabIconPill: {
+    paddingHorizontal: 20,
+    paddingVertical: 5,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
   },
-  tabLabelUnder: {
-    marginTop: 3,
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.45,
-    textTransform: 'uppercase',
+  tabLabel: {
+    fontSize: 11,
+    fontWeight: '700',
     textAlign: 'center',
     maxWidth: '100%',
   },
   cartBadge: {
     position: 'absolute',
-    top: -5,
-    right: -6,
+    top: -3,
+    right: 14,
     minWidth: 17,
     height: 17,
     borderRadius: 9,
@@ -531,7 +427,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 3,
     borderWidth: 1.5,
-    borderColor: '#F8FAFC',
+    borderColor: '#FFFFFF',
   },
   cartBadgeText: {
     color: '#FFFFFF',

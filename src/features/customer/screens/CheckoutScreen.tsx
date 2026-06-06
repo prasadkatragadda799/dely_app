@@ -28,6 +28,7 @@ import {
   useLazyReverseGeocodeQuery,
 } from '../../../services/api/mobileApi';
 import { getApiErrorMessage } from '../../../utils/apiErrorMessage';
+import { palette, radius, shadow, getDivision } from '../../../utils/theme';
 
 type SavedAddress = {
   id: string;
@@ -271,9 +272,9 @@ const CheckoutScreen = () => {
     }
   };
 
-  const isHomeKitchen = homeDivision === 'homeKitchen';
-  const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
-  const primaryText = isHomeKitchen ? '#14532D' : '#0B3B8F';
+  const div = getDivision(homeDivision);
+  const primary = div.primary;
+  const primaryText = div.primaryDeep;
 
   // Cart is now backed by API and already scoped to the active division.
   const visibleItems = useMemo(() => items, [items]);
@@ -392,7 +393,7 @@ const CheckoutScreen = () => {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { backgroundColor: primary }]}>
+      <View style={[styles.header, { backgroundColor: primary, paddingTop: insets.top + 12 }]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
@@ -756,7 +757,7 @@ const CheckoutScreen = () => {
 
       <View style={[styles.footer, { paddingBottom: tabBarHeight + insets.bottom + 12 }]}>
         <TouchableOpacity
-          style={[styles.placeOrderButton, { backgroundColor: primary }]}
+          style={[styles.placeOrderButton, { backgroundColor: primary }, shadow.accent(primary)]}
           onPress={handlePlaceOrder}
           disabled={loading}
           activeOpacity={0.92}>
@@ -771,14 +772,17 @@ const CheckoutScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { flex: 1, backgroundColor: palette.bg },
   header: {
     paddingTop: 18,
-    paddingBottom: 14,
+    paddingBottom: 16,
     paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
+    ...shadow.md,
   },
   backButton: {
     width: 34,
@@ -791,11 +795,12 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#FFFFFF', fontWeight: '900', fontSize: 20 },
   content: { padding: 14, paddingBottom: 140, gap: 12 },
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: palette.surface,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: palette.line,
     padding: 14,
+    ...shadow.sm,
   },
   cardTitle: { fontSize: 16, fontWeight: '900', marginBottom: 12 },
   addressRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -887,14 +892,16 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    padding: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    backgroundColor: '#FFFFFF',
+    padding: 16,
+    paddingTop: 18,
+    backgroundColor: palette.surface,
+    borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl,
+    ...shadow.lg,
   },
   placeOrderButton: {
-    borderRadius: 14,
-    paddingVertical: 14,
+    borderRadius: radius.md,
+    paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',

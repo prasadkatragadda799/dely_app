@@ -3,14 +3,15 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useAppSelector } from '../../../hooks/redux';
+import { palette, radius, shadow, getDivision } from '../../../utils/theme';
 
 const OrderSuccessScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const homeDivision = useAppSelector(state => state.homeDivision?.division ?? 'fmcg');
-  const isHomeKitchen = homeDivision === 'homeKitchen';
-  const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
-  const primaryText = isHomeKitchen ? '#14532D' : '#0B3B8F';
+  const div = getDivision(homeDivision);
+  const primary = div.primary;
+  const primaryText = div.primaryDeep;
 
   const orderId = route.params?.orderId;
   const amount = route.params?.amount ?? 0;
@@ -24,7 +25,7 @@ const OrderSuccessScreen = () => {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.circle, { backgroundColor: primary }]}>
+      <View style={[styles.circle, { backgroundColor: primary }, shadow.accent(primary)]}>
         <Icon name="check-bold" size={40} color="#FFFFFF" />
       </View>
       <Text style={[styles.title, { color: primaryText }]}>Order Successful</Text>
@@ -46,7 +47,7 @@ const OrderSuccessScreen = () => {
       </View>
 
       <TouchableOpacity
-        style={[styles.button, { backgroundColor: primary }]}
+        style={[styles.button, { backgroundColor: primary }, shadow.accent(primary)]}
         onPress={() =>
           navigation.reset({
             index: 0,
@@ -63,7 +64,7 @@ const OrderSuccessScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: palette.bg,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20,
@@ -87,20 +88,21 @@ const styles = StyleSheet.create({
   summaryCard: {
     marginTop: 22,
     width: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: palette.surface,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 14,
-    gap: 8,
+    borderColor: palette.line,
+    padding: 16,
+    gap: 10,
+    ...shadow.sm,
   },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  label: { color: '#64748B', fontWeight: '700' },
-  value: { color: '#0F172A', fontWeight: '900', flex: 1, textAlign: 'right', marginLeft: 8 },
+  label: { color: palette.muted, fontWeight: '700' },
+  value: { color: palette.ink, fontWeight: '900', flex: 1, textAlign: 'right', marginLeft: 8 },
   button: {
     marginTop: 20,
-    borderRadius: 14,
-    paddingVertical: 14,
+    borderRadius: radius.md,
+    paddingVertical: 16,
     width: '100%',
     alignItems: 'center',
   },

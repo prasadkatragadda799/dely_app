@@ -4,7 +4,6 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { PriceOptionKey, Product } from '../../types';
 import { useCart } from '../../hooks/useCart';
 import {
-  packagingShortLine,
   stepperQuantityCaptionForCartLine,
 } from '../../utils/productPackaging';
 import {
@@ -15,6 +14,7 @@ import {
 import { formatRs } from '../../utils/formatMoney';
 import { useWishlist } from '../../hooks/useWishlist';
 import AddPriceTierModal from './AddPriceTierModal';
+import { sizedImageUrl } from './AppImage';
 
 const hexToRgba = (hex: string, alpha: number) => {
   const normalized = hex.replace('#', '');
@@ -134,7 +134,8 @@ const ProductCard = ({
   const originalPrice = Math.round(
     (displayPrice / Math.max(1 - discountPct / 100, 0.01)) * 100,
   ) / 100;
-  const packHint = packagingShortLine(product);
+  // Zone serviceability: backend flags products the seller's zone can't reach.
+  const notDeliverable = product.deliverable === false;
 
   return (
     <Wrapper
@@ -145,7 +146,7 @@ const ProductCard = ({
       <View style={styles.imageWrap}>
         {imageError || !product.image ? (
           <View style={[styles.image, styles.imageFallback]}>
-            <Icon name="image-off-outline" size={28} color="#CBD5E1" />
+            <Icon name="image-outline" size={26} color="#CBD5E1" />
           </View>
         ) : (
           <>
@@ -159,7 +160,7 @@ const ProductCard = ({
               />
             )}
             <Image
-              source={{ uri: product.image }}
+              source={{ uri: sizedImageUrl(product.image, 200) }}
               style={[styles.image, imageLoading && styles.imageHidden]}
               onLoadStart={() => setImageLoading(true)}
               onLoad={() => setImageLoading(false)}
@@ -210,28 +211,6 @@ const ProductCard = ({
           {product.name}
         </Text>
       )}
-      <View style={styles.metaRow}>
-        {product.isVeg !== undefined ? (
-          <View style={styles.metaPill}>
-            <Icon
-              name={product.isVeg ? 'leaf' : 'food-drumstick-outline'}
-              size={11}
-              color={accentColor}
-            />
-            <Text style={[styles.metaPillText, { color: accentColor }]}>
-              {product.isVeg ? 'Veg' : 'Non-veg'}
-            </Text>
-          </View>
-        ) : null}
-        {product.etaMinutes !== undefined ? (
-          <View style={styles.metaPill}>
-            <Icon name="clock-outline" size={11} color={accentColor} />
-            <Text style={[styles.metaPillText, { color: accentColor }]}>
-              {product.etaMinutes} min
-            </Text>
-          </View>
-        ) : null}
-      </View>
       <View style={styles.priceBlock}>
         {opts && opts.length > 1 ? (
           <Text style={styles.fromHint}>From</Text>
@@ -243,13 +222,6 @@ const ProductCard = ({
           ) : null}
         </View>
       </View>
-      {packHint ? (
-        <View style={styles.packHintPill}>
-          <Text style={styles.packHintPillText} numberOfLines={2}>
-            {packHint}
-          </Text>
-        </View>
-      ) : null}
       {showTierChips ? (
         <View style={styles.tierRow}>
           {opts!.map(opt => {
@@ -283,7 +255,12 @@ const ProductCard = ({
         </View>
       ) : null}
       <View style={styles.actionRow}>
-        {displayQty <= 0 ? (
+        {notDeliverable ? (
+          <View style={styles.notDeliverable}>
+            <Icon name="map-marker-off-outline" size={14} color="#94A3B8" />
+            <Text style={styles.notDeliverableText}>Not in your area</Text>
+          </View>
+        ) : displayQty <= 0 ? (
           <TouchableOpacity
             style={[styles.addButton, { backgroundColor: mutating ? hexToRgba(accentColor, 0.6) : accentColor }]}
             disabled={mutating}
@@ -424,13 +401,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 10,
     paddingBottom: 11,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
     shadowColor: '#0F172A',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
   imageWrap: {
     position: 'relative',
@@ -487,7 +462,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1D4ED8',
   },
   brand: {
-    marginTop: 10,
+    marginTop: 8,
     color: '#64748B',
     fontSize: 10,
     fontWeight: '700',
@@ -495,7 +470,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   name: {
-    marginTop: 4,
+    marginTop: 3,
     color: '#0F172A',
     fontSize: 12,
     lineHeight: 16,
@@ -530,7 +505,7 @@ const styles = StyleSheet.create({
     marginBottom: -2,
   },
   priceBlock: {
-    marginTop: 8,
+    marginTop: 6,
     gap: 2,
   },
   priceLine: {
@@ -586,20 +561,17 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   actionRow: {
-    marginTop: 12,
+    marginTop: 9,
     width: '100%',
     flexDirection: 'row',
-    justifyContent: 'flex-end',
     alignItems: 'center',
   },
   addButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'flex-end',
     paddingVertical: 10,
-    paddingHorizontal: 16,
-    minWidth: 96,
     borderRadius: 12,
     gap: 6,
   },
@@ -609,6 +581,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 0.2,
   },
+  notDeliverable: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  notDeliverableText: { color: '#94A3B8', fontWeight: '800', fontSize: 12 },
   /**
    * Full-width row; middle uses minWidth 0 so flex can shrink and the side
    * columns (fixed width) are never clipped by overflow:hidden.

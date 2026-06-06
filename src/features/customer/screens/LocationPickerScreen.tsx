@@ -163,14 +163,14 @@ const LocationPickerScreen = () => {
 
       {/* Fixed center pin */}
       <View pointerEvents="none" style={styles.pinWrapper}>
-        <Icon name="map-marker" size={48} color="#1D4ED8" />
+        <Icon name="map-marker" size={48} color="#3B82F6" />
         <View style={styles.pinShadow} />
       </View>
 
       {/* Header */}
       <SafeAreaView edges={['top']} style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Icon name="arrow-left" size={22} color="#0B3B8F" />
+          <Icon name="arrow-left" size={22} color="#3B82F6" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Set delivery location</Text>
       </SafeAreaView>
@@ -182,9 +182,9 @@ const LocationPickerScreen = () => {
         disabled={isLocating}
         activeOpacity={0.85}>
         {isLocating ? (
-          <ActivityIndicator size="small" color="#1D4ED8" />
+          <ActivityIndicator size="small" color="#3B82F6" />
         ) : (
-          <Icon name="crosshairs-gps" size={22} color="#1D4ED8" />
+          <Icon name="crosshairs-gps" size={22} color="#3B82F6" />
         )}
       </TouchableOpacity>
 
@@ -194,12 +194,12 @@ const LocationPickerScreen = () => {
           <Icon
             name="map-marker-outline"
             size={22}
-            color="#1D4ED8"
+            color="#3B82F6"
             style={styles.addressIcon}
           />
           <View style={styles.addressTextWrap}>
             {isResolving ? (
-              <ActivityIndicator size="small" color="#1D4ED8" />
+              <ActivityIndicator size="small" color="#3B82F6" />
             ) : (
               <Text style={styles.addressMain} numberOfLines={2}>
                 {address || 'Move the map to set location'}
@@ -327,10 +327,15 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   confirmBtn: {
-    backgroundColor: '#1D4ED8',
-    borderRadius: 12,
-    paddingVertical: 14,
+    backgroundColor: '#3B82F6',
+    borderRadius: 14,
+    paddingVertical: 16,
     alignItems: 'center',
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
+    elevation: 6,
   },
   confirmBtnDisabled: {
     backgroundColor: '#93C5FD',

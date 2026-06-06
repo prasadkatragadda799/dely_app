@@ -3,8 +3,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Image,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -16,16 +16,19 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Toast from 'react-native-toast-message';
 import { useAuth } from '../../../hooks/useAuth';
 import { AuthStackParamList } from '../../../navigation/types';
+import { palette, radius, shadow, spacing, divisionTheme } from '../../../utils/theme';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Otp'>;
 
 const RESEND_COOLDOWN = 30;
+const ACCENT = divisionTheme.fmcg;
+const OTP_LENGTH = 6;
 
 const maskPhone = (phone: string) => {
   const digits = phone.replace(/\D/g, '');
   if (digits.length <= 4) return phone;
   const tail = digits.slice(-4);
-  return `XXXXXX${tail}`;
+  return `••••••${tail}`;
 };
 
 const OtpScreen = ({ navigation, route }: Props) => {
@@ -37,6 +40,7 @@ const OtpScreen = ({ navigation, route }: Props) => {
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [countdown, setCountdown] = useState(RESEND_COOLDOWN);
+  const [focused, setFocused] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
@@ -66,9 +70,9 @@ const OtpScreen = ({ navigation, route }: Props) => {
   };
 
   const handleOtpChange = (val: string) => {
-    const digits = val.replace(/\D/g, '').slice(0, 6);
+    const digits = val.replace(/\D/g, '').slice(0, OTP_LENGTH);
     setOtp(digits);
-    if (digits.length === 6 && !loading) {
+    if (digits.length === OTP_LENGTH && !loading) {
       onVerify(digits);
     }
   };
@@ -93,78 +97,105 @@ const OtpScreen = ({ navigation, route }: Props) => {
     }
   };
 
+  const cells = Array.from({ length: OTP_LENGTH });
+
   return (
     <SafeAreaView style={styles.container}>
+      <View style={[styles.glowTop, { backgroundColor: ACCENT.primary }]} />
+
       <KeyboardAvoidingView
         style={styles.keyboardArea}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.topBar}>
           <TouchableOpacity
             onPress={() => navigation.goBack()}
             style={styles.backBtn}
-            activeOpacity={0.9}
-          >
-            <Icon name="arrow-left" size={22} color="#FFFFFF" />
+            activeOpacity={0.9}>
+            <Icon name="arrow-left" size={20} color={palette.ink} />
           </TouchableOpacity>
-          <Image
-            source={require('../../../../assets/logo.png')}
-            style={styles.topBarLogo}
-            resizeMode="contain"
-          />
-          <View style={{ width: 38 }} />
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.title}>Enter OTP</Text>
+          <View style={[styles.iconBadge, { backgroundColor: ACCENT.soft }]}>
+            <Icon name="shield-key-outline" size={26} color={ACCENT.primary} />
+          </View>
+          <Text style={styles.title}>Verify your number</Text>
           <Text style={styles.subtitle}>
-            We sent a 6-digit code to {maskedPhone}
+            Enter the 6-digit code we sent to{'\n'}
+            <Text style={styles.phoneStrong}>{maskedPhone}</Text>
           </Text>
 
-          <Text style={styles.label}>OTP</Text>
-          <View style={styles.inputRow}>
-            <Icon name="shield-key-outline" size={18} color="#64748B" />
-            <TextInput
-              ref={inputRef}
-              value={otp}
-              onChangeText={handleOtpChange}
-              keyboardType="number-pad"
-              placeholder="6-digit OTP"
-              placeholderTextColor="#94A3B8"
-              style={styles.input}
-              maxLength={6}
-              autoComplete="sms-otp"
-              textContentType="oneTimeCode"
-              editable={!loading}
-            />
-            {loading && <ActivityIndicator size="small" color="#1D4ED8" style={{ marginRight: 4 }} />}
-          </View>
+          {/* OTP cells (hidden input drives the value) */}
+          <Pressable style={styles.cellRow} onPress={() => inputRef.current?.focus()}>
+            {cells.map((_, i) => {
+              const char = otp[i] ?? '';
+              const isActive = focused && i === otp.length;
+              const isFilled = !!char;
+              return (
+                <View
+                  key={i}
+                  style={[
+                    styles.cell,
+                    isFilled && { borderColor: ACCENT.primary, backgroundColor: ACCENT.softer },
+                    isActive && styles.cellActive,
+                    isActive && { borderColor: ACCENT.primary },
+                  ]}>
+                  <Text style={styles.cellText}>{char}</Text>
+                </View>
+              );
+            })}
+          </Pressable>
+
+          <TextInput
+            ref={inputRef}
+            value={otp}
+            onChangeText={handleOtpChange}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            keyboardType="number-pad"
+            maxLength={OTP_LENGTH}
+            autoComplete="sms-otp"
+            textContentType="oneTimeCode"
+            editable={!loading}
+            style={styles.hiddenInput}
+            caretHidden
+          />
 
           <TouchableOpacity
-            style={[styles.button, (loading || otp.length < 6) && styles.buttonDisabled]}
-            disabled={loading || otp.length < 6}
+            style={[
+              styles.button,
+              { backgroundColor: ACCENT.primary, ...shadow.accent(ACCENT.primary) },
+              (loading || otp.length < OTP_LENGTH) && styles.buttonDisabled,
+            ]}
+            disabled={loading || otp.length < OTP_LENGTH}
             onPress={() => onVerify(otp)}
-          >
+            activeOpacity={0.9}>
             {loading ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
-              <Text style={styles.buttonText}>Verify OTP</Text>
+              <Text style={styles.buttonText}>Verify & continue</Text>
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.outlineButton, (countdown > 0 || resendLoading) && styles.buttonDisabled]}
-            disabled={countdown > 0 || resendLoading}
-            onPress={onResend}
-          >
-            {resendLoading ? (
-              <ActivityIndicator color="#1D4ED8" size="small" />
-            ) : (
-              <Text style={styles.outlineButtonText}>
-                {countdown > 0 ? `Resend OTP in ${countdown}s` : 'Resend OTP'}
-              </Text>
-            )}
-          </TouchableOpacity>
+          <View style={styles.resendRow}>
+            <Text style={styles.resendQuestion}>Didn't receive it?</Text>
+            <TouchableOpacity
+              disabled={countdown > 0 || resendLoading}
+              onPress={onResend}
+              activeOpacity={0.8}>
+              {resendLoading ? (
+                <ActivityIndicator color={ACCENT.primary} size="small" />
+              ) : (
+                <Text
+                  style={[
+                    styles.resendLink,
+                    { color: countdown > 0 ? palette.faint : ACCENT.primary },
+                  ]}>
+                  {countdown > 0 ? `Resend in ${countdown}s` : 'Resend OTP'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -172,79 +203,108 @@ const OtpScreen = ({ navigation, route }: Props) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#062B66' },
-  keyboardArea: { flex: 1, paddingHorizontal: 20, justifyContent: 'center' },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 18,
-    marginTop: 4,
+  container: { flex: 1, backgroundColor: palette.bg, overflow: 'hidden' },
+  glowTop: {
+    position: 'absolute',
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    top: -150,
+    right: -90,
+    opacity: 0.09,
   },
+  keyboardArea: { flex: 1, paddingHorizontal: spacing.xl, justifyContent: 'center' },
+  topBar: { position: 'absolute', top: spacing.lg, left: spacing.xl },
   backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    width: 42,
+    height: 42,
+    borderRadius: radius.md,
+    backgroundColor: palette.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: palette.line,
+    ...shadow.xs,
+  },
+  card: {
+    backgroundColor: palette.surface,
+    borderRadius: radius.xxl,
+    padding: spacing.xxl,
+    borderWidth: 1,
+    borderColor: palette.line,
+    alignItems: 'center',
+    ...shadow.md,
+  },
+  iconBadge: {
+    width: 60,
+    height: 60,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
+  title: { fontSize: 22, fontWeight: '800', letterSpacing: -0.3, color: palette.ink },
+  subtitle: {
+    color: palette.muted,
+    marginTop: 8,
+    textAlign: 'center',
+    fontWeight: '500',
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  phoneStrong: { color: palette.ink, fontWeight: '800' },
+
+  cellRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginTop: spacing.xxl,
+    width: '100%',
+  },
+  cell: {
+    flex: 1,
+    aspectRatio: 0.82,
+    maxWidth: 50,
+    borderRadius: radius.md,
+    borderWidth: 1.5,
+    borderColor: palette.line,
+    backgroundColor: palette.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  topBarLogo: { width: 120, height: 34 },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    padding: 18,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 5,
+  cellActive: {
+    backgroundColor: palette.surface,
+    ...shadow.sm,
   },
-  title: { fontSize: 24, fontWeight: '900', color: '#0F172A' },
-  subtitle: { color: '#334155', marginTop: 6, marginBottom: 14, fontWeight: '600' },
-  label: { color: '#0F172A', fontWeight: '800', marginTop: 10, marginBottom: 8 },
-  inputRow: {
+  cellText: { fontSize: 22, fontWeight: '800', color: palette.ink },
+  hiddenInput: {
+    position: 'absolute',
+    opacity: 0,
+    height: 1,
+    width: 1,
+  },
+
+  button: {
+    marginTop: spacing.xxl,
+    borderRadius: radius.lg,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 54,
+    alignSelf: 'stretch',
+  },
+  buttonDisabled: { opacity: 0.5 },
+  buttonText: { color: '#FFFFFF', textAlign: 'center', fontWeight: '800', fontSize: 16 },
+
+  resendRow: {
+    marginTop: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    backgroundColor: '#F8FAFC',
-  },
-  input: { flex: 1, paddingVertical: 14, paddingLeft: 10, color: '#0F172A', fontSize: 20, letterSpacing: 6, fontWeight: '800' },
-  button: {
-    marginTop: 16,
-    backgroundColor: '#1D4ED8',
-    borderRadius: 14,
-    paddingVertical: 13,
-    alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 48,
+    gap: 6,
   },
-  buttonDisabled: { opacity: 0.55 },
-  buttonText: {
-    color: '#FFFFFF',
-    textAlign: 'center',
-    fontWeight: '900',
-    fontSize: 16,
-  },
-  outlineButton: {
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: '#1D4ED8',
-    borderRadius: 14,
-    paddingVertical: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 48,
-  },
-  outlineButtonText: {
-    color: '#1D4ED8',
-    textAlign: 'center',
-    fontWeight: '900',
-    fontSize: 16,
-  },
+  resendQuestion: { color: palette.muted, fontWeight: '600', fontSize: 13 },
+  resendLink: { fontWeight: '800', fontSize: 13 },
 });
 
 export default OtpScreen;

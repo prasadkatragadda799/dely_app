@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { ActivityIndicator, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import AppImage from '../../../shared/ui/AppImage';
 import { useNavigation } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +10,7 @@ import { useWishlist } from '../../../hooks/useWishlist';
 import { useCart } from '../../../hooks/useCart';
 import { defaultPriceTier } from '../../../utils/productPricing';
 import { useAppSelector } from '../../../hooks/redux';
+import { palette, getDivision } from '../../../utils/theme';
 
 const WishlistScreen = () => {
   const navigation = useNavigation();
@@ -18,7 +20,7 @@ const WishlistScreen = () => {
   const homeDivision = useAppSelector(state => state.homeDivision?.division ?? 'fmcg');
 
   const isHomeKitchen = homeDivision === 'homeKitchen';
-  const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
+  const primary = getDivision(homeDivision).primary;
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
 
@@ -81,7 +83,7 @@ const WishlistScreen = () => {
         renderItem={({ item }) => (
           <View style={styles.rowCard}>
             <View style={styles.productRow}>
-              <Image source={{ uri: item.image }} style={styles.thumb} />
+              <AppImage uri={item.image} width={64} style={styles.thumb} rounded={12} />
               <View style={styles.meta}>
                 <Text style={styles.name} numberOfLines={1}>
                   {item.name}
@@ -118,7 +120,7 @@ const WishlistScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F8FAFC', paddingHorizontal: 14 },
+  root: { flex: 1, backgroundColor: palette.bg, paddingHorizontal: 14 },
   loaderWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
   backLink: {
     flexDirection: 'row',

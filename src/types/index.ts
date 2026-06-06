@@ -68,6 +68,8 @@ export interface Product {
   companyLogoUrl?: string;
   stockQuantity?: number;
   isAvailable?: boolean;
+  /** Zone serviceability for the customer's pincode (from `deliver_to`). Undefined = not evaluated. */
+  deliverable?: boolean;
   price: number;
   discountPercent: number;
   /** When the API exposes multiple tiers (unit / set / remaining), customer picks one. */

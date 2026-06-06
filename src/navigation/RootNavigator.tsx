@@ -19,6 +19,7 @@ import NotificationBanner from '../components/NotificationBanner';
 import AuthStack from './AuthStack';
 import CustomerTabs from './CustomerTabs';
 import DeliveryTabs from './DeliveryTabs';
+import { palette, divisionTheme } from '../utils/theme';
 import {
   useRefreshTokenMutation,
   useRegisterFcmTokenMutation,
@@ -27,18 +28,27 @@ import {
 
 const NAV_THEME = {
   ...DefaultTheme,
-  colors: { ...DefaultTheme.colors, background: '#062B66' },
+  colors: { ...DefaultTheme.colors, background: palette.bg },
 };
 
 const SplashScreen = () => (
   <View style={styles.splashContainer}>
-    <Image
-      source={require('../../assets/logo.png')}
-      style={styles.logoImage}
-      resizeMode="contain"
-    />
+    <View style={styles.splashGlowTop} />
+    <View style={styles.splashGlowBottom} />
+    <View style={styles.logoMark}>
+      <Image
+        source={require('../../assets/logo.png')}
+        style={styles.logoImage}
+        resizeMode="contain"
+      />
+    </View>
     <Text style={styles.logoText}>Delycart</Text>
-    <ActivityIndicator size="large" color="#7C3AED" />
+    <Text style={styles.logoTagline}>Quick commerce, beautifully simple</Text>
+    <ActivityIndicator
+      size="small"
+      color={divisionTheme.fmcg.primary}
+      style={styles.splashLoader}
+    />
   </View>
 );
 
@@ -153,10 +163,57 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: palette.white,
+    overflow: 'hidden',
   },
-  logoImage: { width: 140, height: 70, marginBottom: 8 },
-  logoText: { fontSize: 34, fontWeight: '900', color: '#7C3AED', marginBottom: 18 },
+  splashGlowTop: {
+    position: 'absolute',
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    top: -120,
+    left: -90,
+    backgroundColor: divisionTheme.fmcg.primary,
+    opacity: 0.08,
+  },
+  splashGlowBottom: {
+    position: 'absolute',
+    width: 360,
+    height: 360,
+    borderRadius: 180,
+    bottom: -140,
+    right: -110,
+    backgroundColor: divisionTheme.homeKitchen.primary,
+    opacity: 0.07,
+  },
+  logoMark: {
+    width: 104,
+    height: 104,
+    borderRadius: 28,
+    backgroundColor: palette.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.1,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  logoImage: { width: 76, height: 76 },
+  logoText: {
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    color: palette.ink,
+  },
+  logoTagline: {
+    marginTop: 6,
+    fontSize: 13,
+    fontWeight: '600',
+    color: palette.muted,
+  },
+  splashLoader: { marginTop: 26 },
 });
 
 export default RootNavigator;

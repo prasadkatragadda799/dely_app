@@ -105,6 +105,7 @@ type ProductApiEntity = {
   stock_quantity?: number | string | null;
   isAvailable?: boolean | null;
   is_available?: boolean | null;
+  deliverable?: boolean | null;
 };
 
 function normalizeSpecifications(raw: unknown): ProductSpecifications | undefined {
@@ -372,6 +373,11 @@ export const mapProductFromApi = (
         ? Boolean(item.is_available)
         : undefined;
 
+  const deliverable =
+    item.deliverable !== undefined && item.deliverable !== null
+      ? Boolean(item.deliverable)
+      : undefined;
+
   const variants = Array.isArray(item.variants) ? item.variants : [];
   let variantSetPieces: string | undefined;
   for (const v of variants) {
@@ -476,6 +482,7 @@ export const mapProductFromApi = (
     companyLogoUrl,
     stockQuantity,
     isAvailable,
+    deliverable,
     price,
     discountPercent: asNumber(discountPercent, 0),
     priceOptions,

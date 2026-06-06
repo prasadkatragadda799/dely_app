@@ -18,6 +18,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import {
   useGetProductQuery,
@@ -56,6 +57,7 @@ import {
 import { formatRs } from '../../../utils/formatMoney';
 import AddPriceTierModal from '../../../shared/ui/AddPriceTierModal';
 import ProductCard from '../../../shared/ui/ProductCard';
+import AppImage from '../../../shared/ui/AppImage';
 
 type DivisionKey = 'fmcg' | 'homeKitchen';
 const MAX_SETS_PER_ADD = 5;
@@ -314,19 +316,26 @@ const ProductDetailCard = ({
                 </Text>
               ) : null}
             </View>
-            <TouchableOpacity
-              style={[styles.addBtnCompact, { backgroundColor: accentColor }]}
-              onPress={() => {
-                if (multiTier && totalQtyAllTiers === 0) {
-                  setTierModalVisible(true);
-                } else {
-                  onAdd(item, tierKey);
-                }
-              }}
-              activeOpacity={0.9}>
-              <Icon name="cart-plus" size={15} color="#FFFFFF" />
-              <Text style={styles.addBtnCompactText}>Add</Text>
-            </TouchableOpacity>
+            {item.deliverable === false ? (
+              <View style={styles.notDeliverableCompact}>
+                <Icon name="map-marker-off-outline" size={14} color="#94A3B8" />
+                <Text style={styles.notDeliverableCompactText}>Not in your area</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[styles.addBtnCompact, { backgroundColor: accentColor }]}
+                onPress={() => {
+                  if (multiTier && totalQtyAllTiers === 0) {
+                    setTierModalVisible(true);
+                  } else {
+                    onAdd(item, tierKey);
+                  }
+                }}
+                activeOpacity={0.9}>
+                <Icon name="cart-plus" size={15} color="#FFFFFF" />
+                <Text style={styles.addBtnCompactText}>Add</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
@@ -361,7 +370,16 @@ const ProductOverviewScreen = () => {
     : '';
 
   const { width: windowWidth } = useWindowDimensions();
-  const { data: allProducts = [] } = useGetProductsQuery();
+  const insets = useSafeAreaInsets();
+  // Customer's default delivery pincode — drives zone serviceability (show-all, mark-unavailable).
+  const { data: deliveryLocationsEnvelope } = useGetDeliveryLocationsQuery();
+  const deliveryLocations = (deliveryLocationsEnvelope?.data as any[]) ?? [];
+  const defaultDeliveryLocation =
+    deliveryLocations.find((l: any) => l.is_default) ?? deliveryLocations[0];
+  const defaultPincode: string = defaultDeliveryLocation?.pincode ?? '';
+  const { data: allProducts = [] } = useGetProductsQuery(
+    defaultPincode ? { deliverTo: defaultPincode } : undefined,
+  );
   const { add, decrement, items: cartItems } = useCart();
   const { toggle, isWishlisted } = useWishlist();
   const dispatch = useAppDispatch();
@@ -655,13 +673,7 @@ const ProductOverviewScreen = () => {
     [selectedProduct],
   );
 
-  // Resolve the customer's default delivery pincode and check serviceability.
-  // Products always render in the listing; the warning + purchase block live here.
-  const { data: deliveryLocationsEnvelope } = useGetDeliveryLocationsQuery();
-  const deliveryLocations = (deliveryLocationsEnvelope?.data as any[]) ?? [];
-  const defaultDeliveryLocation =
-    deliveryLocations.find((l: any) => l.is_default) ?? deliveryLocations[0];
-  const defaultPincode: string = defaultDeliveryLocation?.pincode ?? '';
+  // Whole-pincode serviceability banner (separate from per-product zone gating above).
   const { data: locationCheckEnvelope } = useCheckServiceLocationQuery(
     defaultPincode,
     { skip: !defaultPincode },
@@ -671,7 +683,9 @@ const ProductOverviewScreen = () => {
     !!locationCheck && locationCheck.restricted && !locationCheck.available;
 
   const canPurchase = selectedProduct
-    ? isProductPurchasable(selectedProduct) && !isLocationUnavailable
+    ? isProductPurchasable(selectedProduct) &&
+      !isLocationUnavailable &&
+      selectedProduct.deliverable !== false
     : false;
 
   const detailProductCartTotal = useMemo(() => {
@@ -813,7 +827,7 @@ const ProductOverviewScreen = () => {
   }, [selectedProduct, isLocationUnavailable]);
 
   const carouselWidth = windowWidth;
-  const carouselHeight = Math.min(Math.round(windowWidth * 0.95), 420);
+  const carouselHeight = Math.min(Math.round(windowWidth * 0.74), 320);
 
   const onGalleryMomentumEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (carouselWidth <= 0 || detailImages.length === 0) return;
@@ -923,24 +937,32 @@ const ProductOverviewScreen = () => {
 
   return (
     <View style={styles.root}>
-      <View
-        style={[
-          styles.gradientLeft,
-          { backgroundColor: primary, opacity: 0.22 },
-        ]}
-      />
-      <View
-        style={[
-          styles.gradientRight,
-          { backgroundColor: accentSecondary, opacity: 0.18 },
-        ]}
-      />
+      {!isDetailMode && (
+        <>
+          <View
+            style={[
+              styles.gradientLeft,
+              { backgroundColor: primary, opacity: 0.22 },
+            ]}
+          />
+          <View
+            style={[
+              styles.gradientRight,
+              { backgroundColor: accentSecondary, opacity: 0.18 },
+            ]}
+          />
+        </>
+      )}
 
       <ScrollView
         style={styles.container}
         contentContainerStyle={[
           styles.content,
           isDetailMode ? styles.detailContent : styles.browseContent,
+          isDetailMode && {
+            paddingTop: insets.top + 4,
+            paddingBottom: insets.bottom + 140,
+          },
         ]}
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled
@@ -951,26 +973,34 @@ const ProductOverviewScreen = () => {
             onPress={() =>
               navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home')
             }
-            style={styles.backBtn}
+            style={[styles.backBtn, isDetailMode && styles.backBtnDetail]}
             activeOpacity={0.9}>
-            <Icon name="chevron-left" size={20} color={primary} />
+            <Icon name="chevron-left" size={22} color={primary} />
           </TouchableOpacity>
 
           <View style={styles.topBarText}>
-            <Text style={[styles.title, { color: primary }]}>
-              {isHomeKitchen ? 'Home & Kitchen' : 'FMCG'}
-            </Text>
-            <Text style={[styles.subtitle, { color: primaryText }]}>
-              {isDetailMode
-                ? 'Product details'
-                : subCategoryFilter
-                  ? `Category: ${subCategoryFilter}`
-                  : brandFilter
-                    ? `Brand: ${brandFilter}`
-                    : companyFilter
-                      ? `Company: ${companyFilter}`
-                      : 'Browse products curated for you'}
-            </Text>
+            {isDetailMode ? (
+              <Text
+                style={[styles.detailTopTitle, { color: primaryText }]}
+                numberOfLines={1}>
+                Product details
+              </Text>
+            ) : (
+              <>
+                <Text style={[styles.title, { color: primary }]}>
+                  {isHomeKitchen ? 'Home & Kitchen' : 'FMCG'}
+                </Text>
+                <Text style={[styles.subtitle, { color: primaryText }]}>
+                  {subCategoryFilter
+                    ? `Category: ${subCategoryFilter}`
+                    : brandFilter
+                      ? `Brand: ${brandFilter}`
+                      : companyFilter
+                        ? `Company: ${companyFilter}`
+                        : 'Browse products curated for you'}
+                </Text>
+              </>
+            )}
           </View>
         </View>
 
@@ -1090,10 +1120,12 @@ const ProductOverviewScreen = () => {
                       <Pressable
                         onPress={() => setZoomImageUri(uri)}
                         style={[styles.detailCarouselPage, { width: carouselWidth, height: carouselHeight }]}>
-                        <Image
-                          source={{ uri }}
+                        <AppImage
+                          uri={uri}
+                          width={carouselWidth}
                           style={styles.detailCarouselImage}
                           resizeMode="contain"
+                          backgroundColor="#F5F7FA"
                         />
                       </Pressable>
                     )}
@@ -1213,6 +1245,22 @@ const ProductOverviewScreen = () => {
                           {defaultPincode
                             ? `We don't deliver to pincode ${defaultPincode} yet. Update your delivery address to check availability.`
                             : "We don't deliver here yet. Update your delivery address to check availability."}
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {selectedProduct.deliverable === false && !isLocationUnavailable ? (
+                    <View style={styles.detailLocationBanner}>
+                      <Icon name="map-marker-off" size={18} color="#92400E" />
+                      <View style={{ flex: 1, marginLeft: 8 }}>
+                        <Text style={styles.detailLocationBannerTitle}>
+                          Not deliverable to your area
+                        </Text>
+                        <Text style={styles.detailLocationBannerBody}>
+                          {defaultPincode
+                            ? `This seller doesn't deliver to pincode ${defaultPincode}. Try a different delivery address.`
+                            : "This seller doesn't deliver to your selected address yet."}
                         </Text>
                       </View>
                     </View>
@@ -1382,35 +1430,20 @@ const ProductOverviewScreen = () => {
                               style={[
                                 styles.variantCard,
                                 selected
-                                  ? {
-                                      borderColor: primary,
-                                      backgroundColor: `${primary}0F`,
-                                    }
-                                  : { borderColor: '#E2E8F0', backgroundColor: '#FFFFFF' },
+                                  ? { borderColor: primary, borderWidth: 2 }
+                                  : { borderColor: '#E2E8F0', borderWidth: 1 },
                                 selected && styles.variantCardSelected,
                               ]}
                               activeOpacity={0.85}
                               onPress={() => setSelectedVariantId(v.id ?? null)}>
-                              {disc > 0 ? (
-                                <View
-                                  style={[
-                                    styles.variantCardBadge,
-                                    { backgroundColor: '#16A34A' },
-                                  ]}>
-                                  <Text style={styles.variantCardBadgeText}>
-                                    {Math.round(disc)}% OFF
-                                  </Text>
-                                </View>
-                              ) : (
-                                <View style={styles.variantCardBadgeSpacer} />
-                              )}
-
                               <View style={styles.variantCardImageWrap}>
                                 {thumb ? (
-                                  <Image
-                                    source={{ uri: thumb }}
+                                  <AppImage
+                                    uri={thumb}
+                                    width={130}
                                     style={styles.variantCardImage}
                                     resizeMode="contain"
+                                    backgroundColor="#F5F7FA"
                                   />
                                 ) : (
                                   <View style={styles.variantCardImagePlaceholder}>
@@ -1421,6 +1454,22 @@ const ProductOverviewScreen = () => {
                                     />
                                   </View>
                                 )}
+                                {disc > 0 ? (
+                                  <View style={styles.variantCardBadge}>
+                                    <Text style={styles.variantCardBadgeText}>
+                                      {Math.round(disc)}% OFF
+                                    </Text>
+                                  </View>
+                                ) : null}
+                                {selected ? (
+                                  <View
+                                    style={[
+                                      styles.variantCardSelectedTick,
+                                      { backgroundColor: primary },
+                                    ]}>
+                                    <Icon name="check" size={12} color="#FFFFFF" />
+                                  </View>
+                                ) : null}
                               </View>
 
                               <Text
@@ -1444,18 +1493,6 @@ const ProductOverviewScreen = () => {
                                 <Text style={styles.variantCardPerUnit} numberOfLines={1}>
                                   {perUnit}
                                 </Text>
-                              ) : (
-                                <View style={styles.variantCardPerUnitSpacer} />
-                              )}
-
-                              {selected ? (
-                                <View
-                                  style={[
-                                    styles.variantCardSelectedTick,
-                                    { backgroundColor: primary },
-                                  ]}>
-                                  <Icon name="check" size={12} color="#FFFFFF" />
-                                </View>
                               ) : null}
                             </TouchableOpacity>
                           );
@@ -1733,7 +1770,11 @@ const ProductOverviewScreen = () => {
 
       {selectedProduct && isDetailMode ? (
         <View
-          style={[styles.detailFooterBar, !canPurchase && styles.detailFooterDisabled]}>
+          style={[
+            styles.detailFooterBar,
+            !canPurchase && styles.detailFooterDisabled,
+            { paddingBottom: insets.bottom + 12 },
+          ]}>
           <View style={styles.detailFooterAddCol}>
             {(hasVariants ? selectedVariantCartQty > 0 && !!selectedVariantId : detailTierCartBinding.displayQty > 0 && !!detailTierCartBinding.decrementTier) &&
             canPurchase ? (
@@ -1753,29 +1794,29 @@ const ProductOverviewScreen = () => {
               style={[
                 styles.detailAddBtn,
                 {
-                  backgroundColor: canPurchase ? primary : '#CBD5E1',
-                  borderColor: canPurchase ? primary : '#CBD5E1',
+                  backgroundColor: canPurchase ? '#FFFFFF' : '#F1F5F9',
+                  borderColor: canPurchase ? primary : '#E2E8F0',
                 },
                 !canPurchase && styles.detailFooterBtnDisabled,
               ]}
               disabled={!canPurchase}
               onPress={onPressDetailAddToCart}
               activeOpacity={0.9}>
-              <Icon name="cart-plus" size={17} color="#FFFFFF" />
+              <Icon name="cart-plus" size={17} color={canPurchase ? primary : '#94A3B8'} />
               <View style={styles.detailAddTextCol}>
-                <Text style={[styles.detailAddText, { color: '#FFFFFF' }]}>
+                <Text style={[styles.detailAddText, { color: canPurchase ? primary : '#94A3B8' }]}>
                   {(hasVariants ? selectedVariantCartQty : detailTierCartBinding.displayQty) > 0
                     ? 'Add more'
                     : 'ADD'}
                 </Text>
                 {hasVariants ? (
                   selectedVariantCartQty > 0 ? (
-                    <Text style={[styles.detailAddSub, { color: '#E0ECFF' }]} numberOfLines={2}>
+                    <Text style={[styles.detailAddSub, { color: '#64748B' }]} numberOfLines={2}>
                       In cart: {selectedVariantCartQty}
                     </Text>
                   ) : null
                 ) : detailProductCartTotal > 0 ? (
-                  <Text style={[styles.detailAddSub, { color: '#E0ECFF' }]} numberOfLines={2}>
+                  <Text style={[styles.detailAddSub, { color: '#64748B' }]} numberOfLines={2}>
                     In cart: {detailCartSummaryText}
                   </Text>
                 ) : null}
@@ -1920,6 +1961,16 @@ const styles = StyleSheet.create({
   topBarText: { flex: 1 },
   title: { fontSize: 22, fontWeight: '900' },
   subtitle: { marginTop: 2, fontWeight: '600' },
+  detailTopTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.2 },
+  backBtnDetail: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
   searchWrap: {
     marginTop: 12,
     borderRadius: 16,
@@ -1966,15 +2017,16 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   detailGalleryBleed: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F5F7FA',
     position: 'relative',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E2E8F0',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    overflow: 'hidden',
   },
   detailCarouselPage: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F5F7FA',
   },
   detailCarouselImage: {
     width: '100%',
@@ -2044,11 +2096,11 @@ const styles = StyleSheet.create({
   detailThumbWrap: {
     width: 64,
     height: 64,
-    borderRadius: 4,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#CBD5E1',
     overflow: 'hidden',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F5F7FA',
   },
   detailThumbWrapActive: {
     borderWidth: 2,
@@ -2058,8 +2110,8 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   detailInfoSection: {
-    paddingTop: 20,
-    paddingBottom: 12,
+    paddingTop: 14,
+    paddingBottom: 10,
   },
   detailHero: {
     paddingBottom: 0,
@@ -2091,7 +2143,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#64748B',
-    marginBottom: 10,
+    marginBottom: 6,
     lineHeight: 18,
   },
   detailName: {
@@ -2107,9 +2159,9 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
   },
   detailSectionRule: {
-    height: 8,
+    height: 6,
     backgroundColor: '#F1F5F9',
-    marginTop: 20,
+    marginTop: 14,
     marginHorizontal: -14,
     marginBottom: 0,
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -2117,8 +2169,8 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
   },
   detailBodyStack: {
-    marginTop: 20,
-    gap: 28,
+    marginTop: 16,
+    gap: 18,
   },
   detailSubsection: {
     gap: 8,
@@ -2188,7 +2240,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   detailPriceRow: {
-    marginTop: 16,
+    marginTop: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
@@ -2244,7 +2296,7 @@ const styles = StyleSheet.create({
     color: '#B91C1C',
   },
   detailMetaList: {
-    marginTop: 18,
+    marginTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#E2E8F0',
   },
@@ -2252,7 +2304,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 14,
+    paddingVertical: 10,
   },
   detailMetaRowDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -2296,7 +2348,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   qtyBlock: {
-    paddingTop: 0,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 14,
   },
   qtyBlockDisabled: {
     opacity: 0.55,
@@ -2322,14 +2378,14 @@ const styles = StyleSheet.create({
   },
   qtyRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   qtyBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 4,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#94A3B8',
+    borderColor: '#CBD5E1',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'transparent',
+    backgroundColor: '#FFFFFF',
   },
   qtyValue: { minWidth: 40, textAlign: 'center', fontSize: 18, fontWeight: '900' },
   maxInfo: { marginTop: 8, fontSize: 12, fontWeight: '700' },
@@ -2367,11 +2423,16 @@ const styles = StyleSheet.create({
     gap: 10,
     alignItems: 'stretch',
     backgroundColor: '#FFFFFF',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#E2E8F0',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 12,
+    paddingTop: 14,
+    paddingBottom: 14,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 16,
   },
   detailFooterAddCol: {
     flex: 1,
@@ -2380,9 +2441,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   detailFooterMinus: {
-    width: 44,
-    borderRadius: 4,
-    borderWidth: StyleSheet.hairlineWidth,
+    width: 46,
+    borderRadius: 14,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFFFFF',
@@ -2445,8 +2506,8 @@ const styles = StyleSheet.create({
   detailAddBtn: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 12,
+    borderRadius: 14,
+    paddingVertical: 14,
     paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2502,7 +2563,7 @@ const styles = StyleSheet.create({
   buyNowBtn: {
     flex: 1,
     alignSelf: 'stretch',
-    borderRadius: 4,
+    borderRadius: 14,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2683,7 +2744,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginHorizontal: -14,
     paddingHorizontal: 14,
-    minHeight: 200,
+    minHeight: 188,
   },
   variantCardRow: {
     paddingVertical: 4,
@@ -2692,14 +2753,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   variantCard: {
-    width: 138,
-    minHeight: 188,
-    borderWidth: 1.5,
-    borderRadius: 14,
+    width: 150,
+    minHeight: 176,
+    borderRadius: 16,
     padding: 10,
     backgroundColor: '#FFFFFF',
     position: 'relative',
-    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
   variantCardSelected: {
     shadowColor: '#1D4ED8',
@@ -2709,11 +2773,14 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   variantCardBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginBottom: 6,
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    zIndex: 2,
+    backgroundColor: '#16A34A',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   variantCardBadgeText: {
     color: '#FFFFFF',
@@ -2727,10 +2794,11 @@ const styles = StyleSheet.create({
   },
   variantCardImageWrap: {
     width: '100%',
-    height: 76,
+    height: 96,
     marginBottom: 8,
-    borderRadius: 8,
-    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    backgroundColor: '#F5F7FA',
+    position: 'relative',
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2779,11 +2847,12 @@ const styles = StyleSheet.create({
   },
   variantCardSelectedTick: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    top: 6,
+    right: 6,
+    zIndex: 2,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2832,6 +2901,19 @@ const styles = StyleSheet.create({
     marginLeft: 5,
     fontSize: 13,
   },
+  notDeliverableCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 11,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    flexShrink: 0,
+  },
+  notDeliverableCompactText: { color: '#94A3B8', fontWeight: '800', fontSize: 12 },
 });
 
 export default ProductOverviewScreen;

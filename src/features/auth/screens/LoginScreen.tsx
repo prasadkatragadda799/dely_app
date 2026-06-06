@@ -20,12 +20,16 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Toast from 'react-native-toast-message';
 import { useAuth } from '../../../hooks/useAuth';
 import { AuthStackParamList } from '../../../navigation/types';
+import { palette, radius, shadow, spacing, divisionTheme } from '../../../utils/theme';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
 type LoginForm = {
   phone: string;
 };
+
+const CUSTOMER = divisionTheme.fmcg;
+const DELIVERY = divisionTheme.homeKitchen;
 
 const LoginScreen = ({ navigation }: Props) => {
   const { sendCustomerOtp, loginAsDelivery } = useAuth();
@@ -38,6 +42,9 @@ const LoginScreen = ({ navigation }: Props) => {
   const [loading, setLoading] = useState(false);
   const [deliveryPhone, setDeliveryPhone] = useState('');
   const [deliveryPassword, setDeliveryPassword] = useState('');
+
+  const isDelivery = mode === 'delivery';
+  const accent = isDelivery ? DELIVERY : CUSTOMER;
 
   const onSubmitCustomer = async (values: LoginForm) => {
     try {
@@ -76,126 +83,103 @@ const LoginScreen = ({ navigation }: Props) => {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* soft ambient glows */}
+      <View style={[styles.glowTop, { backgroundColor: accent.primary }]} />
+      <View style={[styles.glowBottom, { backgroundColor: accent.primaryDark }]} />
+
       <KeyboardAvoidingView
         style={styles.keyboardArea}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
-      >
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="always"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.topBar}>
-            <Image
-              source={require('../../../../assets/logo.png')}
-              style={styles.topBarLogo}
-              resizeMode="contain"
-            />
+          showsVerticalScrollIndicator={false}>
+          {/* Brand */}
+          <View style={styles.brandRow}>
+            <View style={styles.logoMark}>
+              <Image
+                source={require('../../../../assets/logo.png')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
+            </View>
+            <Text style={styles.brandName}>Delycart</Text>
           </View>
 
-          <View
-            style={[
-              styles.modeSegment,
-              {
-                borderColor:
-                  mode === 'delivery'
-                    ? 'rgba(16,185,129,0.25)'
-                    : 'rgba(29,78,216,0.25)',
-              },
-            ]}
-          >
+          {/* Headline */}
+          <Text style={styles.headline}>
+            {isDelivery ? 'Partner sign in' : 'Welcome back'}
+          </Text>
+          <Text style={styles.subhead}>
+            {isDelivery
+              ? 'Manage routes, tasks and performance in one place.'
+              : 'Enter your mobile number to continue with a one-time code.'}
+          </Text>
+
+          {/* Segmented control */}
+          <View style={styles.segment}>
             <TouchableOpacity
               style={[
-                styles.modePill,
-                mode === 'customer' && {
-                  backgroundColor: '#1D4ED8',
-                  borderColor: '#1D4ED8',
+                styles.segmentPill,
+                !isDelivery && {
+                  backgroundColor: CUSTOMER.primary,
+                  ...shadow.accent(CUSTOMER.primary),
                 },
               ]}
               onPress={() => setMode('customer')}
-              activeOpacity={0.95}
-            >
+              activeOpacity={0.9}>
               <Icon
                 name="account-outline"
                 size={16}
-                color={mode === 'customer' ? '#FFFFFF' : '#1D4ED8'}
-                style={{ marginRight: 6 }}
+                color={!isDelivery ? '#FFFFFF' : palette.muted}
               />
               <Text
                 style={[
-                  styles.modeText,
-                  mode === 'customer' && { color: '#FFFFFF' },
-                ]}
-              >
-                Client Login
+                  styles.segmentText,
+                  { color: !isDelivery ? '#FFFFFF' : palette.muted },
+                ]}>
+                Client
               </Text>
             </TouchableOpacity>
-            <View style={styles.modeDivider} />
             <TouchableOpacity
               style={[
-                styles.modePill,
-                mode === 'delivery' && {
-                  backgroundColor: '#16A34A',
-                  borderColor: '#16A34A',
+                styles.segmentPill,
+                isDelivery && {
+                  backgroundColor: DELIVERY.primary,
+                  ...shadow.accent(DELIVERY.primary),
                 },
               ]}
               onPress={() => setMode('delivery')}
-              activeOpacity={0.95}
-            >
+              activeOpacity={0.9}>
               <Icon
                 name="truck-fast-outline"
                 size={16}
-                color={mode === 'delivery' ? '#FFFFFF' : '#16A34A'}
-                style={{ marginRight: 6 }}
+                color={isDelivery ? '#FFFFFF' : palette.muted}
               />
               <Text
                 style={[
-                  styles.modeText,
-                  mode === 'delivery' && { color: '#FFFFFF' },
-                ]}
-              >
-                Delivery Partner
+                  styles.segmentText,
+                  { color: isDelivery ? '#FFFFFF' : palette.muted },
+                ]}>
+                Delivery
               </Text>
             </TouchableOpacity>
           </View>
 
-          {mode === 'delivery' ? (
-            <View>
-              <View style={styles.deliveryHero}>
-              <View style={styles.heroIconBox}>
-                <Icon name="bike-fast" size={26} color="#FFFFFF" />
-              </View>
-              <Text style={styles.deliveryTitle}>Delivery Partner Portal</Text>
-              <Text style={styles.deliverySubtitle}>
-                Sign in to manage routes, delivery tasks, and performance in one
-                place.
-              </Text>
-              <View style={styles.trustRow}>
-                <View style={styles.trustChip}>
-                  <Icon name="shield-check-outline" size={14} color="#BFDBFE" />
-                  <Text style={styles.trustChipText}>Secure Access</Text>
-                </View>
-                <View style={styles.trustChip}>
-                  <Icon name="clock-outline" size={14} color="#BFDBFE" />
-                  <Text style={styles.trustChipText}>Instant Sync</Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.deliveryCard}>
-              <Text style={styles.deliveryLabel}>
-                Registered mobile number
-              </Text>
-
-                <View style={styles.deliveryInputRow} collapsable={false}>
-                  <Icon name="account-outline" size={18} color="#94A3B8" />
+          {/* Card */}
+          <View style={styles.card}>
+            {isDelivery ? (
+              <>
+                <Text style={styles.label}>Registered mobile number</Text>
+                <View style={styles.inputRow}>
+                  <Icon name="phone-outline" size={18} color={palette.faint} />
                   <TextInput
                     placeholder="10-digit mobile number"
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor={palette.faint}
                     value={deliveryPhone}
                     onChangeText={setDeliveryPhone}
-                    style={styles.deliveryInput}
+                    style={styles.input}
                     keyboardType="phone-pad"
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -203,159 +187,137 @@ const LoginScreen = ({ navigation }: Props) => {
                   />
                 </View>
 
-              <View style={styles.passwordLabelRow}>
-                <Text style={styles.deliveryLabel}>Password</Text>
-                <TouchableOpacity
-                  onPress={async () => {
-                    Keyboard.dismiss();
-                    const url = 'mailto:support@delycart.app?subject=Delivery%20Password%20Reset';
-                    const canOpen = await Linking.canOpenURL(url);
-                    if (canOpen) {
-                      await Linking.openURL(url);
-                    } else {
-                      Toast.show({
-                        type: 'error',
-                        text1: 'Unable to open email app',
-                        text2: 'Please contact support@delycart.app',
-                      });
-                    }
-                  }}
-                >
-                  <Text style={styles.forgotText}>Forgot Password?</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.deliveryInputRow} collapsable={false}>
-                <Icon name="lock-outline" size={18} color="#94A3B8" />
-                <TextInput
-                  placeholder="Password"
-                  placeholderTextColor="#94A3B8"
-                  value={deliveryPassword}
-                  onChangeText={setDeliveryPassword}
-                  style={styles.deliveryInput}
-                  secureTextEntry={!showDeliveryPassword}
-                />
-                <TouchableOpacity
-                  onPress={() => setShowDeliveryPassword(prev => !prev)}
-                  style={styles.eyeBtn}
-                  activeOpacity={0.9}
-                >
-                  <Icon
-                    name={showDeliveryPassword ? 'eye-off-outline' : 'eye-outline'}
-                    size={18}
-                    color="#94A3B8"
-                  />
-                </TouchableOpacity>
-              </View>
-
-              <TouchableOpacity
-                style={[styles.primaryButton, styles.deliverySubmitButton, loading && styles.buttonLoading]}
-                disabled={loading}
-                onPress={onSubmitDelivery}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <>
-                    <Text style={styles.primaryButtonText}>Continue as Partner</Text>
-                    <Icon name="arrow-right" size={18} color="#FFFFFF" />
-                  </>
-                )}
-              </TouchableOpacity>
-
-              {/* <Text style={styles.bottomQuestion}>
-                Don't have an account yet?
-              </Text>
-
-              <TouchableOpacity
-                style={styles.outlineButton}
-                onPress={() => navigation.navigate('Register')}
-              >
-                <Text style={styles.outlineButtonText}>
-                  Join Delivery Network
-                </Text>
-              </TouchableOpacity> */}
-            </View>
-
-            {/* Mode switch moved to the segmented control above */}
-            </View>
-          ) : (
-            <View>
-              <View style={styles.deliveryHero}>
-              <View style={styles.heroIconBox}>
-                <Icon name="account-circle-outline" size={26} color="#FFFFFF" />
-              </View>
-              <Text style={styles.deliveryTitle}>Welcome Back</Text>
-              <Text style={styles.deliverySubtitle}>
-                Enter your mobile number to login with OTP.
-              </Text>
-              <View style={styles.trustRow}>
-                <View style={styles.trustChip}>
-                  <Icon name="lock-outline" size={14} color="#BFDBFE" />
-                  <Text style={styles.trustChipText}>Private & Safe</Text>
+                <View style={styles.passwordLabelRow}>
+                  <Text style={styles.label}>Password</Text>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      Keyboard.dismiss();
+                      const url =
+                        'mailto:support@delycart.app?subject=Delivery%20Password%20Reset';
+                      const canOpen = await Linking.canOpenURL(url);
+                      if (canOpen) {
+                        await Linking.openURL(url);
+                      } else {
+                        Toast.show({
+                          type: 'error',
+                          text1: 'Unable to open email app',
+                          text2: 'Please contact support@delycart.app',
+                        });
+                      }
+                    }}>
+                    <Text style={[styles.forgotText, { color: DELIVERY.primary }]}>
+                      Forgot password?
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-                <View style={styles.trustChip}>
-                  <Icon
-                    name="lightning-bolt-outline"
-                    size={14}
-                    color="#BFDBFE"
-                  />
-                  <Text style={styles.trustChipText}>Quick Login</Text>
-                </View>
-              </View>
-            </View>
 
-            <View style={styles.deliveryCard}>
-              <Text style={styles.deliveryLabel}>Phone number</Text>
-              <Controller
-                control={control}
-                name="phone"
-                render={({ field: { onChange, value } }) => (
-                  <View style={styles.deliveryInputRow} collapsable={false}>
-                    <Icon name="phone-outline" size={18} color="#94A3B8" />
-                    <TextInput
-                      placeholder="Enter phone number"
-                      placeholderTextColor="#94A3B8"
-                      value={value ?? ''}
-                      onChangeText={onChange}
-                      style={styles.deliveryInput}
-                      keyboardType="phone-pad"
-                      autoCapitalize="none"
+                <View style={styles.inputRow}>
+                  <Icon name="lock-outline" size={18} color={palette.faint} />
+                  <TextInput
+                    placeholder="Password"
+                    placeholderTextColor={palette.faint}
+                    value={deliveryPassword}
+                    onChangeText={setDeliveryPassword}
+                    style={styles.input}
+                    secureTextEntry={!showDeliveryPassword}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowDeliveryPassword(prev => !prev)}
+                    style={styles.eyeBtn}
+                    activeOpacity={0.9}>
+                    <Icon
+                      name={showDeliveryPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={18}
+                      color={palette.faint}
                     />
-                  </View>
-                )}
-              />
+                  </TouchableOpacity>
+                </View>
 
-              <TouchableOpacity
-                style={[styles.primaryButton, loading && styles.buttonLoading]}
-                disabled={loading}
-                onPress={handleSubmit(onSubmitCustomer)}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <>
-                    <Text style={styles.primaryButtonText}>Send OTP</Text>
-                    <Icon name="arrow-right" size={18} color="#FFFFFF" />
-                  </>
-                )}
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.primaryButton,
+                    { backgroundColor: DELIVERY.primary, ...shadow.accent(DELIVERY.primary) },
+                    loading && styles.buttonLoading,
+                  ]}
+                  disabled={loading}
+                  onPress={onSubmitDelivery}
+                  activeOpacity={0.9}>
+                  {loading ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <>
+                      <Text style={styles.primaryButtonText}>Continue as partner</Text>
+                      <Icon name="arrow-right" size={18} color="#FFFFFF" />
+                    </>
+                  )}
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.label}>Phone number</Text>
+                <Controller
+                  control={control}
+                  name="phone"
+                  render={({ field: { onChange, value } }) => (
+                    <View style={styles.inputRow}>
+                      <Icon name="phone-outline" size={18} color={palette.faint} />
+                      <TextInput
+                        placeholder="Enter phone number"
+                        placeholderTextColor={palette.faint}
+                        value={value ?? ''}
+                        onChangeText={onChange}
+                        style={styles.input}
+                        keyboardType="phone-pad"
+                        autoCapitalize="none"
+                      />
+                    </View>
+                  )}
+                />
 
-              <Text style={styles.bottomQuestion}>
-                Don't have an account yet?
-              </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.primaryButton,
+                    { backgroundColor: CUSTOMER.primary, ...shadow.accent(CUSTOMER.primary) },
+                    loading && styles.buttonLoading,
+                  ]}
+                  disabled={loading}
+                  onPress={handleSubmit(onSubmitCustomer)}
+                  activeOpacity={0.9}>
+                  {loading ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <>
+                      <Text style={styles.primaryButtonText}>Send OTP</Text>
+                      <Icon name="arrow-right" size={18} color="#FFFFFF" />
+                    </>
+                  )}
+                </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.outlineButton}
-                onPress={() => navigation.navigate('Register')}
-              >
-                <Text style={styles.outlineButtonText}>Create Account</Text>
-              </TouchableOpacity>
+                <View style={styles.signupRow}>
+                  <Text style={styles.signupQuestion}>New to Delycart?</Text>
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate('Register')}
+                    activeOpacity={0.8}>
+                    <Text style={[styles.signupLink, { color: CUSTOMER.primary }]}>
+                      Create account
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+
+          {/* Trust strip */}
+          <View style={styles.trustRow}>
+            <View style={styles.trustChip}>
+              <Icon name="shield-check-outline" size={15} color={accent.primary} />
+              <Text style={styles.trustChipText}>Secure & private</Text>
             </View>
-
-            {/* Mode switch moved to the segmented control above */}
+            <View style={styles.trustChip}>
+              <Icon name="lightning-bolt-outline" size={15} color={accent.primary} />
+              <Text style={styles.trustChipText}>Fast checkout</Text>
             </View>
-          )}
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -363,296 +325,158 @@ const LoginScreen = ({ navigation }: Props) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#062B66' },
-  keyboardArea: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 18,
+  container: { flex: 1, backgroundColor: palette.bg, overflow: 'hidden' },
+  glowTop: {
+    position: 'absolute',
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    top: -130,
+    left: -80,
+    opacity: 0.1,
   },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 240,
+  glowBottom: {
+    position: 'absolute',
+    width: 340,
+    height: 340,
+    borderRadius: 170,
+    bottom: -160,
+    right: -110,
+    opacity: 0.08,
   },
+  keyboardArea: { flex: 1, paddingHorizontal: spacing.xl },
+  scrollContent: { flexGrow: 1, paddingTop: spacing.xl, paddingBottom: 160 },
 
-  topBar: {
+  brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    marginTop: 6,
+    gap: 12,
+    marginBottom: spacing.xxxl,
   },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topBarLogo: {
+  logoMark: {
     width: 52,
     height: 52,
+    borderRadius: radius.lg,
+    backgroundColor: palette.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.sm,
+  },
+  logoImage: { width: 38, height: 38 },
+  brandName: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    color: palette.ink,
   },
 
-  modeSegment: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 28,
-    marginBottom: 20,
-    padding: 5,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+  headline: { fontSize: 28, fontWeight: '800', letterSpacing: -0.5, color: palette.ink },
+  subhead: {
+    marginTop: 8,
+    fontSize: 14,
+    fontWeight: '500',
+    lineHeight: 20,
+    color: palette.muted,
   },
-  modePill: {
+
+  segment: {
+    flexDirection: 'row',
+    marginTop: spacing.xxl,
+    backgroundColor: palette.surfaceAlt,
+    borderRadius: radius.pill,
+    padding: 5,
+    borderWidth: 1,
+    borderColor: palette.line,
+    gap: 4,
+  },
+  segmentPill: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 22,
+    gap: 7,
     paddingVertical: 12,
-    marginHorizontal: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderRadius: radius.pill,
   },
-  modeDivider: {
-    width: 1,
-    height: 34,
-    backgroundColor: 'transparent',
-  },
-  modeText: {
-    fontWeight: '900',
-    fontSize: 13,
-    color: '#FFFFFF',
-    marginLeft: 4,
-  },
-
-  topHeader: {
-    marginBottom: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-
-  brandBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#1D4ED8',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 18,
-  },
-  brandText: { color: '#FFFFFF', fontWeight: '800' },
-  deliveryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#DCFCE7',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  deliveryButtonText: { color: '#14532D', fontWeight: '700' },
+  segmentText: { fontWeight: '800', fontSize: 14 },
 
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    padding: 18,
+    marginTop: spacing.xl,
+    backgroundColor: palette.surface,
+    borderRadius: radius.xxl,
+    padding: spacing.xl,
     borderWidth: 1,
-    borderColor: '#DBEAFE',
+    borderColor: palette.line,
+    ...shadow.md,
   },
-  title: { fontSize: 28, fontWeight: '800', color: '#0F172A' },
-  subtitle: { color: '#334155', marginTop: 4, marginBottom: 14 },
-  label: { color: '#1E3A8A', fontWeight: '700', marginTop: 8, marginBottom: 6 },
+  label: {
+    color: palette.ink,
+    fontWeight: '700',
+    fontSize: 13,
+    marginBottom: 8,
+  },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#BFDBFE',
-    borderRadius: 12,
-    backgroundColor: '#F8FBFF',
-    paddingHorizontal: 12,
+    borderColor: palette.line,
+    borderRadius: radius.md,
+    paddingHorizontal: 14,
+    backgroundColor: palette.surfaceAlt,
+    gap: 10,
   },
-  input: {
-    flex: 1,
-    color: '#0F172A',
-    paddingLeft: 10,
-    paddingVertical: 12,
-  },
-
-  primaryButtonCustomer: {
-    backgroundColor: '#1D4ED8',
-    marginTop: 20,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryButtonTextCustomer: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 16,
-  },
-
-  link: {
-    color: '#1D4ED8',
-    marginTop: 16,
-    textAlign: 'center',
-    fontWeight: '700',
-  },
-
-  // Delivery UI
-  deliveryHero: { marginTop: 6, alignItems: 'center' },
-  heroIconBox: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  deliveryTitle: {
-    marginTop: 6,
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#FFFFFF',
-  },
-  deliverySubtitle: {
-    marginTop: 8,
-    color: '#D1E9FF',
-    textAlign: 'center',
-    fontWeight: '600',
-    lineHeight: 20,
-  },
-  trustRow: {
-    marginTop: 12,
+  input: { flex: 1, minWidth: 0, paddingVertical: 14, color: palette.ink, fontWeight: '600' },
+  eyeBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  passwordLabelRow: {
+    marginTop: spacing.lg,
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  forgotText: { fontWeight: '800', fontSize: 12 },
+
+  primaryButton: {
+    marginTop: spacing.xl,
+    paddingVertical: 16,
+    borderRadius: radius.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 54,
+  },
+  buttonLoading: { opacity: 0.8 },
+  primaryButtonText: { color: '#FFFFFF', fontWeight: '800', fontSize: 16 },
+
+  signupRow: {
+    marginTop: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  signupQuestion: { color: palette.muted, fontWeight: '600', fontSize: 13 },
+  signupLink: { fontWeight: '800', fontSize: 13 },
+
+  trustRow: {
+    marginTop: spacing.xxl,
+    flexDirection: 'row',
+    justifyContent: 'center',
     gap: 10,
   },
   trustChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  trustChipText: {
-    color: '#DBEAFE',
-    fontWeight: '800',
-    fontSize: 11,
-  },
-  deliveryCard: {
-    marginTop: 14,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 26,
-    padding: 18,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 5,
-  },
-  deliveryLabel: {
-    color: '#0F172A',
-    fontWeight: '800',
-    marginTop: 10,
-    marginBottom: 8,
-  },
-  deliveryInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    backgroundColor: palette.surface,
+    borderRadius: radius.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    backgroundColor: '#F8FAFC',
+    borderColor: palette.line,
+    ...shadow.xs,
   },
-  deliveryInput: {
-    flex: 1,
-    minWidth: 0,
-    paddingVertical: 14,
-    color: '#0F172A',
-  },
-  eyeBtn: {
-    width: 34,
-    height: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  passwordLabelRow: {
-    marginTop: 14,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  forgotText: { color: '#2563EB', fontWeight: '800', fontSize: 12 },
-
-  primaryButton: {
-    backgroundColor: '#1D4ED8',
-    marginTop: 16,
-    paddingVertical: 14,
-    borderRadius: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    minHeight: 52,
-  },
-  deliverySubmitButton: {
-    backgroundColor: '#16A34A',
-  },
-  buttonLoading: {
-    opacity: 0.75,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '900',
-    fontSize: 16,
-  },
-
-  outlineButton: {
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: '#1D4ED8',
-    borderRadius: 16,
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  outlineButtonText: { color: '#1D4ED8', fontWeight: '900' },
-  bottomQuestion: {
-    marginTop: 12,
-    textAlign: 'center',
-    color: '#64748B',
-    fontWeight: '700',
-  },
-
-  featureRow: { marginTop: 18, flexDirection: 'row', gap: 12 },
-  featureCard: {
-    flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 16,
-    padding: 16,
-  },
-  featureTitle: {
-    marginTop: 10,
-    color: '#FFFFFF',
-    fontWeight: '900',
-    fontSize: 13,
-  },
-  featureSubtitle: {
-    marginTop: 4,
-    color: '#D1E9FF',
-    fontWeight: '700',
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  switchLink: { marginTop: 14, alignItems: 'center' },
-  switchLinkText: { color: '#FFFFFF', fontWeight: '900', opacity: 0.9 },
+  trustChipText: { color: palette.body, fontWeight: '700', fontSize: 12 },
 });
 
 export default LoginScreen;

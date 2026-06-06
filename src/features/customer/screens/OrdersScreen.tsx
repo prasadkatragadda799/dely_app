@@ -23,6 +23,7 @@ import {
   useInitiateReturnMutation,
 } from '../../../services/api/mobileApi';
 import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
+import { palette, radius, shadow, getDivision } from '../../../utils/theme';
 
 type UiOrder = {
   id: string;
@@ -32,6 +33,31 @@ type UiOrder = {
   itemsSummary: string;
   createdAt?: string;
   address: string;
+  /** Status of this order's return request, if one exists. */
+  returnStatus?: string | null;
+};
+
+const RETURN_STEPS = ['Requested', 'Approved', 'Pickup', 'Picked up', 'At hub'];
+const returnStepIndex = (status?: string | null): number => {
+  switch (status) {
+    case 'requested': return 0;
+    case 'approved': return 1;
+    case 'pickup_assigned': return 2;
+    case 'picked_up': return 3;
+    case 'received_at_hub': return 4;
+    default: return -1;
+  }
+};
+const returnStatusLabel = (status?: string | null): string => {
+  switch (status) {
+    case 'requested': return 'Requested';
+    case 'approved': return 'Approved';
+    case 'pickup_assigned': return 'Pickup scheduled';
+    case 'picked_up': return 'Picked up';
+    case 'received_at_hub': return 'Received at hub';
+    case 'rejected': return 'Rejected';
+    default: return '';
+  }
 };
 
 const toTitleCase = (value: string) =>
@@ -108,8 +134,7 @@ const OrdersScreen = () => {
   const navigation = useNavigation();
   const { alert: appAlert, confirm } = useAppAlert();
   const homeDivision = useAppSelector(state => state.homeDivision?.division ?? 'fmcg');
-  const isHomeKitchen = homeDivision === 'homeKitchen';
-  const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
+  const primary = getDivision(homeDivision).primary;
   const tabBarHeight = useBottomTabBarHeight();
   const insets = useSafeAreaInsets();
   const [invoiceOrderId, setInvoiceOrderId] = React.useState<string | null>(null);
@@ -155,6 +180,7 @@ const OrdersScreen = () => {
           ? buildItemsSummary(o.items)
           : buildItemsSummaryFromCount(o?.items_count ?? o?.itemsCount),
       createdAt: o?.createdAt ?? o?.created_at ?? o?.createdAtUtc,
+      returnStatus: (o?.returnStatus ?? o?.return_status ?? null) as string | null,
       address:
         deriveAddress(
           o?.deliveryAddress ??
@@ -348,12 +374,12 @@ const OrdersScreen = () => {
                         <Text style={[styles.invoiceBtnText, { color: primary }]}>View invoice</Text>
                       </TouchableOpacity>
                     ) : null}
-                    {canRequestReturn(order) ? (
+                    {canRequestReturn(order) && !order.returnStatus ? (
                       <TouchableOpacity
                         style={styles.returnBtn}
                         onPress={() => openReturnModal(order)}
                         activeOpacity={0.9}>
-                        <Icon name="package-variant-remove" size={14} color="#7C3AED" />
+                        <Icon name="arrow-u-left-top" size={14} color="#7C3AED" />
                         <Text style={styles.returnBtnText}>Return</Text>
                       </TouchableOpacity>
                     ) : null}
@@ -382,6 +408,41 @@ const OrdersScreen = () => {
                     })}
                   </View>
                 )}
+
+                {order.returnStatus ? (
+                  <View style={styles.returnJourney}>
+                    <View style={styles.returnJourneyHead}>
+                      <Icon name="keyboard-return" size={14} color="#7C3AED" />
+                      <Text style={styles.returnJourneyTitle}>
+                        Return · {returnStatusLabel(order.returnStatus)}
+                      </Text>
+                    </View>
+                    {order.returnStatus === 'rejected' ? (
+                      <Text style={styles.returnRejectedText}>
+                        Your return request was not approved.
+                      </Text>
+                    ) : (
+                      <View style={styles.trackWrap}>
+                        {RETURN_STEPS.map((label, index) => {
+                          const rStep = returnStepIndex(order.returnStatus);
+                          const done = rStep >= index;
+                          const dotColor = done ? '#7C3AED' : '#CBD5E1';
+                          return (
+                            <View key={label} style={styles.trackStep}>
+                              <View style={[styles.trackDot, { backgroundColor: dotColor }]} />
+                              {index < RETURN_STEPS.length - 1 ? (
+                                <View style={[styles.trackLine, { backgroundColor: rStep > index ? '#7C3AED' : '#E2E8F0' }]} />
+                              ) : null}
+                              <Text style={[styles.trackLabel, done && { color: '#0F172A', fontWeight: '800' }]}>
+                                {label}
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </View>
+                ) : null}
               </View>
             );
           })
@@ -592,7 +653,7 @@ const OrdersScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F1F5F9' },
+  root: { flex: 1, backgroundColor: palette.bg },
   content: { paddingHorizontal: 14 },
   backLink: {
     flexDirection: 'row',
@@ -609,22 +670,24 @@ const styles = StyleSheet.create({
   loaderText: { marginTop: 10, color: '#475569', fontWeight: '700' },
   emptyCard: {
     marginTop: 18,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    backgroundColor: palette.surface,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: palette.line,
     padding: 20,
     alignItems: 'center',
+    ...shadow.sm,
   },
   emptyTitle: { marginTop: 10, color: '#0F172A', fontSize: 16, fontWeight: '900' },
   emptySub: { marginTop: 6, color: '#64748B', textAlign: 'center', fontWeight: '700' },
   orderCard: {
-    marginTop: 10,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    marginTop: 12,
+    backgroundColor: palette.surface,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 12,
+    borderColor: palette.line,
+    padding: 14,
+    ...shadow.sm,
   },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   orderId: { color: '#0F172A', fontWeight: '900' },
@@ -680,6 +743,15 @@ const styles = StyleSheet.create({
     height: 2,
   },
   trackLabel: { marginTop: 7, color: '#64748B', fontSize: 11, fontWeight: '700', textAlign: 'center' },
+  returnJourney: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#EEF2F6',
+  },
+  returnJourneyHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
+  returnJourneyTitle: { color: '#7C3AED', fontWeight: '900', fontSize: 13 },
+  returnRejectedText: { color: '#B91C1C', fontWeight: '700', fontSize: 13 },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(15,23,42,0.45)',

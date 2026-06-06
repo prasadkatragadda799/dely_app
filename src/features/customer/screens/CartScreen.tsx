@@ -3,12 +3,12 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import AppImage from '../../../shared/ui/AppImage';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Toast from 'react-native-toast-message';
 import { useNavigation } from '@react-navigation/native';
@@ -27,6 +27,7 @@ import {
   useCheckServiceLocationQuery,
   useGetDeliveryLocationsQuery,
 } from '../../../services/api/mobileApi';
+import { palette, shadow, getDivision } from '../../../utils/theme';
 
 const formatInrAmount = (value: number) => {
   const n = Number(value);
@@ -65,7 +66,7 @@ const CartScreen = () => {
   const insets = useSafeAreaInsets();
 
   const isHomeKitchen = homeDivision === 'homeKitchen';
-  const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
+  const primary = getDivision(homeDivision).primary;
 
   const [mutatingIds, setMutatingIds] = useState<Set<string>>(new Set());
   const [clearing, setClearing] = useState(false);
@@ -245,7 +246,7 @@ const CartScreen = () => {
           return (
             <View style={[styles.rowCard, isMutating && styles.rowCardMutating]}>
               <View style={styles.rowInfo}>
-                <Image source={{ uri: item.product.image }} style={styles.thumb} />
+                <AppImage uri={item.product.image} width={52} style={styles.thumb} rounded={14} backgroundColor="#EEF2FF" />
                 <View style={styles.rowInfoText}>
                   <Text style={styles.name}>{item.product.name}</Text>
                   <Text style={styles.brand}>{item.product.brand}</Text>
@@ -384,7 +385,7 @@ const CartScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FBFF' },
+  container: { flex: 1, backgroundColor: palette.bg },
   header: {
     paddingHorizontal: 16,
     paddingBottom: 14,
@@ -443,15 +444,16 @@ const styles = StyleSheet.create({
   },
   listContent: { padding: 14, paddingBottom: 120 },
   rowCard: {
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: palette.surface,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(226,232,240,0.9)',
+    borderColor: palette.line,
     padding: 12,
     flexDirection: 'row',
     justifyContent: 'flex-start',
     alignItems: 'center',
     marginBottom: 12,
+    ...shadow.sm,
   },
   rowCardMutating: { opacity: 0.65 },
   rowInfo: { flex: 1, paddingRight: 8, flexDirection: 'row', gap: 10, alignItems: 'center' },
@@ -520,9 +522,13 @@ const styles = StyleSheet.create({
   empty: { color: '#64748B', fontWeight: '800' },
   footer: {
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    padding: 14,
-    backgroundColor: '#FFFFFF',
+    borderTopColor: palette.line,
+    padding: 16,
+    paddingTop: 18,
+    backgroundColor: palette.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    ...shadow.lg,
   },
   billRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   billLabel: { color: '#64748B', fontWeight: '700' },
@@ -532,8 +538,8 @@ const styles = StyleSheet.create({
   total: { fontSize: 18, fontWeight: '900', marginBottom: 10, color: '#0F172A' },
   checkout: {
     backgroundColor: '#1D4ED8',
-    borderRadius: 14,
-    paddingVertical: 14,
+    borderRadius: 16,
+    paddingVertical: 16,
   },
   checkoutUnavailable: {
     backgroundColor: '#94A3B8',

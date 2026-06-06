@@ -1,20 +1,25 @@
-import React, { useMemo } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Toast from 'react-native-toast-message';
 import { useAuth } from '../../../hooks/useAuth';
 import { useAppSelector } from '../../../hooks/redux';
 import { CustomerProfileStackParamList } from '../../../navigation/types';
 import {
+  useCreateDeliveryLocationMutation,
+  useGetDeliveryLocationsQuery,
   useGetKycStatusQuery,
+  useGetProfileQuery,
   useSkipKycMutation,
   useSubmitKycMutation,
   useUploadKycImageMutation,
 } from '../../../services/api/mobileApi';
 import type { BusinessProfile } from '../businessProfileSlice';
 import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
+import { palette, shadow, getDivision } from '../../../utils/theme';
 
 function KycDocTile({ uri, label }: { uri?: string; label: string }) {
   return (
@@ -48,10 +53,89 @@ const ProfileScreen = () => {
   const navigation =
     useNavigation<NativeStackNavigationProp<CustomerProfileStackParamList>>();
   const homeDivision = useAppSelector(state => state.homeDivision?.division ?? 'fmcg');
-  const isHomeKitchen = homeDivision === 'homeKitchen';
-  const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
-  const primarySoft = isHomeKitchen ? 'rgba(22,163,74,0.12)' : 'rgba(29,78,216,0.12)';
+  const primary = getDivision(homeDivision).primary;
   const business = useAppSelector(state => state.businessProfile?.profile ?? null);
+
+  // Profile data for pre-filling new address form.
+  const { data: profileRes } = useGetProfileQuery();
+  const profile = profileRes?.data as any;
+  const businessAddress = profile?.address;
+  const profileAddressLine1 =
+    typeof businessAddress === 'object' && businessAddress
+      ? businessAddress.address_line1 ?? businessAddress.addressLine1 ?? businessAddress.address ?? ''
+      : '';
+  const profileAddressLine2 =
+    typeof businessAddress === 'object' && businessAddress
+      ? businessAddress.address_line2 ?? businessAddress.addressLine2 ?? businessAddress.landmark ?? ''
+      : '';
+  const profileCity = profile?.city ?? profile?.businessCity ?? '';
+  const profileState = profile?.state ?? profile?.businessState ?? '';
+  const profilePincode = profile?.pincode ?? profile?.businessPincode ?? '';
+
+  // Saved delivery addresses.
+  const {
+    data: savedAddressesEnvelope,
+    refetch: refetchSavedAddresses,
+    isLoading: isLoadingSavedAddresses,
+  } = useGetDeliveryLocationsQuery(undefined, { skip: !user });
+  type SavedAddress = {
+    id: string; address_line1?: string; address_line2?: string;
+    city?: string; state?: string; pincode?: string;
+    type?: string; is_default?: boolean;
+  };
+  const savedAddresses = useMemo<SavedAddress[]>(
+    () => ((savedAddressesEnvelope?.data as SavedAddress[]) ?? []) || [],
+    [savedAddressesEnvelope],
+  );
+  const [createDeliveryLocation, { isLoading: isSavingAddress }] = useCreateDeliveryLocationMutation();
+
+  // Add new address form state.
+  const [isAddingAddress, setIsAddingAddress] = useState(false);
+  const [editLine1, setEditLine1] = useState('');
+  const [editLine2, setEditLine2] = useState('');
+  const [editCity, setEditCity] = useState('');
+  const [editState, setEditState] = useState('');
+  const [editPincode, setEditPincode] = useState('');
+  const [newAddrType, setNewAddrType] = useState<'home' | 'office' | 'other'>('home');
+  const [newAddrDefault, setNewAddrDefault] = useState(false);
+
+  const openAddForm = (prefill = false) => {
+    setEditLine1(prefill ? profileAddressLine1 : '');
+    setEditLine2(prefill ? profileAddressLine2 : '');
+    setEditCity(prefill ? profileCity : '');
+    setEditState(prefill ? profileState : '');
+    setEditPincode(prefill ? profilePincode : '');
+    setNewAddrType('home');
+    setNewAddrDefault(savedAddresses.length === 0);
+    setIsAddingAddress(true);
+  };
+
+  const handleSaveAddress = async () => {
+    if (!editLine1.trim() || !editCity.trim() || !editState.trim() || editPincode.trim().length !== 6) {
+      Toast.show({
+        type: 'error',
+        text1: 'Please complete all required fields',
+        text2: 'Address line 1, city, state, and a 6-digit pincode are required.',
+      });
+      return;
+    }
+    try {
+      await createDeliveryLocation({
+        address_line1: editLine1.trim(),
+        address_line2: editLine2.trim() || undefined,
+        city: editCity.trim(),
+        state: editState.trim(),
+        pincode: editPincode.trim(),
+        type: newAddrType,
+        is_default: newAddrDefault,
+      } as any).unwrap();
+      await refetchSavedAddresses();
+      setIsAddingAddress(false);
+      Toast.show({ type: 'success', text1: 'Address saved' });
+    } catch {
+      Toast.show({ type: 'error', text1: 'Could not save address', text2: 'Please try again.' });
+    }
+  };
 
   const {
     data: kycEnvelope,
@@ -175,35 +259,22 @@ const ProfileScreen = () => {
           },
         ]}
         showsVerticalScrollIndicator={false}>
-        <View style={[styles.heroCard, { borderColor: `${primary}30` }]}>
-          <View style={[styles.heroGlowLeft, { backgroundColor: primary }]} />
-          <View style={styles.heroGlowRight} />
-
+        <View style={[styles.heroCard, { backgroundColor: primary }]}>
           <View style={styles.heroTop}>
-            <View style={[styles.avatar, { backgroundColor: primarySoft }]}>
-              <Icon name="account-circle-outline" size={34} color={primary} />
+            <View style={styles.avatar}>
+              <Icon name="account" size={34} color={primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.heroName}>{user?.name ?? 'Guest User'}</Text>
-              <Text style={styles.heroEmail}>{user?.email ?? '—'}</Text>
-            </View>
-            <View style={[styles.rolePill, { borderColor: `${primary}55`, backgroundColor: primarySoft }]}>
-              <Text style={[styles.rolePillText, { color: primary }]}>
-                {(user?.role ?? 'customer').toUpperCase()}
+              <Text style={styles.heroName} numberOfLines={1}>
+                {user?.name ?? 'Guest User'}
+              </Text>
+              <Text style={styles.heroEmail} numberOfLines={1}>
+                {user?.email ?? '—'}
               </Text>
             </View>
-          </View>
-
-          <View style={styles.heroStats}>
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>Account</Text>
-              <Text style={styles.statValue}>Active</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>Division</Text>
-              <Text style={styles.statValue}>
-                {isHomeKitchen ? 'Home & Kitchen' : 'FMCG'}
+            <View style={styles.rolePill}>
+              <Text style={styles.rolePillText}>
+                {(user?.role ?? 'customer').toUpperCase()}
               </Text>
             </View>
           </View>
@@ -239,7 +310,7 @@ const ProfileScreen = () => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.actionRow}
+            style={[styles.actionRow, styles.actionRowLast]}
             onPress={() => navigation.navigate('HelpSupport')}>
             <View style={[styles.actionIcon, { backgroundColor: `${primary}22` }]}>
               <Icon name="help-circle-outline" size={18} color={primary} />
@@ -250,6 +321,143 @@ const ProfileScreen = () => {
             </View>
             <Icon name="chevron-right" size={18} color="#94A3B8" />
           </TouchableOpacity>
+        </View>
+
+        <View style={styles.sectionWrap}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Saved Addresses</Text>
+            {savedAddresses.length > 0 && !isAddingAddress && (
+              <TouchableOpacity
+                style={[styles.addNewBtn, { borderColor: `${primary}66` }]}
+                onPress={() => openAddForm(false)}
+                activeOpacity={0.85}>
+                <Icon name="plus" size={14} color={primary} />
+                <Text style={[styles.addNewBtnText, { color: primary }]}>Add new</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {isLoadingSavedAddresses ? (
+            <ActivityIndicator size="small" color={primary} style={{ marginTop: 12 }} />
+          ) : !isAddingAddress && savedAddresses.length === 0 ? (
+            <View style={styles.emptyAddressBox}>
+              <Icon name="map-marker-plus-outline" size={26} color={primary} />
+              <Text style={styles.emptyAddressTitle}>No saved addresses</Text>
+              <Text style={styles.emptyAddressSubtitle}>
+                Add your delivery address to speed up checkout.
+              </Text>
+              <TouchableOpacity
+                style={[styles.emptyAddressBtn, { backgroundColor: primary }]}
+                onPress={() => openAddForm(true)}
+                activeOpacity={0.9}>
+                <Icon name="plus" size={15} color="#FFFFFF" />
+                <Text style={styles.emptyAddressBtnText}>Add address</Text>
+              </TouchableOpacity>
+            </View>
+          ) : !isAddingAddress ? (
+            <View style={{ gap: 10, marginTop: 10 }}>
+              {savedAddresses.map(addr => {
+                const typeLabel = (addr.type || 'home').toString();
+                const fullAddress = [
+                  addr.address_line1,
+                  addr.address_line2,
+                  [addr.city, addr.state, addr.pincode].filter(Boolean).join(', '),
+                ].filter(Boolean).join(', ');
+                return (
+                  <View key={addr.id} style={styles.savedAddrCard}>
+                    <View style={styles.savedAddrBadgeRow}>
+                      <View style={[styles.typeBadge, { backgroundColor: `${primary}1A`, borderColor: `${primary}40` }]}>
+                        <Icon
+                          name={typeLabel === 'office' ? 'office-building-outline' : typeLabel === 'other' ? 'map-marker-outline' : 'home-outline'}
+                          size={11} color={primary} />
+                        <Text style={[styles.typeBadgeText, { color: primary }]}>
+                          {typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1)}
+                        </Text>
+                      </View>
+                      {addr.is_default && (
+                        <View style={styles.defaultBadge}>
+                          <Text style={styles.defaultBadgeText}>Default</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.savedAddrLine}>{fullAddress || '—'}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+
+          {isAddingAddress && (
+            <View style={{ gap: 8, marginTop: 10 }}>
+              <View style={styles.typeRow}>
+                {(['home', 'office', 'other'] as const).map(t => (
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.typeChip, newAddrType === t && { backgroundColor: primary, borderColor: primary }]}
+                    onPress={() => setNewAddrType(t)}
+                    activeOpacity={0.85}>
+                    <Text style={[styles.typeChipText, newAddrType === t && { color: '#FFFFFF' }]}>
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.editLabel}>Address line 1 *</Text>
+              <TextInput style={styles.editInput} value={editLine1} onChangeText={setEditLine1}
+                placeholder="House / street / locality" autoCapitalize="none" />
+
+              <Text style={styles.editLabel}>Address line 2</Text>
+              <TextInput style={styles.editInput} value={editLine2} onChangeText={setEditLine2}
+                placeholder="Landmark (optional)" autoCapitalize="sentences" />
+
+              <View style={styles.editRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.editLabel}>City *</Text>
+                  <TextInput style={styles.editInput} value={editCity} onChangeText={setEditCity}
+                    placeholder="City" autoCapitalize="words" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.editLabel}>State *</Text>
+                  <TextInput style={styles.editInput} value={editState} onChangeText={setEditState}
+                    placeholder="State" autoCapitalize="words" />
+                </View>
+              </View>
+
+              <Text style={styles.editLabel}>Pincode *</Text>
+              <TextInput style={styles.editInput} value={editPincode} onChangeText={setEditPincode}
+                placeholder="Pincode" keyboardType="phone-pad" />
+
+              <TouchableOpacity
+                style={styles.defaultToggleRow}
+                onPress={() => setNewAddrDefault(v => !v)}
+                activeOpacity={0.85}>
+                <View style={[styles.checkbox, newAddrDefault && { backgroundColor: primary, borderColor: primary }]}>
+                  {newAddrDefault && <Icon name="check" size={12} color="#FFFFFF" />}
+                </View>
+                <Text style={styles.defaultToggleText}>Set as default delivery address</Text>
+              </TouchableOpacity>
+
+              <View style={styles.editActions}>
+                <TouchableOpacity
+                  style={[styles.editActionBtn, { backgroundColor: 'rgba(148,163,184,0.15)' }]}
+                  onPress={() => setIsAddingAddress(false)}
+                  disabled={isSavingAddress}
+                  activeOpacity={0.9}>
+                  <Text style={[styles.editActionBtnText, { color: '#64748B' }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.editActionBtn, { backgroundColor: primary }, isSavingAddress && { opacity: 0.7 }]}
+                  onPress={handleSaveAddress}
+                  disabled={isSavingAddress}
+                  activeOpacity={0.9}>
+                  <Text style={[styles.editActionBtnText, { color: '#FFFFFF' }]}>
+                    {isSavingAddress ? 'Saving...' : 'Save address'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </View>
 
         <View style={styles.sectionWrap}>
@@ -400,14 +608,12 @@ const ProfileScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#F1F5F9' },
+  root: { flex: 1, backgroundColor: palette.bg },
   content: { paddingHorizontal: 14 },
   heroCard: {
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    padding: 14,
-    overflow: 'hidden',
+    borderRadius: 24,
+    padding: 18,
+    ...shadow.md,
   },
   heroGlowLeft: {
     position: 'absolute',
@@ -434,66 +640,74 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#EEF2FF',
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heroName: { color: '#0F172A', fontWeight: '900', fontSize: 19 },
-  heroEmail: { marginTop: 4, color: '#475569', fontWeight: '600' },
+  heroName: { color: '#FFFFFF', fontWeight: '900', fontSize: 19 },
+  heroEmail: { marginTop: 4, color: 'rgba(255,255,255,0.85)', fontWeight: '600' },
   rolePill: {
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
-  rolePillText: { fontWeight: '900', fontSize: 11 },
+  rolePillText: { fontWeight: '900', fontSize: 11, color: '#FFFFFF' },
   heroStats: {
-    marginTop: 14,
-    padding: 10,
+    marginTop: 16,
+    padding: 12,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 14,
+    borderColor: 'rgba(255,255,255,0.22)',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
   },
   statBox: { flex: 1 },
-  statLabel: { color: '#64748B', fontWeight: '700', fontSize: 12 },
-  statValue: { color: '#0F172A', marginTop: 4, fontWeight: '900' },
-  statDivider: { width: 1, height: 32, backgroundColor: '#CBD5E1' },
+  statLabel: { color: 'rgba(255,255,255,0.8)', fontWeight: '700', fontSize: 12 },
+  statValue: { color: '#FFFFFF', marginTop: 4, fontWeight: '900' },
+  statDivider: { width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.25)' },
   sectionWrap: {
-    marginTop: 14,
+    marginTop: 16,
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
+    borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#E5E9EF',
   },
-  sectionTitle: { color: '#0F172A', fontWeight: '900', fontSize: 16 },
+  sectionTitle: {
+    color: '#64748B',
+    fontWeight: '800',
+    fontSize: 12,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
   actionRow: {
-    marginTop: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 11,
-    borderRadius: 14,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#EEF2F6',
+  },
+  actionRowLast: {
+    borderBottomWidth: 0,
   },
   actionIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 12,
   },
-  actionTitle: { fontWeight: '900', color: '#0F172A' },
-  actionSubtitle: { marginTop: 2, color: '#64748B', fontWeight: '700', fontSize: 12 },
+  actionTitle: { fontWeight: '800', color: '#0F172A', fontSize: 14 },
+  actionSubtitle: { marginTop: 2, color: '#64748B', fontWeight: '600', fontSize: 12 },
   infoRow: {
     marginTop: 10,
     borderRadius: 12,
@@ -537,13 +751,18 @@ const styles = StyleSheet.create({
   },
   emptyText: { marginTop: 10, color: '#64748B', fontWeight: '700', lineHeight: 18 },
   logout: {
-    marginTop: 16,
+    marginTop: 18,
     borderRadius: 16,
-    paddingVertical: 14,
+    paddingVertical: 15,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 4,
   },
   logoutText: { color: '#FFFFFF', fontWeight: '900' },
 
@@ -612,6 +831,118 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#16A34A',
   },
+
+  // ─── Saved addresses ───
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  addNewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  addNewBtnText: { fontSize: 12, fontWeight: '700' },
+  emptyAddressBox: {
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    gap: 6,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+    marginTop: 10,
+  },
+  emptyAddressTitle: { fontSize: 14, fontWeight: '800', color: '#0F172A' },
+  emptyAddressSubtitle: { fontSize: 12, color: '#64748B', textAlign: 'center', marginBottom: 4 },
+  emptyAddressBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  emptyAddressBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
+  savedAddrCard: {
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+  },
+  savedAddrBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  savedAddrLine: { color: '#1F2937', fontSize: 13, lineHeight: 18 },
+  typeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  typeBadgeText: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
+  defaultBadge: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#86EFAC',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  defaultBadgeText: { fontSize: 10, fontWeight: '800', color: '#166534', textTransform: 'uppercase' },
+  typeRow: { flexDirection: 'row', gap: 8 },
+  typeChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+  },
+  typeChipText: { fontSize: 12, fontWeight: '700', color: '#475569' },
+  editLabel: { color: '#64748B', fontWeight: '800', fontSize: 12, marginTop: 4 },
+  editInput: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#F8FAFC',
+    color: '#0F172A',
+    fontWeight: '700',
+  },
+  editRow: { flexDirection: 'row', gap: 10 },
+  defaultToggleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  defaultToggleText: { fontSize: 13, color: '#334155', fontWeight: '600' },
+  editActions: { flexDirection: 'row', gap: 10, marginTop: 6 },
+  editActionBtn: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editActionBtnText: { fontWeight: '900' },
 });
 
 export default ProfileScreen;
