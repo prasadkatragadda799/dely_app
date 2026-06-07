@@ -150,10 +150,10 @@ const RegisterScreen = ({ navigation }: Props) => {
       return;
     }
     if (selectedRole === 'customer') {
-      if (!form.addressLine1.trim() || !form.city.trim() || !form.state.trim() || !form.pincode.trim() || !form.businessName.trim() || !form.fmcgNumber.trim()) {
+      if (!form.addressLine1.trim() || !form.city.trim() || !form.state.trim() || !form.pincode.trim() || !form.businessName.trim()) {
         await appAlert({
           title: 'Complete your profile',
-          message: 'Address, business name, and FMCG (FSSAI) number are required.',
+          message: 'Address and business name are required.',
         });
         return;
       }
@@ -380,7 +380,7 @@ const RegisterScreen = ({ navigation }: Props) => {
               )} />
 
               {/* FMCG Number */}
-              <FieldLabel label="FMCG / FSSAI Number" />
+              <FieldLabel label="FMCG / FSSAI Number (optional)" />
               <Controller control={control} name="fmcgNumber" render={({ field: { onChange, value } }) => (
                 <InputBox icon="barcode-scan">
                   <TextInput style={styles.input} placeholder="Enter FSSAI license number" placeholderTextColor="#CBD5E1" value={value} onChangeText={onChange} />

@@ -105,8 +105,8 @@ const EditInfoScreen = () => {
     if (!pincode.trim()) issues.push('Pincode');
     if (!businessName.trim()) issues.push('Business name');
     if (!gstNumber.trim()) issues.push('GST number');
-    if (!fmcgNumber.trim()) issues.push('FMCG (FSSAI) number');
-    if (fssaiDigits.length !== 14) {
+    // FMCG / FSSAI is optional; only validate the format when a value is entered.
+    if (fssaiDigits.length > 0 && fssaiDigits.length !== 14) {
       issues.push('FSSAI must be exactly 14 digits');
     }
     const hasAtLeastOneDoc = gstCertificate || fssaiLicense || udyamRegistration || tradeCertificate || shopImageUri;
@@ -282,7 +282,7 @@ const EditInfoScreen = () => {
           </View>
         </View>
 
-        <Text style={styles.smallLabel}>FMCG number (FSSAI)</Text>
+        <Text style={styles.smallLabel}>FMCG number (FSSAI) · optional</Text>
         <TextInput
           style={styles.input}
           value={fmcgNumber}

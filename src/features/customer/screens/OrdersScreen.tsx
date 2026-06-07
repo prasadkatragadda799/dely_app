@@ -2,6 +2,7 @@ import React, { useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Linking,
   Modal,
   RefreshControl,
   ScrollView,
@@ -20,10 +21,12 @@ import {
   useCancelOrderApiMutation,
   useGetOrderInvoiceQuery,
   useGetOrdersQuery,
+  useGetReturnStatusQuery,
   useInitiateReturnMutation,
 } from '../../../services/api/mobileApi';
 import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
 import { palette, radius, shadow, getDivision } from '../../../utils/theme';
+import { launchImageLibrary, type Asset } from 'react-native-image-picker';
 
 type UiOrder = {
   id: string;
@@ -146,6 +149,8 @@ const OrdersScreen = () => {
   const [returnOrderNumber, setReturnOrderNumber] = React.useState<string>('');
   const [returnOrderIsCod, setReturnOrderIsCod] = React.useState(false);
   const [returnReason, setReturnReason] = React.useState('');
+  const [returnPhotos, setReturnPhotos] = React.useState<Asset[]>([]);
+  const [returnVideo, setReturnVideo] = React.useState<Asset | null>(null);
   const [returnBankAccount, setReturnBankAccount] = React.useState('');
   const [returnBankIfsc, setReturnBankIfsc] = React.useState('');
   const [returnBankHolder, setReturnBankHolder] = React.useState('');
@@ -161,6 +166,15 @@ const OrdersScreen = () => {
     { orderId: invoiceOrderId ?? '' },
     { skip: !invoiceOrderId },
   );
+
+  // Return detail sheet — surfaces the reason, the admin's note (e.g. why a return
+  // was rejected), and the refund expectation for a particular returned order.
+  const [returnDetailOrderId, setReturnDetailOrderId] = React.useState<string | null>(null);
+  const { data: returnDetailRes, isFetching: isReturnDetailLoading } = useGetReturnStatusQuery(
+    { orderId: returnDetailOrderId ?? '' },
+    { skip: !returnDetailOrderId },
+  );
+  const returnDetail = (returnDetailRes?.data ?? null) as any;
 
   const orders = useMemo<UiOrder[]>(() => {
     const payload = data?.data as any;
@@ -216,10 +230,26 @@ const OrdersScreen = () => {
     setReturnOrderNumber((order.orderNumber ?? order.id).slice(-12));
     setReturnOrderIsCod(true); // always show bank fields; backend knows payment method
     setReturnReason('');
+    setReturnPhotos([]);
+    setReturnVideo(null);
     setReturnBankAccount('');
     setReturnBankIfsc('');
     setReturnBankHolder('');
     setReturnBankName('');
+  };
+
+  const pickReturnPhotos = () => {
+    launchImageLibrary({ mediaType: 'photo', selectionLimit: 4 }, resp => {
+      if (resp.assets?.length) {
+        setReturnPhotos(prev => [...prev, ...resp.assets!].slice(0, 4));
+      }
+    });
+  };
+
+  const pickReturnVideo = () => {
+    launchImageLibrary({ mediaType: 'video', selectionLimit: 1 }, resp => {
+      if (resp.assets?.length) setReturnVideo(resp.assets[0]);
+    });
   };
 
   const closeReturnModal = () => {
@@ -232,12 +262,30 @@ const OrdersScreen = () => {
       await appAlert({ title: 'Reason required', message: 'Please describe the return reason (min 5 chars).' });
       return;
     }
+    if (returnPhotos.length === 0) {
+      await appAlert({ title: 'Photo required', message: 'Please add at least one photo of the item being returned.' });
+      return;
+    }
+    if (!returnVideo) {
+      await appAlert({ title: 'Video required', message: 'Please add a short video of the item being returned.' });
+      return;
+    }
     const fd = new FormData();
     fd.append('reason', returnReason.trim());
     if (returnBankAccount.trim()) fd.append('bank_account_number', returnBankAccount.trim());
     if (returnBankIfsc.trim()) fd.append('bank_ifsc_code', returnBankIfsc.trim().toUpperCase());
     if (returnBankHolder.trim()) fd.append('bank_account_holder', returnBankHolder.trim());
     if (returnBankName.trim()) fd.append('bank_name', returnBankName.trim());
+    // Mandatory evidence: photos + a video, uploaded under the `files` field.
+    [...returnPhotos, returnVideo].forEach((asset, i) => {
+      if (!asset?.uri) return;
+      const isVideo = asset === returnVideo;
+      fd.append('files', {
+        uri: asset.uri,
+        type: asset.type || (isVideo ? 'video/mp4' : 'image/jpeg'),
+        name: asset.fileName || `return_${i}.${isVideo ? 'mp4' : 'jpg'}`,
+      } as any);
+    });
     try {
       await initiateReturn({ orderId: returnOrderId, formData: fd }).unwrap();
       closeReturnModal();
@@ -410,12 +458,16 @@ const OrdersScreen = () => {
                 )}
 
                 {order.returnStatus ? (
-                  <View style={styles.returnJourney}>
+                  <TouchableOpacity
+                    style={styles.returnJourney}
+                    activeOpacity={0.85}
+                    onPress={() => setReturnDetailOrderId(order.id)}>
                     <View style={styles.returnJourneyHead}>
                       <Icon name="keyboard-return" size={14} color="#7C3AED" />
                       <Text style={styles.returnJourneyTitle}>
                         Return · {returnStatusLabel(order.returnStatus)}
                       </Text>
+                      <Text style={styles.returnJourneyDetailsHint}>Details ›</Text>
                     </View>
                     {order.returnStatus === 'rejected' ? (
                       <Text style={styles.returnRejectedText}>
@@ -441,7 +493,7 @@ const OrdersScreen = () => {
                         })}
                       </View>
                     )}
-                  </View>
+                  </TouchableOpacity>
                 ) : null}
               </View>
             );
@@ -553,6 +605,22 @@ const OrdersScreen = () => {
                   <Text style={styles.totalGrand}>Grand Total: {formatMoney(invoice?.grand_total ?? invoice?.total)}</Text>
                 </View>
 
+                {invoice?.upiQr?.qrImage ? (
+                  <View style={styles.invoiceUpi}>
+                    <Text style={styles.invoiceUpiTitle}>Scan to pay this invoice</Text>
+                    <Image source={{ uri: invoice.upiQr.qrImage }} style={styles.invoiceUpiQr} resizeMode="contain" />
+                    <Text style={styles.invoiceUpiAmt}>{formatMoney(invoice.upiQr.amount)}</Text>
+                    <Text style={styles.invoiceUpiVpa}>{invoice.upiQr.payeeName} · {invoice.upiQr.vpa}</Text>
+                    <TouchableOpacity
+                      style={styles.invoiceUpiBtn}
+                      onPress={() => invoice.upiQr?.upiUri && Linking.openURL(invoice.upiQr.upiUri).catch(() => {})}
+                      activeOpacity={0.9}>
+                      <Icon name="cellphone" size={15} color="#FFFFFF" />
+                      <Text style={styles.invoiceUpiBtnText}>Pay with UPI app</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+
                 <View style={styles.orderedThrough}>
                   <Image source={require('../../../assets/dely-logo.png')} style={styles.orderedLogoImage} />
                   <Text style={styles.orderedThroughSub}>Ordered Through</Text>
@@ -590,6 +658,48 @@ const OrdersScreen = () => {
                 value={returnReason}
                 onChangeText={setReturnReason}
               />
+
+              <Text style={styles.returnModalSection}>Photos & video *</Text>
+              <Text style={{ color: '#64748B', fontSize: 11, fontWeight: '600', marginBottom: 8 }}>
+                Add at least one photo and a short video of the item — required for every return.
+              </Text>
+              <View style={styles.mediaPickRow}>
+                <TouchableOpacity style={styles.mediaPickBtn} onPress={pickReturnPhotos} activeOpacity={0.85}>
+                  <Icon name="image-plus" size={16} color="#7C3AED" />
+                  <Text style={styles.mediaPickBtnText}>
+                    {returnPhotos.length ? `Photos (${returnPhotos.length})` : 'Add photos'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.mediaPickBtn} onPress={pickReturnVideo} activeOpacity={0.85}>
+                  <Icon name={returnVideo ? 'check-circle' : 'video-plus'} size={16} color="#7C3AED" />
+                  <Text style={styles.mediaPickBtnText}>{returnVideo ? 'Video added' : 'Add video'}</Text>
+                </TouchableOpacity>
+              </View>
+              {returnPhotos.length > 0 ? (
+                <View style={styles.mediaThumbRow}>
+                  {returnPhotos.map((a, i) => (
+                    <View key={`${a.uri}-${i}`} style={styles.mediaThumbWrap}>
+                      <Image source={{ uri: a.uri }} style={styles.mediaThumb} />
+                      <TouchableOpacity
+                        style={styles.mediaThumbRemove}
+                        onPress={() => setReturnPhotos(prev => prev.filter((_, j) => j !== i))}>
+                        <Icon name="close" size={11} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+              {returnVideo ? (
+                <View style={styles.mediaVideoChip}>
+                  <Icon name="video" size={14} color="#166534" />
+                  <Text style={styles.mediaVideoChipText} numberOfLines={1}>
+                    {returnVideo.fileName || 'Video attached'}
+                  </Text>
+                  <TouchableOpacity onPress={() => setReturnVideo(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Icon name="close" size={14} color="#94A3B8" />
+                  </TouchableOpacity>
+                </View>
+              ) : null}
 
               <Text style={styles.returnModalSection}>Bank Details (for COD refund)</Text>
               <Text style={{ color: '#64748B', fontSize: 11, fontWeight: '600' }}>
@@ -645,6 +755,85 @@ const OrdersScreen = () => {
                 }
               </TouchableOpacity>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Return detail sheet — reason, support's note, refund expectation, photos */}
+      <Modal
+        visible={!!returnDetailOrderId}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setReturnDetailOrderId(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { maxHeight: '85%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Return details</Text>
+              <TouchableOpacity onPress={() => setReturnDetailOrderId(null)} activeOpacity={0.9}>
+                <Icon name="close" size={20} color="#334155" />
+              </TouchableOpacity>
+            </View>
+            {isReturnDetailLoading ? (
+              <View style={styles.loaderWrap}>
+                <ActivityIndicator size="large" color="#7C3AED" />
+                <Text style={styles.loaderText}>Loading return…</Text>
+              </View>
+            ) : !returnDetail ? (
+              <View style={styles.loaderWrap}>
+                <Text style={styles.loaderText}>No return found for this order.</Text>
+              </View>
+            ) : (
+              <ScrollView contentContainerStyle={{ paddingBottom: 16 }} showsVerticalScrollIndicator={false}>
+                <View style={styles.returnDetailStatus}>
+                  <Icon name="keyboard-return" size={16} color="#6D28D9" />
+                  <Text style={styles.returnDetailStatusText}>
+                    {returnStatusLabel(returnDetail.status)}
+                  </Text>
+                </View>
+
+                <Text style={styles.returnDetailLabel}>Reason</Text>
+                <Text style={styles.returnDetailValue}>{returnDetail.reason || '—'}</Text>
+
+                {returnDetail.adminNotes ? (
+                  <View
+                    style={[
+                      styles.returnDetailNoteBox,
+                      returnDetail.status === 'rejected' && { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
+                    ]}>
+                    <Text style={styles.returnDetailNoteLabel}>
+                      {returnDetail.status === 'rejected' ? 'Why it was not approved' : 'Note from support'}
+                    </Text>
+                    <Text style={styles.returnDetailNoteText}>{returnDetail.adminNotes}</Text>
+                  </View>
+                ) : null}
+
+                {returnDetail.status !== 'rejected' ? (
+                  <View style={styles.returnRefundBox}>
+                    <Icon name="cash-refund" size={16} color="#166534" />
+                    <Text style={styles.returnRefundText}>
+                      {returnDetail.status === 'received_at_hub'
+                        ? `Item received. Your refund will be issued ${returnDetail.isCod ? 'to your bank account within 10 working days' : 'to your original payment method'}.`
+                        : `Once we collect and verify the item, your refund will be issued ${returnDetail.isCod ? 'to your bank account within 10 working days' : 'to your original payment method'}.`}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {Array.isArray(returnDetail.mediaUrls) && returnDetail.mediaUrls.length > 0 ? (
+                  <>
+                    <Text style={styles.returnDetailLabel}>Photos you shared</Text>
+                    <View style={styles.returnDetailMediaRow}>
+                      {returnDetail.mediaUrls.map((m: any, i: number) => (
+                        <Image
+                          key={i}
+                          source={{ uri: typeof m === 'string' ? m : m?.url }}
+                          style={styles.returnDetailMedia}
+                        />
+                      ))}
+                    </View>
+                  </>
+                ) : null}
+              </ScrollView>
+            )}
           </View>
         </View>
       </Modal>
@@ -751,7 +940,32 @@ const styles = StyleSheet.create({
   },
   returnJourneyHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
   returnJourneyTitle: { color: '#7C3AED', fontWeight: '900', fontSize: 13 },
+  returnJourneyDetailsHint: { marginLeft: 'auto', color: '#7C3AED', fontWeight: '800', fontSize: 12 },
   returnRejectedText: { color: '#B91C1C', fontWeight: '700', fontSize: 13 },
+  returnDetailStatus: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
+    backgroundColor: '#F5F3FF', borderColor: '#DDD6FE', borderWidth: 1, borderRadius: 999,
+    paddingHorizontal: 12, paddingVertical: 6, marginTop: 4, marginBottom: 4,
+  },
+  returnDetailStatusText: { color: '#6D28D9', fontWeight: '900', fontSize: 13 },
+  returnDetailLabel: {
+    color: '#64748B', fontWeight: '800', fontSize: 12, marginTop: 12,
+    textTransform: 'uppercase', letterSpacing: 0.3,
+  },
+  returnDetailValue: { color: '#0F172A', fontWeight: '600', fontSize: 14, marginTop: 4, lineHeight: 20 },
+  returnDetailNoteBox: {
+    marginTop: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC', padding: 12,
+  },
+  returnDetailNoteLabel: { color: '#475569', fontWeight: '800', fontSize: 12, marginBottom: 3 },
+  returnDetailNoteText: { color: '#0F172A', fontWeight: '500', fontSize: 13, lineHeight: 19 },
+  returnRefundBox: {
+    marginTop: 12, flexDirection: 'row', alignItems: 'flex-start', gap: 8, borderRadius: 12,
+    backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0', padding: 12,
+  },
+  returnRefundText: { flex: 1, color: '#166534', fontWeight: '600', fontSize: 13, lineHeight: 19 },
+  returnDetailMediaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
+  returnDetailMedia: { width: 72, height: 72, borderRadius: 10, backgroundColor: '#F1F5F9' },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(15,23,42,0.45)',
@@ -794,6 +1008,13 @@ const styles = StyleSheet.create({
   totalWrap: { marginTop: 10, alignItems: 'flex-end' },
   totalLine: { color: '#334155', fontWeight: '700', marginTop: 3 },
   totalGrand: { color: '#0F172A', fontWeight: '900', marginTop: 6, fontSize: 16 },
+  invoiceUpi: { marginTop: 16, alignItems: 'center', paddingTop: 14, borderTopWidth: 1, borderTopColor: '#E2E8F0' },
+  invoiceUpiTitle: { color: '#0F172A', fontWeight: '900', fontSize: 13, marginBottom: 10 },
+  invoiceUpiQr: { width: 180, height: 180, borderRadius: 10, backgroundColor: '#FFFFFF' },
+  invoiceUpiAmt: { marginTop: 10, color: '#0F172A', fontWeight: '900', fontSize: 16 },
+  invoiceUpiVpa: { marginTop: 2, color: '#475569', fontWeight: '700', fontSize: 11 },
+  invoiceUpiBtn: { marginTop: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#2563EB', paddingVertical: 11, paddingHorizontal: 22, borderRadius: 12 },
+  invoiceUpiBtnText: { color: '#FFFFFF', fontWeight: '900', fontSize: 13 },
   orderedThrough: { marginTop: 14, alignItems: 'center', paddingBottom: 10 },
   orderedLogoImage: { width: 44, height: 44, borderRadius: 8, resizeMode: 'contain' },
   orderedThroughSub: { marginTop: 4, fontSize: 11, color: '#475569', fontWeight: '700' },
@@ -822,6 +1043,49 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   returnModalLabel: { color: '#334155', fontWeight: '800', fontSize: 12, marginTop: 12 },
+  mediaPickRow: { flexDirection: 'row', gap: 8 },
+  mediaPickBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    backgroundColor: '#F5F3FF',
+  },
+  mediaPickBtnText: { color: '#6D28D9', fontWeight: '800', fontSize: 12 },
+  mediaThumbRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  mediaThumbWrap: { position: 'relative' },
+  mediaThumb: { width: 64, height: 64, borderRadius: 10, backgroundColor: '#F1F5F9' },
+  mediaThumbRemove: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#0F172A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  mediaVideoChip: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 12,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  mediaVideoChipText: { flex: 1, color: '#166534', fontWeight: '700', fontSize: 12 },
   returnModalSection: { color: '#7C3AED', fontWeight: '900', fontSize: 13, marginTop: 14, marginBottom: 2 },
   returnSubmitBtn: {
     marginTop: 18,
