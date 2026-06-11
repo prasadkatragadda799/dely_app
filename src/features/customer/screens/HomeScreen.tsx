@@ -96,10 +96,10 @@ const HomeScreen = () => {
   const deliveryLocations = (deliveryLocationsEnvelope?.data as any[]) ?? [];
   const defaultLocation = deliveryLocations.find((l: any) => l.is_default) ?? deliveryLocations[0];
   const defaultPincode: string = defaultLocation?.pincode ?? '';
-  const deliverTo = defaultPincode || undefined;
-  const { data: fmcgProds = [], isLoading: isFmcgLoading, isError: isFmcgError } = useGetProductsQuery({ category: 'fmcg', deliverTo });
-  const { data: kitchenProds = [], isLoading: isKitchenLoading } = useGetProductsQuery({ category: 'kitchen', deliverTo });
-  const { data: homeProds = [], isLoading: isHomeLoading } = useGetProductsQuery({ category: 'home', deliverTo });
+  const pincode = defaultPincode || undefined;
+  const { data: fmcgProds = [], isLoading: isFmcgLoading, isError: isFmcgError } = useGetProductsQuery({ category: 'fmcg', pincode });
+  const { data: kitchenProds = [], isLoading: isKitchenLoading } = useGetProductsQuery({ category: 'kitchen', pincode });
+  const { data: homeProds = [], isLoading: isHomeLoading } = useGetProductsQuery({ category: 'home', pincode });
   const allProducts = useMemo(() => [...fmcgProds, ...kitchenProds, ...homeProds], [fmcgProds, kitchenProds, homeProds]);
   const isProductsLoading = isFmcgLoading || isKitchenLoading || isHomeLoading;
   const isProductsError = isFmcgError;

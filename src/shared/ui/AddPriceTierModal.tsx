@@ -58,9 +58,13 @@ const AddPriceTierModal = ({
                   </Text>
                   <Text style={styles.optionHint}>
                     {opt.key === 'set'
-                      ? 'Sold as one set'
+                      ? product.piecesPerSet && product.piecesPerSet > 1
+                        ? `Set of ${product.piecesPerSet} pieces`
+                        : 'Sold as one set'
                       : opt.key === 'unit'
-                        ? 'Per piece / unit'
+                        ? product.piecesPerSet && product.piecesPerSet > 1
+                          ? 'Price for the full pack'
+                          : 'Per piece / unit'
                         : 'Clearance lot'}
                   </Text>
                 </View>

@@ -281,6 +281,7 @@ const CartScreen = () => {
                         setPendingQty(item.cartItemId, nextQty);
                         setMutating(item.cartItemId, true);
                         decrement(item.product.id, item.priceOptionKey, item.variantId)
+                          .catch(() => setPendingQty(item.cartItemId, null))
                           .finally(() => {
                             settledIdsRef.current.add(item.cartItemId);
                             setMutating(item.cartItemId, false);
@@ -315,6 +316,7 @@ const CartScreen = () => {
                         setPendingQty(item.cartItemId, nextQty);
                         setMutating(item.cartItemId, true);
                         increment(item.product.id, item.priceOptionKey, item.variantId)
+                          .catch(() => setPendingQty(item.cartItemId, null))
                           .finally(() => {
                             settledIdsRef.current.add(item.cartItemId);
                             setMutating(item.cartItemId, false);

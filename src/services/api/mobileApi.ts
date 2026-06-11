@@ -427,6 +427,7 @@ export const mobileApi = createApi({
           : '';
         return { url: `/cart${suffix}`, method: 'POST', body: rest };
       },
+      invalidatesTags: ['Cart'],
       async onQueryStarted(arg, { dispatch, queryFulfilled }) {
         const div: 'fmcg' | 'homeKitchen' =
           arg.cartDivision === 'homeKitchen' ? 'homeKitchen' : 'fmcg';

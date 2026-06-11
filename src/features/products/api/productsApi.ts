@@ -62,12 +62,12 @@ export const productsApi = createApi({
     },
   }),
   endpoints: builder => ({
-    getProducts: builder.query<Product[], { category?: string; deliverTo?: string } | void>({
+    getProducts: builder.query<Product[], { category?: string; pincode?: string } | void>({
       async queryFn(args, api, _extraOptions, baseQuery) {
         const requestedCategory =
           args && 'category' in args ? (args.category as Product['category'] | undefined) : undefined;
-        const deliverTo =
-          args && 'deliverTo' in args ? (args.deliverTo as string | undefined) : undefined;
+        const pincode =
+          args && 'pincode' in args ? (args.pincode as string | undefined) : undefined;
 
         const categoriesToFetch: Product['category'][] = requestedCategory
           ? [requestedCategory]
@@ -76,13 +76,13 @@ export const productsApi = createApi({
         const limit = 50;
         const page = 1;
 
-        const deliverParam = deliverTo ? `&deliver_to=${encodeURIComponent(deliverTo)}` : '';
+        const pincodeParam = pincode ? `&pincode=${encodeURIComponent(pincode)}` : '';
         const buildUrlForCategory = (cat: Product['category']): string => {
           if (cat === 'kitchen' || cat === 'home') {
-            return `/products?page=${page}&limit=${limit}&division_slug=${encodeURIComponent(cat)}${deliverParam}`;
+            return `/products?page=${page}&limit=${limit}&division_slug=${encodeURIComponent(cat)}${pincodeParam}`;
           }
           // Backend treats the "default division" as grocery (division_id == None).
-          return `/products?page=${page}&limit=${limit}${deliverParam}`;
+          return `/products?page=${page}&limit=${limit}${pincodeParam}`;
         };
 
         const merged: Product[] = [];

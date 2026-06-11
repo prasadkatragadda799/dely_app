@@ -1,21 +1,29 @@
 import React, { useMemo } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import AppImage from '../../../shared/ui/AppImage';
 import { useNavigation } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useGetProductsQuery } from '../../products/api/productsApi';
+import { useGetDeliveryLocationsQuery } from '../../../services/api/mobileApi';
 import { useWishlist } from '../../../hooks/useWishlist';
 import { useCart } from '../../../hooks/useCart';
-import { defaultPriceTier } from '../../../utils/productPricing';
 import { useAppSelector } from '../../../hooks/redux';
 import { palette, getDivision } from '../../../utils/theme';
+import ProductCard from '../../../shared/ui/ProductCard';
 
 const WishlistScreen = () => {
-  const navigation = useNavigation();
-  const { data: products = [], isLoading: isProductsLoading } = useGetProductsQuery();
-  const { productIds, toggle } = useWishlist();
+  const navigation = useNavigation<any>();
+  const { data: deliveryLocationsEnvelope } = useGetDeliveryLocationsQuery();
+  const deliveryLocations = (deliveryLocationsEnvelope?.data as any[]) ?? [];
+  const defaultLocation = deliveryLocations.find((l: any) => l.is_default) ?? deliveryLocations[0];
+  const defaultPincode: string = defaultLocation?.pincode ?? '';
+  const pincode = defaultPincode || undefined;
+
+  const { data: products = [], isLoading: isProductsLoading } = useGetProductsQuery(
+    pincode ? { pincode } : undefined,
+  );
+  const { productIds } = useWishlist();
   const { add } = useCart();
   const homeDivision = useAppSelector(state => state.homeDivision?.division ?? 'fmcg');
 
@@ -63,70 +71,54 @@ const WishlistScreen = () => {
           <ActivityIndicator size="large" color={primary} />
         </View>
       ) : (
-      <FlatList
-        data={wishlistProducts}
-        keyExtractor={item => item.id}
-        contentContainerStyle={
-          wishlistProducts.length === 0
-            ? [styles.emptyContent, { paddingBottom: tabBarHeight + insets.bottom + 16 }]
-            : [styles.content, { paddingBottom: tabBarHeight + insets.bottom + 16 }]
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyCard}>
-            <View style={[styles.emptyIconWrap, { backgroundColor: `${primary}14` }]}>
-              <Icon name="heart-outline" size={32} color={primary} />
-            </View>
-            <Text style={styles.emptyTitle}>Your wishlist is empty</Text>
-            <Text style={styles.emptySub}>Tap heart on products to save them here.</Text>
-          </View>
-        }
-        renderItem={({ item }) => (
-          <View style={styles.rowCard}>
-            <View style={styles.productRow}>
-              <AppImage uri={item.image} width={64} style={styles.thumb} rounded={12} />
-              <View style={styles.meta}>
-                <Text style={styles.name} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <Text style={styles.brand} numberOfLines={1}>
-                  {item.brand ?? 'No brand'}
-                </Text>
-                <Text style={[styles.price, { color: primary }]}>Rs {item.price}</Text>
+        <FlatList
+          data={wishlistProducts}
+          keyExtractor={item => item.id}
+          numColumns={2}
+          columnWrapperStyle={styles.columnWrapper}
+          contentContainerStyle={[
+            wishlistProducts.length === 0
+              ? styles.emptyContent
+              : styles.content,
+            { paddingBottom: tabBarHeight + insets.bottom + 16 },
+          ]}
+          ListEmptyComponent={
+            <View style={styles.emptyCard}>
+              <View style={[styles.emptyIconWrap, { backgroundColor: `${primary}14` }]}>
+                <Icon name="heart-outline" size={32} color={primary} />
               </View>
+              <Text style={styles.emptyTitle}>Your wishlist is empty</Text>
+              <Text style={styles.emptySub}>Tap the heart on any product to save it here.</Text>
             </View>
-
-            <View style={styles.actionRow}>
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.removeBtn]}
-                activeOpacity={0.9}
-                onPress={() => toggle(item.id)}>
-                <Icon name="heart-off-outline" size={16} color="#DC2626" />
-                <Text style={styles.removeText}>Remove</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: primary }]}
-                activeOpacity={0.9}
-                onPress={() => add(item, 1, defaultPriceTier(item))}>
-                <Icon name="cart-plus" size={16} color="#FFFFFF" />
-                <Text style={styles.addText}>Add to Cart</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-      />
+          }
+          renderItem={({ item }) => (
+            <ProductCard
+              product={item}
+              onAdd={(p, tier) => add(p, 1, tier)}
+              accentColor={primary}
+              onCardPress={() =>
+                navigation.navigate('ProductOverview', {
+                  division: homeDivision,
+                  productId: item.id,
+                })
+              }
+            />
+          )}
+        />
       )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: palette.bg, paddingHorizontal: 14 },
+  root: { flex: 1, backgroundColor: palette.bg, paddingHorizontal: 8 },
   loaderWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
   backLink: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
     marginBottom: 10,
+    marginLeft: 6,
     gap: 2,
   },
   backLinkText: { fontSize: 16, fontWeight: '800' },
@@ -137,6 +129,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginBottom: 10,
+    marginHorizontal: 6,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -152,66 +145,27 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   countText: { fontWeight: '900', fontSize: 13 },
-  content: { paddingBottom: 24 },
-  emptyContent: { flexGrow: 1, justifyContent: 'center', paddingBottom: 24 },
-  rowCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 12,
-    marginBottom: 12,
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.06,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  productRow: { flexDirection: 'row', alignItems: 'center' },
-  thumb: {
-    width: 64,
-    height: 64,
-    borderRadius: 12,
-    backgroundColor: '#F1F5F9',
-  },
-  meta: { flex: 1, marginLeft: 12 },
-  name: { color: '#0F172A', fontWeight: '800', fontSize: 15 },
-  brand: { color: '#64748B', marginTop: 3, fontWeight: '700', fontSize: 12 },
-  price: { marginTop: 5, fontWeight: '900', fontSize: 14 },
-  actionRow: { marginTop: 12, flexDirection: 'row', gap: 8 },
-  actionBtn: {
-    flex: 1,
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  removeBtn: {
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    backgroundColor: '#FEF2F2',
-  },
-  removeText: { color: '#B91C1C', fontWeight: '800', marginLeft: 6 },
-  addText: { color: '#FFFFFF', fontWeight: '800', marginLeft: 6 },
+  content: { paddingTop: 4 },
+  emptyContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 6 },
+  columnWrapper: { justifyContent: 'flex-start' },
   emptyCard: {
     borderWidth: 1,
     borderColor: '#E2E8F0',
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     alignItems: 'center',
-    paddingVertical: 28,
+    paddingVertical: 48,
     paddingHorizontal: 18,
   },
   emptyIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emptyTitle: { marginTop: 12, color: '#334155', fontWeight: '900', fontSize: 16 },
-  emptySub: { marginTop: 6, color: '#64748B', fontWeight: '600' },
+  emptyTitle: { marginTop: 14, color: '#334155', fontWeight: '900', fontSize: 17 },
+  emptySub: { marginTop: 6, color: '#64748B', fontWeight: '600', textAlign: 'center' },
 });
 
 export default WishlistScreen;

@@ -378,7 +378,7 @@ const ProductOverviewScreen = () => {
     deliveryLocations.find((l: any) => l.is_default) ?? deliveryLocations[0];
   const defaultPincode: string = defaultDeliveryLocation?.pincode ?? '';
   const { data: allProducts = [] } = useGetProductsQuery(
-    defaultPincode ? { deliverTo: defaultPincode } : undefined,
+    defaultPincode ? { pincode: defaultPincode } : undefined,
   );
   const { add, decrement, items: cartItems } = useCart();
   const { toggle, isWishlisted } = useWishlist();
@@ -555,11 +555,22 @@ const ProductOverviewScreen = () => {
     return listProduct;
   }, [selectedProductId, listProduct, fetchedProduct]);
 
+  // RTK Query returns a cached error state (isFetching=false, isError=true) for one
+  // render before dispatching the new fetch when selectedProductId changes. Track the
+  // last rendered ID so that transitional render is treated as loading, not an error.
+  const lastSeenProductIdRef = useRef<string | undefined>(undefined);
+  const productIdJustChanged = lastSeenProductIdRef.current !== selectedProductId;
+  lastSeenProductIdRef.current = selectedProductId;
+
   const showDetailSpinner = Boolean(
-    selectedProductId && !selectedProduct && isProductFetching,
+    selectedProductId && !selectedProduct && (isProductFetching || productIdJustChanged),
   );
   const showDetailError = Boolean(
-    selectedProductId && !selectedProduct && !isProductFetching && isProductError,
+    selectedProductId &&
+      !selectedProduct &&
+      !productIdJustChanged &&
+      !isProductFetching &&
+      isProductError,
   );
 
   const selectedPackagingDetail = useMemo(
@@ -939,23 +950,90 @@ const ProductOverviewScreen = () => {
     <View style={styles.root}>
       {!isDetailMode && (
         <>
-          <View
-            style={[
-              styles.gradientLeft,
-              { backgroundColor: primary, opacity: 0.22 },
-            ]}
-          />
-          <View
-            style={[
-              styles.gradientRight,
-              { backgroundColor: accentSecondary, opacity: 0.18 },
-            ]}
-          />
+          <View style={[styles.browseHeaderBar, { paddingTop: insets.top }]}>
+            <TouchableOpacity
+              onPress={() =>
+                navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home')
+              }
+              style={[styles.browseHeaderIconBtn, { borderColor: primaryBorder }]}
+              activeOpacity={0.9}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Icon name="chevron-left" size={22} color={primary} />
+            </TouchableOpacity>
+            <View style={styles.browseHeaderTitleSlot} pointerEvents="none">
+              <Text style={[styles.browseHeaderTitle, { color: primary }]} numberOfLines={1}>
+                {companyFilter || brandFilter || subCategoryFilter || (isHomeKitchen ? 'Home & Kitchen' : 'FMCG')}
+              </Text>
+              <Text style={styles.browseHeaderCaption} numberOfLines={1}>
+                {isHomeKitchen ? 'Home & Kitchen' : 'FMCG'} · {products.length} items
+              </Text>
+            </View>
+          </View>
+
+          <View style={[styles.browseSearchToolbar, { borderColor: primaryBorder }]}>
+            <Icon name="magnify" size={20} color={primary} />
+            <TextInput
+              style={[styles.search, { color: primaryText }]}
+              placeholder={
+                isHomeKitchen
+                  ? 'Search kitchen & home essentials...'
+                  : 'Search FMCG essentials...'
+              }
+              placeholderTextColor="#94A3B8"
+              value={query}
+              onChangeText={setQuery}
+            />
+            <TouchableOpacity
+              onPress={async () => {
+                try {
+                  if (!isVoiceSearchAvailable) {
+                    showUiAlert('Voice Search', VOICE_NOT_AVAILABLE_MESSAGE, 'error');
+                    return;
+                  }
+                  if (Platform.OS === 'android') {
+                    const granted = await PermissionsAndroid.request(
+                      PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+                    );
+                    if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+                      showUiAlert(
+                        'Microphone permission',
+                        'Please allow microphone access to use voice search.',
+                        'error',
+                      );
+                      return;
+                    }
+                  }
+                  if (isListening) {
+                    setIsListening(false);
+                    await Voice.stop();
+                    return;
+                  }
+                  setQuery('');
+                  setIsListening(true);
+                  await Voice.start('en-US');
+                } catch (err: any) {
+                  setIsListening(false);
+                  showUiAlert(
+                    'Voice Search',
+                    err?.message ?? 'Could not start voice search',
+                    'error',
+                  );
+                }
+              }}
+              style={styles.micBtn}
+              activeOpacity={0.9}>
+              <Icon
+                name={isListening ? 'microphone' : 'microphone-outline'}
+                size={20}
+                color={primary}
+              />
+            </TouchableOpacity>
+          </View>
         </>
       )}
 
       <ScrollView
-        style={styles.container}
+        style={[styles.container, !isDetailMode && styles.browseContainer]}
         contentContainerStyle={[
           styles.content,
           isDetailMode ? styles.detailContent : styles.browseContent,
@@ -968,114 +1046,25 @@ const ProductOverviewScreen = () => {
         nestedScrollEnabled
         keyboardShouldPersistTaps="handled"
         bounces>
-        <View style={styles.topBar}>
-          <TouchableOpacity
-            onPress={() =>
-              navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home')
-            }
-            style={[styles.backBtn, isDetailMode && styles.backBtnDetail]}
-            activeOpacity={0.9}>
-            <Icon name="chevron-left" size={22} color={primary} />
-          </TouchableOpacity>
-
-          <View style={styles.topBarText}>
-            {isDetailMode ? (
+        {isDetailMode && (
+          <View style={styles.topBar}>
+            <TouchableOpacity
+              onPress={() =>
+                navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Home')
+              }
+              style={[styles.backBtn, styles.backBtnDetail]}
+              activeOpacity={0.9}>
+              <Icon name="chevron-left" size={22} color={primary} />
+            </TouchableOpacity>
+            <View style={styles.topBarText}>
               <Text
                 style={[styles.detailTopTitle, { color: primaryText }]}
                 numberOfLines={1}>
                 Product details
               </Text>
-            ) : (
-              <>
-                <Text style={[styles.title, { color: primary }]}>
-                  {isHomeKitchen ? 'Home & Kitchen' : 'FMCG'}
-                </Text>
-                <Text style={[styles.subtitle, { color: primaryText }]}>
-                  {subCategoryFilter
-                    ? `Category: ${subCategoryFilter}`
-                    : brandFilter
-                      ? `Brand: ${brandFilter}`
-                      : companyFilter
-                        ? `Company: ${companyFilter}`
-                        : 'Browse products curated for you'}
-                </Text>
-              </>
-            )}
-          </View>
-        </View>
-
-        {!isDetailMode ? (
-          <>
-            <View
-              style={[
-                styles.searchWrap,
-                { borderColor: primaryBorder, backgroundColor: 'rgba(255,255,255,0.65)' },
-              ]}>
-              <Icon name="magnify" size={20} color={primary} />
-              <TextInput
-                style={[styles.search, { color: primaryText }]}
-                placeholder={
-                  isHomeKitchen
-                    ? 'Search kitchen & home essentials...'
-                    : 'Search FMCG essentials...'
-                }
-                placeholderTextColor={primary}
-                value={query}
-                onChangeText={setQuery}
-              />
-              <TouchableOpacity
-                onPress={async () => {
-                  try {
-                    if (!isVoiceSearchAvailable) {
-                      showUiAlert('Voice Search', VOICE_NOT_AVAILABLE_MESSAGE, 'error');
-                      return;
-                    }
-
-                    if (Platform.OS === 'android') {
-                      const granted = await PermissionsAndroid.request(
-                        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-                      );
-                      if (
-                        granted !== PermissionsAndroid.RESULTS.GRANTED
-                      ) {
-                        showUiAlert(
-                          'Microphone permission',
-                          'Please allow microphone access to use voice search.',
-                          'error',
-                        );
-                        return;
-                      }
-                    }
-
-                    if (isListening) {
-                      setIsListening(false);
-                      await Voice.stop();
-                      return;
-                    }
-
-                    setQuery('');
-                    setIsListening(true);
-                    await Voice.start('en-US');
-                  } catch (err: any) {
-                    setIsListening(false);
-                    showUiAlert(
-                      'Voice Search',
-                      err?.message ?? 'Could not start voice search',
-                      'error',
-                    );
-                  }
-                }}
-                style={styles.micBtn}
-                activeOpacity={0.9}>
-                <Icon
-                  name={isListening ? 'microphone' : 'microphone-outline'}
-                  size={20}
-                  color={primary}
-                />
-              </TouchableOpacity>
             </View>
-          </>
-        ) : null}
+          </View>
+        )}
 
         {isDetailMode ? (
           showDetailSpinner ? (
@@ -1739,31 +1728,27 @@ const ProductOverviewScreen = () => {
               </Text>
             </View>
 
-            {products.map(item => (
-              <View key={item.id} style={styles.browseCardWrap}>
-                <TouchableOpacity
-                  activeOpacity={0.95}
-                  onPress={() =>
-                    navigation.navigate('ProductOverview', {
-                      division,
-                      productId: item.id,
-                      subCategory: subCategoryFilter,
-                      brand: brandFilter,
-                      company: companyFilter,
-                      categoryFilter,
-                    })
-                  }>
-                  <ProductDetailCard
-                    item={item}
-                    onAdd={(p, tier) => add(p, 1, tier)}
-                    onToggleWishlist={toggle}
-                    isWishlisted={isWishlisted(item.id)}
+            <View style={styles.productGrid}>
+              {products.map(item => (
+                <View key={item.id} style={styles.productGridCell}>
+                  <ProductCard
+                    product={item}
                     accentColor={primary}
-                    textColor={primaryText}
+                    onAdd={(p, tier) => add(p, 1, tier)}
+                    onCardPress={() =>
+                      navigation.navigate('ProductOverview', {
+                        division,
+                        productId: item.id,
+                        subCategory: subCategoryFilter,
+                        brand: brandFilter,
+                        company: companyFilter,
+                        categoryFilter,
+                      })
+                    }
                   />
-                </TouchableOpacity>
-              </View>
-            ))}
+                </View>
+              ))}
+            </View>
           </>
         )}
       </ScrollView>
@@ -1776,52 +1761,69 @@ const ProductOverviewScreen = () => {
             { paddingBottom: insets.bottom + 12 },
           ]}>
           <View style={styles.detailFooterAddCol}>
-            {(hasVariants ? selectedVariantCartQty > 0 && !!selectedVariantId : detailTierCartBinding.displayQty > 0 && !!detailTierCartBinding.decrementTier) &&
-            canPurchase ? (
-              <TouchableOpacity
-                style={[styles.detailFooterMinus, { borderColor: primary }]}
-                onPress={() =>
-                  hasVariants
-                    ? decrement(selectedProduct.id, undefined, selectedVariantId ?? undefined)
-                    : decrement(selectedProduct.id, detailTierCartBinding.decrementTier!)
+            {(() => {
+              // When the product has purchasable variants, prefer the variant-specific
+              // cart qty. Fall back to the product-level total when an item was added
+              // without a variant (e.g. from HomeScreen's quick-add button).
+              const footerQty = hasVariants
+                ? selectedVariantCartQty > 0
+                  ? selectedVariantCartQty
+                  : detailProductCartTotal
+                : detailTierCartBinding.displayQty;
+              const showMinus = footerQty > 0 && canPurchase && (
+                hasVariants
+                  ? (selectedVariantCartQty > 0 && !!selectedVariantId) || detailProductCartTotal > 0
+                  : !!detailTierCartBinding.decrementTier
+              );
+              const onPressMinus = () => {
+                if (hasVariants) {
+                  if (selectedVariantCartQty > 0 && selectedVariantId) {
+                    decrement(selectedProduct.id, undefined, selectedVariantId);
+                  } else {
+                    decrement(selectedProduct.id, detailTierCartBinding.decrementTier!);
+                  }
+                } else {
+                  decrement(selectedProduct.id, detailTierCartBinding.decrementTier!);
                 }
-                activeOpacity={0.9}
-                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
-                <Text style={[styles.detailFooterMinusText, { color: primary }]}>−</Text>
-              </TouchableOpacity>
-            ) : null}
-            <TouchableOpacity
-              style={[
-                styles.detailAddBtn,
-                {
-                  backgroundColor: canPurchase ? '#FFFFFF' : '#F1F5F9',
-                  borderColor: canPurchase ? primary : '#E2E8F0',
-                },
-                !canPurchase && styles.detailFooterBtnDisabled,
-              ]}
-              disabled={!canPurchase}
-              onPress={onPressDetailAddToCart}
-              activeOpacity={0.9}>
-              <Icon name="cart-plus" size={17} color={canPurchase ? primary : '#94A3B8'} />
-              <View style={styles.detailAddTextCol}>
-                <Text style={[styles.detailAddText, { color: canPurchase ? primary : '#94A3B8' }]}>
-                  {(hasVariants ? selectedVariantCartQty : detailTierCartBinding.displayQty) > 0
-                    ? 'Add more'
-                    : 'ADD'}
-                </Text>
-                {hasVariants ? (
-                  selectedVariantCartQty > 0 ? (
-                    <Text style={[styles.detailAddSub, { color: '#64748B' }]} numberOfLines={2}>
-                      In cart: {selectedVariantCartQty}
-                    </Text>
-                  ) : null
-                ) : detailProductCartTotal > 0 ? (
-                  <Text style={[styles.detailAddSub, { color: '#64748B' }]} numberOfLines={2}>
-                    In cart: {detailCartSummaryText}
-                  </Text>
-                ) : null}
-              </View>
-            </TouchableOpacity>
+              };
+              return (
+                <>
+                  {showMinus ? (
+                    <TouchableOpacity
+                      style={[styles.detailFooterMinus, { borderColor: primary }]}
+                      onPress={onPressMinus}
+                      activeOpacity={0.9}
+                      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+                      <Text style={[styles.detailFooterMinusText, { color: primary }]}>−</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  <TouchableOpacity
+                    style={[
+                      styles.detailAddBtn,
+                      {
+                        backgroundColor: canPurchase ? '#FFFFFF' : '#F1F5F9',
+                        borderColor: canPurchase ? primary : '#E2E8F0',
+                      },
+                      !canPurchase && styles.detailFooterBtnDisabled,
+                    ]}
+                    disabled={!canPurchase}
+                    onPress={onPressDetailAddToCart}
+                    activeOpacity={0.9}>
+                    <Icon name="cart-plus" size={17} color={canPurchase ? primary : '#94A3B8'} />
+                    <View style={styles.detailAddTextCol}>
+                      <Text style={[styles.detailAddText, { color: canPurchase ? primary : '#94A3B8' }]}>
+                        {footerQty > 0 ? 'Add more' : 'ADD'}
+                      </Text>
+                      {footerQty > 0 ? (
+                        <Text style={[styles.detailAddSub, { color: '#64748B' }]} numberOfLines={2}>
+                          In cart: {hasVariants && selectedVariantCartQty > 0 ? selectedVariantCartQty : detailCartSummaryText}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </TouchableOpacity>
+                </>
+              );
+            })()}
           </View>
           <TouchableOpacity
             style={[
@@ -2914,6 +2916,69 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   notDeliverableCompactText: { color: '#94A3B8', fontWeight: '800', fontSize: 12 },
+  productGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -4,
+    marginTop: 4,
+  },
+  productGridCell: {
+    width: '50%',
+    paddingHorizontal: 4,
+    marginBottom: 8,
+  },
+  browseContainer: {
+    backgroundColor: '#F8FAFC',
+  },
+  browseHeaderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+  },
+  browseHeaderIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  browseHeaderTitleSlot: {
+    flex: 1,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 0,
+  },
+  browseHeaderTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    textAlign: 'center',
+    width: '100%',
+  },
+  browseHeaderCaption: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#94A3B8',
+    textAlign: 'center',
+    width: '100%',
+  },
+  browseSearchToolbar: {
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E2E8F0',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
 });
 
 export default ProductOverviewScreen;

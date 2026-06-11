@@ -254,7 +254,17 @@ const mapPriceOptionsFromApi = (item: ProductApiEntity): ProductPriceOption[] | 
         : undefined,
     });
   }
-  return out.length ? out : undefined;
+  if (out.length < 2) return out.length ? out : undefined;
+  // Drop non-unit tiers whose displayed price is identical to the unit tier price —
+  // the backend filter may miss edge cases with Decimal precision.
+  const unitPrice = out.find(o => o.key === 'unit')?.sellingPrice;
+  const deduped =
+    unitPrice !== undefined
+      ? out.filter(
+          o => o.key === 'unit' || Math.round(o.sellingPrice * 100) !== Math.round(unitPrice * 100),
+        )
+      : out;
+  return deduped.length ? deduped : undefined;
 };
 
 export const mapProductFromApi = (

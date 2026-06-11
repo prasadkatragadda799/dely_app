@@ -209,17 +209,21 @@ export const useCart = () => {
             i.priceOptionKey === tier &&
             (variantId ? i.variantId === variantId : !i.variantId),
         );
-        const pcs = Math.max(1, product.piecesPerSet ?? 1);
         // A variant is an individual SKU → minimum of 1 per line.
-        // 'set' price-tier: qty is in set units, minOrder is in pieces → convert.
-        // All other tiers: qty and minOrder share the same unit; use minOrder directly.
+        // 'set' / 'remaining' tiers: count in sets/lots, so minimum is always 1.
+        // Natural-set products (unit ≠ 'piece', piecesPerSet > 1): the sale unit
+        //   is already a set. minOrderQuantity is ambiguous (pieces vs sets) so
+        //   always start with 1 set — the stepper handles subsequent increments.
+        // All other tiers: minOrder and qty share the same unit; use minOrder directly.
+        const pcsPerSet = Math.max(1, product.piecesPerSet ?? 1);
+        const isNaturalSet =
+          pcsPerSet > 1 &&
+          (product.unit || 'piece').toLowerCase() !== 'piece';
         const minLineQty = variantId
           ? 1
-          : tier === 'set'
-            ? Math.max(1, Math.ceil(minOrder / pcs))
-            : tier === 'remaining'
-              ? 1
-              : minOrder;
+          : tier === 'set' || tier === 'remaining' || isNaturalSet
+            ? 1
+            : minOrder;
         const safeQuantity = alreadyInCart
           ? requested
           : Math.max(minLineQty, requested);
@@ -236,7 +240,7 @@ export const useCart = () => {
             Toast.show({
               type: 'error',
               text1: 'Could not add to cart',
-              text2: e?.data?.message ?? e?.message ?? 'Please try again.',
+              text2: e?.data?.detail ?? e?.data?.message ?? e?.message ?? 'Please try again.',
             });
             throw e;
           });
@@ -291,14 +295,13 @@ export const useCart = () => {
         const maxQty = stock !== undefined && stock > 0 ? stock : 99;
         const tPcs = Math.max(1, target.product.piecesPerSet ?? 1);
         const tMinO = Math.max(1, Math.trunc(Number(target.product.minOrderQuantity) || 1));
-        // Variant lines are individual SKUs → step 1.
-        // 'set'/'remaining' tiers: qty already in bundle units → step 1.
-        // 'unit' tier with pcs>1: step by pack size (works for both unit='piece' and
-        //   unit='set' — the backend counts raw units and pcs drives the step size).
-        // 'unit' tier implied-set (pcs=1, minO>1): step by minOrder.
+        const tIsNaturalSet =
+          tPcs > 1 && (target.product.unit || 'piece').toLowerCase() !== 'piece';
+        // Variant lines, 'set'/'remaining' tiers, and natural-set products all step by 1.
+        // Implied-set 'unit' tier (unit='piece', pcs>1): step by piecesPerSet (pieces).
         const step = variantId
           ? 1
-          : target.priceOptionKey === 'set' || target.priceOptionKey === 'remaining'
+          : target.priceOptionKey === 'set' || target.priceOptionKey === 'remaining' || tIsNaturalSet
             ? 1
             : tPcs > 1
               ? tPcs
@@ -314,8 +317,9 @@ export const useCart = () => {
             Toast.show({
               type: 'error',
               text1: 'Could not update cart',
-              text2: e?.data?.message ?? e?.message ?? 'Please try again.',
+              text2: e?.data?.detail ?? e?.data?.message ?? e?.message ?? 'Please try again.',
             });
+            throw e;
           });
       },
       decrement: (
@@ -333,11 +337,13 @@ export const useCart = () => {
         if (!target?.cartItemId) return Promise.resolve();
         const dPcs = Math.max(1, target.product.piecesPerSet ?? 1);
         const dMinO = Math.max(1, Math.trunc(Number(target.product.minOrderQuantity) || 1));
+        const dIsNaturalSet =
+          dPcs > 1 && (target.product.unit || 'piece').toLowerCase() !== 'piece';
         const tier = target.priceOptionKey;
         // Variant lines are individual SKUs: step 1, minimum 1.
         const dStep = variantId
           ? 1
-          : tier === 'set' || tier === 'remaining'
+          : tier === 'set' || tier === 'remaining' || dIsNaturalSet
             ? 1
             : dPcs > 1
               ? dPcs
@@ -349,11 +355,12 @@ export const useCart = () => {
           1,
           Math.trunc(Number(target.product.minOrderQuantity) || 1),
         );
-        const pcs = Math.max(1, target.product.piecesPerSet ?? 1);
+        // 'set' tier: one set is the minimum line unit; decrement to 0 removes the
+        //   item, decrement from 2→1 should update not delete.
         const minLineQty = variantId
           ? 1
           : tier === 'set'
-            ? Math.max(1, Math.ceil(minOrder / pcs))
+            ? 1
             : tier === 'remaining'
               ? 1
               : minOrder;
@@ -365,8 +372,9 @@ export const useCart = () => {
           Toast.show({
             type: 'error',
             text1: 'Could not update cart',
-            text2: e?.data?.message ?? e?.message ?? 'Please try again.',
+            text2: e?.data?.detail ?? e?.data?.message ?? e?.message ?? 'Please try again.',
           });
+          throw e;
         });
       },
     }),

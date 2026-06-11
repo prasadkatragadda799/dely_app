@@ -45,6 +45,7 @@ const ProductCard = ({
 }: Props) => {
   const { items, increment, decrement } = useCart();
   const [mutating, setMutating] = useState(false);
+  const addMutatingRef = useRef(false);
   const [imageError, setImageError] = useState(false);
   const [imageLoading, setImageLoading] = useState(true);
   const shimmerAnim = useRef(new Animated.Value(0)).current;
@@ -266,25 +267,30 @@ const ProductCard = ({
             disabled={mutating}
             onPress={e => {
               e.stopPropagation?.();
-              if (mutating) return;
+              if (addMutatingRef.current || mutating) return;
               if (multiTier && totalQtyAllTiers === 0) {
                 setTierModalVisible(true);
               } else {
+                addMutatingRef.current = true;
                 // Optimistic: compute the same safeQuantity logic as useCart.add
                 const minOrder = Math.max(1, Math.trunc(Number(product.minOrderQuantity) || 1));
                 const pcs = Math.max(1, product.piecesPerSet ?? 1);
+                const isNaturalSet =
+                  pcs > 1 && (product.unit || 'piece').toLowerCase() !== 'piece';
                 const minLineQty =
-                  tierKey === 'set'
-                    ? Math.max(1, Math.ceil(minOrder / pcs))
-                    : tierKey === 'remaining'
-                      ? 1
-                      : minOrder;
+                  tierKey === 'set' || tierKey === 'remaining' || isNaturalSet
+                    ? 1
+                    : minOrder;
                 setLocalQty(minLineQty);
                 setMutating(true);
-                Promise.resolve(onAdd(product, tierKey)).catch(() => {
-                  setLocalQty(null);
-                  setMutating(false);
-                });
+                Promise.resolve(onAdd(product, tierKey))
+                  .catch(() => {
+                    setLocalQty(null);
+                    setMutating(false);
+                  })
+                  .finally(() => {
+                    addMutatingRef.current = false;
+                  });
               }
             }}
             activeOpacity={0.92}>
@@ -313,9 +319,11 @@ const ProductCard = ({
                   if (mutating || !cartLineForCard) return;
                   const dPcs = Math.max(1, product.piecesPerSet ?? 1);
                   const dMinO = Math.max(1, Math.trunc(Number(product.minOrderQuantity) || 1));
+                  const dIsNaturalSet =
+                    dPcs > 1 && (product.unit || 'piece').toLowerCase() !== 'piece';
                   const tier = cartLineForCard.priceOptionKey;
                   const dStep =
-                    tier === 'set' || tier === 'remaining'
+                    tier === 'set' || tier === 'remaining' || dIsNaturalSet
                       ? 1
                       : dPcs > 1 ? dPcs
                         : dMinO > 1 && productImpliesSetPurchase(product) ? dMinO : 1;
@@ -355,9 +363,11 @@ const ProductCard = ({
                   if (mutating || !cartLineForCard) return;
                   const tPcs = Math.max(1, product.piecesPerSet ?? 1);
                   const tMinO = Math.max(1, Math.trunc(Number(product.minOrderQuantity) || 1));
+                  const tIsNaturalSet =
+                    tPcs > 1 && (product.unit || 'piece').toLowerCase() !== 'piece';
                   const tier = cartLineForCard.priceOptionKey;
                   const step =
-                    tier === 'set' || tier === 'remaining'
+                    tier === 'set' || tier === 'remaining' || tIsNaturalSet
                       ? 1
                       : tPcs > 1 ? tPcs
                         : tMinO > 1 && productImpliesSetPurchase(product) ? tMinO : 1;
@@ -385,8 +395,14 @@ const ProductCard = ({
         product={product}
         accentColor={accentColor}
         onSelectTier={tier => {
+          if (addMutatingRef.current || mutating) return;
+          addMutatingRef.current = true;
           setTierKey(tier);
-          onAdd(product, tier);
+          setLocalQty(1);
+          setMutating(true);
+          Promise.resolve(onAdd(product, tier))
+            .catch(() => { setLocalQty(null); setMutating(false); })
+            .finally(() => { addMutatingRef.current = false; });
         }}
       />
     </Wrapper>
