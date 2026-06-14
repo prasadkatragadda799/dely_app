@@ -336,6 +336,12 @@ export const mobileApi = createApi({
       query: () => ({ url: '/delivery/auth/logout', method: 'POST' }),
       invalidatesTags: ['Auth'],
     }),
+    deliveryChangePassword: builder.mutation<
+      ApiEnvelope<unknown>,
+      { current_password: string; new_password: string }
+    >({
+      query: body => ({ url: '/delivery/auth/change-password', method: 'POST', body }),
+    }),
 
     getProductById: builder.query<ApiEnvelope<unknown>, IdParam>({
       query: ({ id }) => `/products/${id}`,
@@ -885,6 +891,7 @@ export const {
   useLogoutApiMutation,
   useDeliveryLoginMutation,
   useDeliveryLogoutApiMutation,
+  useDeliveryChangePasswordMutation,
   useGetProductByIdQuery,
   useGetProductBySlugQuery,
   useSearchProductsQuery,

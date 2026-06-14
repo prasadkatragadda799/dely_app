@@ -524,108 +524,228 @@ const OrdersScreen = () => {
                 <Text style={styles.loaderText}>Invoice unavailable.</Text>
               </View>
             ) : (
-              <ScrollView contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
-                <View style={styles.invoiceTopRow}>
+              <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+                {/* ── Header: logo+meta full-width, then Bill From | Bill To side by side ── */}
+                {/* Row 1: logo + meta fields (full width) */}
+                <View style={{ flexDirection: 'row', gap: 6, alignItems: 'flex-start', marginTop: 8 }}>
                   <Image source={require('../../../assets/dely-logo.png')} style={styles.logoBadgeImage} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.invoiceHeading}>Bill of Supply</Text>
-                    <Text style={styles.invoiceMeta}>Order No: {invoice?.order_number ?? '-'}</Text>
-                    <Text style={styles.invoiceMeta}>Invoice No: {invoice?.invoice_number ?? '-'}</Text>
-                    <Text style={styles.invoiceMeta}>Invoice Date: {invoiceDate}</Text>
-                    <Text style={styles.invoiceMeta}>Supply Type: {invoice?.supply_type ?? '-'}</Text>
-                    <Text style={styles.invoiceMeta}>Place of Supply: {invoice?.place_of_supply ?? '-'}</Text>
+                    <Text style={styles.invBillOfSupply}>BILL OF SUPPLY</Text>
+                    <Text style={styles.invMeta}>Invoice No : {invoice?.invoice_number ?? '—'}</Text>
+                    <Text style={styles.invMeta}>Order No : {invoice?.order_number ?? '—'}</Text>
+                    <Text style={styles.invMeta}>Shipment No : {invoice?.shipment_number ?? invoice?.shipmentNumber ?? '—'}</Text>
+                    <Text style={styles.invMeta}>Invoice Date : {invoiceDate}</Text>
+                    <Text style={styles.invMeta}>Place of Supply : {String(invoice?.place_of_supply ?? '—').toUpperCase()}</Text>
+                    <Text style={styles.invMeta}>Supply Type : {invoice?.supply_type ?? '—'}</Text>
+                    <Text style={styles.invMeta}>Page No : {invoice?.page_number ?? invoice?.pageNumber ?? '1/1'}</Text>
+                  </View>
+                </View>
+                {/* Row 2: Bill From | Bill To side by side (each gets ~50% width) */}
+                <View style={styles.invBillRow}>
+                  <View style={styles.invBillCol}>
+                    <Text style={styles.invBillLabel}>Bill From:</Text>
+                    <Text style={styles.invBillText}>{invoice?.seller?.company_name ?? invoice?.seller?.name ?? '—'}</Text>
+                    {invoice?.seller?.address_line1 ? <Text style={styles.invBillText}>{invoice.seller.address_line1}</Text> : null}
+                    {invoice?.seller?.address_line2 ? <Text style={styles.invBillText}>{invoice.seller.address_line2}</Text> : null}
+                    {[invoice?.seller?.city, invoice?.seller?.state, invoice?.seller?.pincode].filter(Boolean).length > 0
+                      ? <Text style={styles.invBillText}>{[invoice?.seller?.city, invoice?.seller?.state, invoice?.seller?.pincode].filter(Boolean).join(', ')}</Text>
+                      : null}
+                    <Text style={styles.invBillText}>GSTIN: {invoice?.seller?.gstin ?? '—'}</Text>
+                    {invoice?.seller?.phone ? <Text style={styles.invBillText}>Phone: {invoice.seller.phone}</Text> : null}
+                    {invoice?.seller?.email ? <Text style={styles.invBillText}>{invoice.seller.email}</Text> : null}
+                  </View>
+                  <View style={styles.invBillCol}>
+                    <Text style={styles.invBillLabel}>Bill To:</Text>
+                    <Text style={styles.invBillText}>{String(invoice?.buyer?.name ?? '—').toUpperCase()}</Text>
+                    {invoice?.buyer?.address_line1 ? <Text style={styles.invBillText}>{invoice.buyer.address_line1}</Text> : null}
+                    {invoice?.buyer?.address_line2 ? <Text style={styles.invBillText}>{invoice.buyer.address_line2}</Text> : null}
+                    {[invoice?.buyer?.city, invoice?.buyer?.state].filter(Boolean).length > 0
+                      ? <Text style={styles.invBillText}>
+                          {[invoice?.buyer?.city, invoice?.buyer?.state].filter(Boolean).join(', ')}{invoice?.buyer?.pincode ? ` - ${invoice.buyer.pincode}` : ''}
+                        </Text>
+                      : null}
+                    <Text style={styles.invBillText}>Mobile: {invoice?.buyer?.phone ?? '—'}</Text>
+                    {invoice?.buyer?.gstin ? <Text style={styles.invBillText}>GSTIN: {invoice.buyer.gstin}</Text> : null}
+                    <Text style={styles.invBillText}>State Code: {invoice?.buyer?.state_code ?? '—'}</Text>
                   </View>
                 </View>
 
-                <View style={styles.invoiceBox}>
-                  <Text style={styles.invoiceSectionTitle}>Bill From</Text>
-                  <Text style={styles.invoiceLine}>{invoice?.seller?.company_name ?? invoice?.seller?.name ?? '-'}</Text>
-                  <Text style={styles.invoiceLine}>
-                    {[invoice?.seller?.address_line1, invoice?.seller?.address_line2].filter(Boolean).join(', ')}
-                  </Text>
-                  <Text style={styles.invoiceLine}>
-                    {[invoice?.seller?.city, invoice?.seller?.state, invoice?.seller?.pincode].filter(Boolean).join(', ')}
-                  </Text>
-                  <Text style={styles.invoiceLine}>GSTIN: {invoice?.seller?.gstin ?? '-'}</Text>
-                </View>
-
-                <View style={styles.invoiceBox}>
-                  <Text style={styles.invoiceSectionTitle}>Bill To</Text>
-                  <Text style={styles.invoiceLine}>{invoice?.buyer?.name ?? '-'}</Text>
-                  <Text style={styles.invoiceLine}>
-                    {[invoice?.buyer?.address_line1, invoice?.buyer?.address_line2].filter(Boolean).join(', ')}
-                  </Text>
-                  <Text style={styles.invoiceLine}>
-                    {[invoice?.buyer?.city, invoice?.buyer?.state, invoice?.buyer?.pincode].filter(Boolean).join(', ')}
-                  </Text>
-                  <Text style={styles.invoiceLine}>Phone: {invoice?.buyer?.phone ?? '-'}</Text>
-                  {invoice?.buyer?.gstin ? (
-                    <Text style={styles.invoiceLine}>GSTIN: {invoice.buyer.gstin}</Text>
-                  ) : null}
-                </View>
-
-                <View style={styles.invoiceTable}>
-                  <View style={styles.invoiceTableHead}>
-                    <Text style={[styles.th, { flex: 1.6 }]}>Description</Text>
-                    <Text style={[styles.th, { flex: 0.8, textAlign: 'right' }]}>Rate</Text>
-                    <Text style={[styles.th, { flex: 0.45, textAlign: 'right' }]}>Qty</Text>
-                    <Text style={[styles.th, { flex: 0.85, textAlign: 'right' }]}>Taxable</Text>
-                    <Text style={[styles.th, { flex: 0.9, textAlign: 'right' }]}>Total</Text>
-                  </View>
-                  {invoiceItems.map((it: any) => (
-                    <View key={it?.id ?? `${it?.product?.name}-${it?.quantity}`} style={styles.invoiceTableRow}>
-                      <Text style={[styles.td, { flex: 1.6 }]}>
-                        {it?.product?.name ?? 'Product'}
-                        {'\n'}
-                        HSN: {it?.product?.hsn ?? '-'}
-                      </Text>
-                      <Text style={[styles.td, { flex: 0.8, textAlign: 'right' }]}>{formatMoney(it?.rate)}</Text>
-                      <Text style={[styles.td, { flex: 0.45, textAlign: 'right' }]}>{Number(it?.quantity ?? 0)}</Text>
-                      <Text style={[styles.td, { flex: 0.85, textAlign: 'right' }]}>{formatMoney(it?.taxable_amount)}</Text>
-                      <Text style={[styles.td, { flex: 0.9, textAlign: 'right' }]}>{formatMoney(it?.total_amount)}</Text>
+                {/* ── Items table (horizontally scrollable) ── */}
+                <ScrollView horizontal showsHorizontalScrollIndicator style={{ marginTop: 10 }}>
+                  <View style={styles.invTable}>
+                    {/* Header row */}
+                    <View style={styles.invTableHeadRow}>
+                      <Text style={[styles.invTh, { width: 140 }]}>Description</Text>
+                      <Text style={[styles.invTh, { width: 72, textAlign: 'right' }]}>HSN Code</Text>
+                      <Text style={[styles.invTh, { width: 78, textAlign: 'right' }]}>Original Rate</Text>
+                      <Text style={[styles.invTh, { width: 78, textAlign: 'right' }]}>Unit Discount</Text>
+                      <Text style={[styles.invTh, { width: 66, textAlign: 'right' }]}>Rate</Text>
+                      <Text style={[styles.invTh, { width: 44, textAlign: 'right' }]}>Qty</Text>
+                      <Text style={[styles.invTh, { width: 82, textAlign: 'right' }]}>Taxable Amt.</Text>
+                      <Text style={[styles.invTh, { width: 56, textAlign: 'right' }]}>SGST</Text>
+                      <Text style={[styles.invTh, { width: 56, textAlign: 'right' }]}>CGST</Text>
+                      <Text style={[styles.invTh, { width: 72, textAlign: 'right' }]}>Total Amt.</Text>
                     </View>
-                  ))}
-                </View>
+                    {/* Item rows */}
+                    {invoiceItems.map((it: any, idx: number) => {
+                      const isCanonical =
+                        it?.product && typeof it.product === 'object' &&
+                        (it.taxable_amount !== undefined || it.taxableAmount !== undefined);
+                      const productName = it?.product?.name ?? it?.productName ?? it?.product_name ?? 'Product';
+                      const hsnCode = it?.product?.hsn ?? it?.product?.hsnCode ?? it?.hsnCode ?? it?.hsn_code ?? '—';
+                      const supplyType = invoice?.supply_type ?? '';
+                      const fmtN = (n: number) =>
+                        n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-                {!!invoiceTaxDetails.length && (
-                  <View style={styles.invoiceBox}>
-                    <Text style={styles.invoiceSectionTitle}>Tax Details</Text>
-                    {invoiceTaxDetails.map((tax: any, idx: number) => (
-                      <Text key={`${tax?.tax_type}-${idx}`} style={styles.invoiceLine}>
-                        {tax?.tax_type} @ {tax?.rate}%: {formatMoney(tax?.tax_amount)}
+                      let mrp: number, sellingPrice: number, discountDisplay: number, quantity: number,
+                          taxableAmount: number, sgstAmount: number, cgstAmount: number, itemTotal: number, taxLabel: string;
+
+                      if (isCanonical) {
+                        mrp = Number(it.mrp ?? it.original_rate ?? it.originalPrice ?? 0);
+                        sellingPrice = Number(it.rate ?? it.selling_price ?? it.price ?? 0);
+                        const unitDiscount = Number(it.unit_discount ?? 0);
+                        discountDisplay = Number(it.discount ?? unitDiscount * Number(it.quantity ?? 1));
+                        quantity = Number(it.quantity ?? it.qty ?? 1);
+                        taxableAmount = Number(it.taxable_amount ?? it.taxableAmount ?? sellingPrice * quantity);
+                        sgstAmount = Number(it.sgst ?? it.tax_details?.sgst ?? 0);
+                        cgstAmount = Number(it.cgst ?? it.tax_details?.cgst ?? 0);
+                        const igstAmount = Number(it.tax_details?.igst ?? it.igst ?? 0);
+                        const taxRate = Number(it.tax_details?.rate ?? 0);
+                        const halfRate = taxRate > 0 ? taxRate / 2 : 0;
+                        itemTotal = Number(it.total_amount ?? it.totalAmount ?? taxableAmount + sgstAmount + cgstAmount + igstAmount);
+                        taxLabel = supplyType === 'INTERSTATE' && igstAmount > 0
+                          ? `IGST@ ${taxRate.toFixed(1)}%`
+                          : `CGST@ ${halfRate.toFixed(1)}%, SGST@ ${halfRate.toFixed(1)}%`;
+                      } else {
+                        mrp = Number(it.mrp ?? it.originalPrice ?? it.original_price ?? 0);
+                        sellingPrice = Number(it.sellingPrice ?? it.selling_price ?? it.price ?? it.rate ?? 0);
+                        quantity = Number(it.quantity ?? it.qty ?? 1);
+                        discountDisplay = Math.max(0, mrp - sellingPrice) * quantity;
+                        taxableAmount = Number(it.taxableAmount ?? it.taxable_amount ?? sellingPrice * quantity);
+                        const cgstRate = Number(it.cgstRate ?? it.cgst_rate ?? 0);
+                        const sgstRate = Number(it.sgstRate ?? it.sgst_rate ?? 0);
+                        cgstAmount = Number(it.cgstAmount ?? it.cgst_amount ?? (taxableAmount * cgstRate) / 100);
+                        sgstAmount = Number(it.sgstAmount ?? it.sgst_amount ?? (taxableAmount * sgstRate) / 100);
+                        itemTotal = Number(it.totalAmount ?? it.total_amount ?? taxableAmount + cgstAmount + sgstAmount);
+                        const unit = it.unit ?? it.product?.unit ?? '';
+                        taxLabel = unit
+                          ? `${unit}, CGST@ ${cgstRate.toFixed(1)}%, SGST@ ${sgstRate.toFixed(1)}%`
+                          : `CGST@ ${cgstRate.toFixed(1)}%, SGST@ ${sgstRate.toFixed(1)}%`;
+                      }
+
+                      return (
+                        <View key={it?.id ?? idx} style={styles.invTableRow}>
+                          <View style={{ width: 140, paddingRight: 4 }}>
+                            <Text style={styles.invTd}>{productName}</Text>
+                            {taxLabel ? <Text style={[styles.invTd, { color: '#64748B', marginTop: 1 }]}>{taxLabel}</Text> : null}
+                          </View>
+                          <Text style={[styles.invTd, { width: 72, textAlign: 'right' }]}>{hsnCode}</Text>
+                          <Text style={[styles.invTd, { width: 78, textAlign: 'right' }]}>{fmtN(mrp)}</Text>
+                          <Text style={[styles.invTd, { width: 78, textAlign: 'right' }]}>{fmtN(discountDisplay)}</Text>
+                          <Text style={[styles.invTd, { width: 66, textAlign: 'right' }]}>{fmtN(sellingPrice)}</Text>
+                          <Text style={[styles.invTd, { width: 44, textAlign: 'right' }]}>{quantity.toFixed(1)}</Text>
+                          <Text style={[styles.invTd, { width: 82, textAlign: 'right' }]}>{fmtN(taxableAmount)}</Text>
+                          <Text style={[styles.invTd, { width: 56, textAlign: 'right' }]}>{fmtN(sgstAmount)}</Text>
+                          <Text style={[styles.invTd, { width: 56, textAlign: 'right' }]}>{fmtN(cgstAmount)}</Text>
+                          <Text style={[styles.invTd, { width: 72, textAlign: 'right' }]}>{fmtN(itemTotal)}</Text>
+                        </View>
+                      );
+                    })}
+                    {/* Page Total row */}
+                    <View style={styles.invPageTotalRow}>
+                      <Text style={styles.invPageTotalText}>Page Total</Text>
+                      <Text style={styles.invPageTotalText}>
+                        Qty {invoiceItems.reduce((s: number, it: any) => s + Number(it.quantity ?? it.qty ?? 1), 0).toFixed(1)}
                       </Text>
-                    ))}
+                      <Text style={styles.invPageTotalText}>
+                        {Number(invoice?.grand_total ?? invoice?.total ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Text>
+                    </View>
                   </View>
-                )}
+                </ScrollView>
 
-                <View style={styles.totalWrap}>
-                  <Text style={styles.totalLine}>Subtotal: {formatMoney(invoice?.subtotal)}</Text>
-                  <Text style={styles.totalLine}>Total Tax: {formatMoney(invoice?.total_tax)}</Text>
-                  <Text style={styles.totalLine}>Delivery: {formatMoney(invoice?.delivery_charge)}</Text>
-                  <Text style={styles.totalGrand}>Grand Total: {formatMoney(invoice?.grand_total ?? invoice?.total)}</Text>
-                </View>
-
+                {/* ── QR code (right-aligned, web style) ── */}
                 {invoice?.upiQr?.qrImage ? (
-                  <View style={styles.invoiceUpi}>
-                    <Text style={styles.invoiceUpiTitle}>Scan to pay this invoice</Text>
-                    <Image source={{ uri: invoice.upiQr.qrImage }} style={styles.invoiceUpiQr} resizeMode="contain" />
-                    <Text style={styles.invoiceUpiAmt}>{formatMoney(invoice.upiQr.amount)}</Text>
-                    <Text style={styles.invoiceUpiVpa}>{invoice.upiQr.payeeName} · {invoice.upiQr.vpa}</Text>
-                    <TouchableOpacity
-                      style={styles.invoiceUpiBtn}
-                      onPress={() => invoice.upiQr?.upiUri && Linking.openURL(invoice.upiQr.upiUri).catch(() => {})}
-                      activeOpacity={0.9}>
-                      <Icon name="cellphone" size={15} color="#FFFFFF" />
-                      <Text style={styles.invoiceUpiBtnText}>Pay with UPI app</Text>
-                    </TouchableOpacity>
+                  <View style={styles.invQrRow}>
+                    <View style={styles.invQrBlock}>
+                      <Image source={{ uri: invoice.upiQr.qrImage }} style={styles.invQrImage} resizeMode="contain" />
+                      <Text style={styles.invQrScanText}>
+                        Scan to pay ₹{Number(invoice.upiQr.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </Text>
+                      <Text style={styles.invQrVpa}>{invoice.upiQr.vpa}</Text>
+                      <Text style={styles.invQrRef}>Ref: {invoice.upiQr.invoiceNumber ?? invoice?.invoice_number ?? ''}</Text>
+                    </View>
                   </View>
                 ) : null}
 
-                <View style={styles.orderedThrough}>
-                  <Image source={require('../../../assets/dely-logo.png')} style={styles.orderedLogoImage} />
-                  <Text style={styles.orderedThroughSub}>Ordered Through</Text>
-                  <Text style={styles.orderedThroughBrand}>Delycart</Text>
+                {/* ── Grand total section ── */}
+                <View style={styles.invGrandTotalRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.invForSeller}>
+                      FOR {String(invoice?.seller?.company_name ?? invoice?.seller?.name ?? '').toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end', marginRight: 16 }}>
+                    <Text style={styles.invSubTotalLabel}>Sub Total Amount Pay:</Text>
+                    <Text style={styles.invSubTotalAmt}>
+                      ₹ {Number(invoice?.grand_total ?? invoice?.total ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={styles.invAmtPayLabel}>Amount Pay:</Text>
+                    <Text style={styles.invAmtPay}>
+                      ₹ {Number(invoice?.grand_total ?? invoice?.total ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Text>
+                  </View>
                 </View>
+
+                {/* UPI Pay button */}
+                {invoice?.upiQr?.upiUri ? (
+                  <TouchableOpacity
+                    style={styles.invUpiBtn}
+                    onPress={() => Linking.openURL(invoice.upiQr.upiUri).catch(() => {})}
+                    activeOpacity={0.9}>
+                    <Icon name="cellphone" size={15} color="#FFFFFF" />
+                    <Text style={styles.invUpiBtnText}>Pay with UPI app</Text>
+                  </TouchableOpacity>
+                ) : null}
+
+                {/* ── Footer ── */}
+                {(() => {
+                  const bank = invoice?.bankDetails || invoice?.bank_details;
+                  const hasBankDetails = bank && (bank.bankName || bank.accountNumber);
+                  return (
+                    <View style={styles.invFooter}>
+                      <View style={{ flex: 1 }}>
+                        {hasBankDetails ? (
+                          <>
+                            <Text style={styles.invFooterLabel}>Bank Details</Text>
+                            {bank.bankName ? <Text style={styles.invFooterText}>Bank Name: {bank.bankName}</Text> : null}
+                            {bank.accountHolderName ? <Text style={styles.invFooterText}>Account Holder: {bank.accountHolderName}</Text> : null}
+                            {bank.accountNumber ? <Text style={styles.invFooterText}>Account No: {bank.accountNumber}</Text> : null}
+                            {bank.ifscCode ? <Text style={styles.invFooterText}>IFSC: {bank.ifscCode}</Text> : null}
+                            {bank.branchName ? <Text style={styles.invFooterText}>Branch: {bank.branchName}</Text> : null}
+                          </>
+                        ) : null}
+                        <Text style={[styles.invFooterText, { marginTop: hasBankDetails ? 8 : 0 }]}>
+                          Is tax payable on reverse charge basis -{' '}
+                          {invoice?.tax_payable_reverse_charge === true ? 'YES' : 'NO'}
+                        </Text>
+                        <Text style={[styles.invFooterText, { marginTop: 4 }]}>
+                          DECLARATION: We declare that this document shows the actual price of the goods described and that the particulars are true and correct.
+                        </Text>
+                        <Text style={[styles.invFooterText, { marginTop: 4 }]}>
+                          {invoice?.terms ?? 'This is a computer-generated Bill of Supply.'}
+                        </Text>
+                      </View>
+                      <View style={styles.invFooterLogo}>
+                        <Image source={require('../../../assets/dely-logo.png')} style={styles.orderedLogoImage} />
+                        <Text style={styles.orderedThroughSub}>Ordered Through</Text>
+                        <Text style={styles.orderedThroughBrand}>Delycart</Text>
+                      </View>
+                    </View>
+                  );
+                })()}
               </ScrollView>
             )}
           </View>
@@ -921,6 +1041,90 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   invoiceBtnText: { fontWeight: '800', fontSize: 12, marginLeft: 5 },
+
+  // ── New invoice layout styles (matching web admin) ──
+  invHeader: { flexDirection: 'row', gap: 8, marginTop: 8, alignItems: 'flex-start' },
+  invMetaCol: { flex: 1.4 },
+  invBillRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  invBillCol: { flex: 1 },
+  invBillOfSupply: { fontSize: 11, fontWeight: '900', color: '#0F172A', textTransform: 'uppercase', marginBottom: 2 },
+  invMeta: { fontSize: 9, color: '#334155', fontWeight: '600', marginTop: 1, lineHeight: 13 },
+  invBillLabel: { fontSize: 9, fontWeight: '900', color: '#0F172A', marginBottom: 2 },
+  invBillText: { fontSize: 9, color: '#334155', fontWeight: '600', marginTop: 1, lineHeight: 12 },
+  invTable: { borderWidth: 1, borderColor: '#000000' },
+  invTableHeadRow: {
+    flexDirection: 'row',
+    backgroundColor: '#E2E8F0',
+    paddingVertical: 5,
+    paddingHorizontal: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#000000',
+  },
+  invTh: { fontSize: 9, fontWeight: '800', color: '#0F172A' },
+  invTableRow: {
+    flexDirection: 'row',
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#CBD5E1',
+    alignItems: 'flex-start',
+  },
+  invTd: { fontSize: 10, color: '#0F172A', fontWeight: '600', lineHeight: 13 },
+  invPageTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 6,
+    paddingVertical: 5,
+    backgroundColor: '#F8FAFC',
+    borderTopWidth: 1,
+    borderTopColor: '#000000',
+  },
+  invPageTotalText: { fontSize: 9, fontWeight: '800', color: '#0F172A' },
+  invQrRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10 },
+  invQrBlock: { alignItems: 'center' },
+  invQrImage: { width: 100, height: 100, borderRadius: 4, borderWidth: 1, borderColor: '#000000', backgroundColor: '#FFFFFF' },
+  invQrScanText: { fontSize: 10, fontWeight: '800', color: '#0F172A', marginTop: 4, textAlign: 'center' },
+  invQrVpa: { fontSize: 9, color: '#475569', fontWeight: '600', textAlign: 'center', marginTop: 1 },
+  invQrRef: { fontSize: 9, color: '#475569', fontWeight: '600', textAlign: 'center', marginTop: 1 },
+  invGrandTotalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  invForSeller: { fontSize: 11, fontWeight: '800', color: '#0F172A' },
+  invSubTotalLabel: { fontSize: 9, color: '#475569', fontWeight: '700' },
+  invSubTotalAmt: { fontSize: 13, fontWeight: '800', color: '#0F172A', marginTop: 2 },
+  invAmtPayLabel: { fontSize: 9, color: '#475569', fontWeight: '700' },
+  invAmtPay: { fontSize: 18, fontWeight: '900', color: '#0F172A', marginTop: 2 },
+  invUpiBtn: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#2563EB',
+    paddingVertical: 11,
+    paddingHorizontal: 22,
+    borderRadius: 12,
+    alignSelf: 'center',
+  },
+  invUpiBtnText: { color: '#FFFFFF', fontWeight: '900', fontSize: 13 },
+  invFooter: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginTop: 14,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    gap: 12,
+  },
+  invFooterLabel: { fontSize: 10, fontWeight: '900', color: '#0F172A', marginBottom: 3 },
+  invFooterText: { fontSize: 9, color: '#475569', fontWeight: '600', lineHeight: 13 },
+  invFooterLogo: { alignItems: 'center', flexShrink: 0 },
+
   trackWrap: { marginTop: 14, flexDirection: 'row', justifyContent: 'space-between' },
   trackStep: { flex: 1, alignItems: 'center' },
   trackDot: { width: 12, height: 12, borderRadius: 6 },

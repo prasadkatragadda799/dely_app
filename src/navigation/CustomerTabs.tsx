@@ -7,6 +7,7 @@ import {
 import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
+import { Product } from '../types';
 import {
   Keyboard,
   LayoutChangeEvent,
@@ -51,6 +52,7 @@ type HomeStackParamList = {
     brand?: string;
     company?: string;
     categoryFilter?: { ids: string[]; names: string[]; slugs?: string[] };
+    initialProduct?: Product;
   };
   CategoryBrowse: {
     division: 'fmcg' | 'homeKitchen';

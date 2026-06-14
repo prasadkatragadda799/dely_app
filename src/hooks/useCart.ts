@@ -298,7 +298,7 @@ export const useCart = () => {
         const tIsNaturalSet =
           tPcs > 1 && (target.product.unit || 'piece').toLowerCase() !== 'piece';
         // Variant lines, 'set'/'remaining' tiers, and natural-set products all step by 1.
-        // Implied-set 'unit' tier (unit='piece', pcs>1): step by piecesPerSet (pieces).
+        // Pack 'unit' tier (pcs>1): step by piecesPerSet so qty stays in multiples of the pack size.
         const step = variantId
           ? 1
           : target.priceOptionKey === 'set' || target.priceOptionKey === 'remaining' || tIsNaturalSet
@@ -364,11 +364,28 @@ export const useCart = () => {
             : tier === 'remaining'
               ? 1
               : minOrder;
-        const op =
-          nextQty <= 0 || nextQty < minLineQty
-            ? deleteCartItemApi({ cartItemId: target.cartItemId })
-            : updateCartItemApi({ cartItemId: target.cartItemId, quantity: nextQty });
-        return op.unwrap().then(() => {}).catch((e: any) => {
+        const shouldDelete = nextQty <= 0 || nextQty < minLineQty;
+        const op = shouldDelete
+          ? deleteCartItemApi({ cartItemId: target.cartItemId })
+          : updateCartItemApi({ cartItemId: target.cartItemId, quantity: nextQty });
+        return op.unwrap().then(() => {}).catch(async (e: any) => {
+          // The backend rejected a PUT because qty < min_order_quantity. This happens
+          // when minOrderQuantity is missing from the cart response so the hook
+          // incorrectly chose PUT over DELETE. Retry as DELETE in that case.
+          const isMinOrderError =
+            !shouldDelete &&
+            (e?.status === 400 || e?.originalStatus === 400) &&
+            String(e?.data?.message ?? e?.data?.detail ?? '')
+              .toLowerCase()
+              .includes('minimum order');
+          if (isMinOrderError) {
+            try {
+              await deleteCartItemApi({ cartItemId: target.cartItemId }).unwrap();
+              return;
+            } catch {
+              // Delete also failed; fall through to error toast.
+            }
+          }
           Toast.show({
             type: 'error',
             text1: 'Could not update cart',

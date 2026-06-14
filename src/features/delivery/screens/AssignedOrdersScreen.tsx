@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   RefreshControl,
   StyleSheet,
   Switch,
@@ -161,7 +162,10 @@ const AssignedOrdersScreen = () => {
           <TouchableOpacity
             style={styles.ghostButton}
             activeOpacity={0.85}
-            onPress={() => handleAccept(item.id)}
+            onPress={() => {
+              const addr = encodeURIComponent(item.address || '');
+              Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${addr}`);
+            }}
             disabled={!!acceptingId}>
             <Icon name="map-outline" size={14} color="#166534" />
             <Text style={styles.ghostButtonText}>View Route</Text>

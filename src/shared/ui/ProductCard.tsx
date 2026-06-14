@@ -30,7 +30,7 @@ const hexToRgba = (hex: string, alpha: number) => {
 
 type Props = {
   product: Product;
-  onAdd: (product: Product, tier: PriceOptionKey) => Promise<void> | void;
+  onAdd: (product: Product, tier: PriceOptionKey, variantId?: string) => Promise<void> | void;
   accentColor?: string;
   onCardPress?: (product: Product) => void;
   onNamePress?: (product: Product) => void;
@@ -81,8 +81,14 @@ const ProductCard = ({
   const Wrapper = onCardPress ? TouchableOpacity : View;
 
   const cartLineForCard = useMemo(() => {
+    const defaultVariantId = product.variants?.[0]?.id;
     const lines = items.filter(i => i.product.id === product.id);
-    const exact = lines.find(i => i.priceOptionKey === tierKey);
+    // For variant products, match the default variant line first.
+    const variantLine = defaultVariantId
+      ? lines.find(i => i.variantId === defaultVariantId)
+      : undefined;
+    if (variantLine) return variantLine;
+    const exact = lines.find(i => i.priceOptionKey === tierKey && !i.variantId);
     if (exact) {
       return exact;
     }
@@ -283,7 +289,10 @@ const ProductCard = ({
                     : minOrder;
                 setLocalQty(minLineQty);
                 setMutating(true);
-                Promise.resolve(onAdd(product, tierKey))
+                // Variant products: use the first variant's id so the cart row
+                // matches the one created from the PDP, preventing duplicates.
+                const defaultVariantId = product.variants?.[0]?.id;
+                Promise.resolve(onAdd(product, tierKey, defaultVariantId))
                   .catch(() => {
                     setLocalQty(null);
                     setMutating(false);
@@ -323,16 +332,25 @@ const ProductCard = ({
                     dPcs > 1 && (product.unit || 'piece').toLowerCase() !== 'piece';
                   const tier = cartLineForCard.priceOptionKey;
                   const dStep =
-                    tier === 'set' || tier === 'remaining' || dIsNaturalSet
+                    cartLineForCard.variantId || tier === 'set' || tier === 'remaining' || dIsNaturalSet
                       ? 1
                       : dPcs > 1 ? dPcs
                         : dMinO > 1 && productImpliesSetPurchase(product) ? dMinO : 1;
                   const nextQty = Math.max(0, displayQty - dStep);
                   setLocalQty(nextQty);
                   setMutating(true);
-                  decrement(product.id, cartLineForCard.priceOptionKey)
-                    .catch(() => setLocalQty(rawLineQty))
-                    .finally(() => setMutating(false));
+                  decrement(product.id, cartLineForCard.priceOptionKey, cartLineForCard.variantId)
+                    .catch(() => {
+                      setLocalQty(rawLineQty);
+                      setMutating(false);
+                    })
+                    .finally(() => {
+                      // For deletes (nextQty === 0), keep the Add button disabled until
+                      // the cart cache refreshes — the rawLineQty useEffect clears
+                      // mutating once RTK refetches, preventing a POST with qty<minOrder
+                      // on a stale cache hit.
+                      if (nextQty > 0) setMutating(false);
+                    });
                 }}
                 activeOpacity={0.85}
                 hitSlop={{ top: 6, bottom: 6, left: 8, right: 4 }}>
@@ -367,7 +385,7 @@ const ProductCard = ({
                     tPcs > 1 && (product.unit || 'piece').toLowerCase() !== 'piece';
                   const tier = cartLineForCard.priceOptionKey;
                   const step =
-                    tier === 'set' || tier === 'remaining' || tIsNaturalSet
+                    cartLineForCard.variantId || tier === 'set' || tier === 'remaining' || tIsNaturalSet
                       ? 1
                       : tPcs > 1 ? tPcs
                         : tMinO > 1 && productImpliesSetPurchase(product) ? tMinO : 1;
@@ -377,7 +395,7 @@ const ProductCard = ({
                   if (nextQty === displayQty) return;
                   setLocalQty(nextQty);
                   setMutating(true);
-                  increment(product.id, tier)
+                  increment(product.id, tier, cartLineForCard.variantId)
                     .catch(() => setLocalQty(rawLineQty))
                     .finally(() => setMutating(false));
                 }}
@@ -400,7 +418,8 @@ const ProductCard = ({
           setTierKey(tier);
           setLocalQty(1);
           setMutating(true);
-          Promise.resolve(onAdd(product, tier))
+          const defaultVariantId = product.variants?.[0]?.id;
+          Promise.resolve(onAdd(product, tier, defaultVariantId))
             .catch(() => { setLocalQty(null); setMutating(false); })
             .finally(() => { addMutatingRef.current = false; });
         }}

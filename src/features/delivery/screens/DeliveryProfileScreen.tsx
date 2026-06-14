@@ -19,6 +19,7 @@ import {
   useGetDeliveryMeQuery,
   useUpdateDeliveryMeMutation,
   useToggleDeliveryAvailabilityMutation,
+  useDeliveryChangePasswordMutation,
 } from '../../../services/api/mobileApi';
 import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
 
@@ -69,6 +70,13 @@ const DeliveryProfileScreen = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [isTogglingOnline, setIsTogglingOnline] = useState(false);
 
+  // Change password state
+  const [showChangePwd, setShowChangePwd] = useState(false);
+  const [currentPwd, setCurrentPwd] = useState('');
+  const [newPwd, setNewPwd] = useState('');
+  const [confirmPwd, setConfirmPwd] = useState('');
+  const [deliveryChangePassword, { isLoading: isChangingPwd }] = useDeliveryChangePasswordMutation();
+
   useEffect(() => {
     setName(deliveryMe?.name ?? '');
     setPhone(deliveryMe?.phone ?? '');
@@ -107,6 +115,32 @@ const DeliveryProfileScreen = () => {
     } catch (err: any) {
       const msg =
         err?.data?.detail ?? err?.data?.message ?? 'Failed to update profile';
+      Toast.show({ type: 'error', text1: msg });
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!currentPwd || !newPwd || !confirmPwd) {
+      Toast.show({ type: 'error', text1: 'Fill in all password fields' });
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      Toast.show({ type: 'error', text1: 'New passwords do not match' });
+      return;
+    }
+    if (newPwd.length < 6) {
+      Toast.show({ type: 'error', text1: 'Password must be at least 6 characters' });
+      return;
+    }
+    try {
+      await deliveryChangePassword({ current_password: currentPwd, new_password: newPwd }).unwrap();
+      Toast.show({ type: 'success', text1: 'Password changed successfully' });
+      setCurrentPwd('');
+      setNewPwd('');
+      setConfirmPwd('');
+      setShowChangePwd(false);
+    } catch (err: any) {
+      const msg = err?.data?.detail ?? err?.data?.message ?? 'Failed to change password';
       Toast.show({ type: 'error', text1: msg });
     }
   };
@@ -294,6 +328,61 @@ const DeliveryProfileScreen = () => {
               <Text style={styles.accountText}>Rating</Text>
               <Text style={styles.accountValue}>4.8 / 5.0</Text>
             </View>
+          </View>
+
+          {/* ── Change Password ── */}
+          <View style={styles.section}>
+            <TouchableOpacity
+              style={styles.sectionHeader}
+              onPress={() => setShowChangePwd(v => !v)}
+              activeOpacity={0.85}>
+              <Text style={styles.sectionTitle}>Change Password</Text>
+              <Icon
+                name={showChangePwd ? 'chevron-up' : 'chevron-down'}
+                size={20}
+                color={DARK_GREEN}
+              />
+            </TouchableOpacity>
+
+            {showChangePwd && (
+              <>
+                {[
+                  { label: 'Current Password', value: currentPwd, onChange: setCurrentPwd },
+                  { label: 'New Password', value: newPwd, onChange: setNewPwd },
+                  { label: 'Confirm New Password', value: confirmPwd, onChange: setConfirmPwd },
+                ].map(field => (
+                  <View key={field.label} style={styles.fieldRow}>
+                    <Icon name="lock-outline" size={16} color="#6B7280" style={styles.fieldIcon} />
+                    <View style={styles.fieldContent}>
+                      <Text style={styles.fieldLabel}>{field.label}</Text>
+                      <TextInput
+                        value={field.value}
+                        onChangeText={field.onChange}
+                        style={styles.fieldInput}
+                        secureTextEntry
+                        autoCapitalize="none"
+                        placeholderTextColor="#9CA3AF"
+                        placeholder="••••••••"
+                      />
+                    </View>
+                  </View>
+                ))}
+                <TouchableOpacity
+                  style={[styles.saveButton, isChangingPwd && styles.saveButtonDisabled]}
+                  onPress={handleChangePassword}
+                  disabled={isChangingPwd}
+                  activeOpacity={0.85}>
+                  {isChangingPwd ? (
+                    <ActivityIndicator size="small" color={WHITE} />
+                  ) : (
+                    <>
+                      <Icon name="lock-reset" size={16} color={WHITE} />
+                      <Text style={styles.saveButtonText}>Update Password</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
           </View>
 
           {/* ── Logout ── */}

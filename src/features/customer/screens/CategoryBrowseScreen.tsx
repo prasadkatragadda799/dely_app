@@ -918,7 +918,7 @@ const CategoryBrowseScreen = () => {
             renderItem={({ item }) => (
               <ProductCard
                 product={item}
-                onAdd={(p, tier) => add(p, 1, tier)}
+                onAdd={(p, tier, vid) => add(p, 1, tier, vid)}
                 accentColor={primary}
                 onCardPress={() => {
                   if (browseMode === 'brands') {

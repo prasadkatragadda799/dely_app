@@ -161,7 +161,7 @@ const ProductDetailCard = ({
   textColor,
 }: {
   item: Product;
-  onAdd: (product: Product, tier: PriceOptionKey) => void;
+  onAdd: (product: Product, tier: PriceOptionKey, variantId?: string) => void;
   onToggleWishlist: (productId: string) => void;
   isWishlisted: boolean;
   accentColor: string;
@@ -328,7 +328,7 @@ const ProductDetailCard = ({
                   if (multiTier && totalQtyAllTiers === 0) {
                     setTierModalVisible(true);
                   } else {
-                    onAdd(item, tierKey);
+                    onAdd(item, tierKey, item.variants?.[0]?.id);
                   }
                 }}
                 activeOpacity={0.9}>
@@ -346,7 +346,7 @@ const ProductDetailCard = ({
         accentColor={accentColor}
         onSelectTier={tier => {
           setTierKey(tier);
-          onAdd(item, tier);
+          onAdd(item, tier, item.variants?.[0]?.id);
         }}
       />
     </View>
@@ -358,6 +358,7 @@ const ProductOverviewScreen = () => {
   const route = useRoute<any>();
   const division: DivisionKey = route.params?.division ?? 'fmcg';
   const selectedProductId: string | undefined = route.params?.productId;
+  const initialProductFromParams: Product | undefined = route.params?.initialProduct;
   const subCategoryFilter: string | undefined = route.params?.subCategory;
   const brandFilter: string | undefined = route.params?.brand;
   const companyFilter: string | undefined = route.params?.company;
@@ -543,32 +544,44 @@ const ProductOverviewScreen = () => {
     data: fetchedProduct,
     isFetching: isProductFetching,
     isError: isProductError,
+    refetch: refetchProduct,
   } = useGetProductQuery(selectedProductId ?? '', {
     skip: !selectedProductId,
+    refetchOnMountOrArgChange: true,
   });
 
   const selectedProduct = useMemo(() => {
     if (!selectedProductId) return undefined;
     if (fetchedProduct) {
-      return mergeProductFromApi(listProduct, fetchedProduct) ?? fetchedProduct;
+      return mergeProductFromApi(listProduct ?? initialProductFromParams, fetchedProduct) ?? fetchedProduct;
     }
-    return listProduct;
-  }, [selectedProductId, listProduct, fetchedProduct]);
+    return listProduct ?? initialProductFromParams;
+  }, [selectedProductId, listProduct, fetchedProduct, initialProductFromParams]);
 
-  // RTK Query returns a cached error state (isFetching=false, isError=true) for one
-  // render before dispatching the new fetch when selectedProductId changes. Track the
-  // last rendered ID so that transitional render is treated as loading, not an error.
+  // RTK Query can return a stale cached error (isFetching=false, isError=true) for
+  // several renders before the new fetch actually starts. A single-render ref guard
+  // is not enough — any intervening re-render (cart update, list loading, etc.) flips
+  // productIdJustChanged to false and flashes the error UI.
+  // Fix: also track whether isFetching=true has been observed for the current ID.
+  // Until it has, treat the state as "loading" regardless of the cached error flag.
   const lastSeenProductIdRef = useRef<string | undefined>(undefined);
-  const productIdJustChanged = lastSeenProductIdRef.current !== selectedProductId;
-  lastSeenProductIdRef.current = selectedProductId;
+  const productFetchInFlightRef = useRef(false);
+
+  if (lastSeenProductIdRef.current !== selectedProductId) {
+    lastSeenProductIdRef.current = selectedProductId;
+    productFetchInFlightRef.current = false;
+  }
+  if (isProductFetching) {
+    productFetchInFlightRef.current = true;
+  }
 
   const showDetailSpinner = Boolean(
-    selectedProductId && !selectedProduct && (isProductFetching || productIdJustChanged),
+    selectedProductId && !selectedProduct && (isProductFetching || !productFetchInFlightRef.current),
   );
   const showDetailError = Boolean(
     selectedProductId &&
       !selectedProduct &&
-      !productIdJustChanged &&
+      productFetchInFlightRef.current &&
       !isProductFetching &&
       isProductError,
   );
@@ -893,7 +906,7 @@ const ProductOverviewScreen = () => {
 
   const addSelectedVariantToCart = (item: Product, variant: ProductVariant) => {
     if (!variant.id) return;
-    add(item, 1, 'unit', variant.id);
+    add(item, selectedSets, 'unit', variant.id);
     const label = variantCardLabel(variant) || item.name;
     showUiAlert('Added to cart', `${label} added.`, 'success');
   };
@@ -1081,8 +1094,15 @@ const ProductOverviewScreen = () => {
                 {"Couldn't load this product"}
               </Text>
               <Text style={styles.detailErrorSub}>
-                Check your connection and try opening it again from the list.
+                Check your connection and try again.
               </Text>
+              <TouchableOpacity
+                style={[styles.retryButton, { borderColor: primary }]}
+                onPress={refetchProduct}
+                activeOpacity={0.85}>
+                <Icon name="refresh" size={15} color={primary} />
+                <Text style={[styles.retryButtonText, { color: primary }]}>Retry</Text>
+              </TouchableOpacity>
             </View>
           ) : selectedProduct ? (
             <View style={styles.detailWrap}>
@@ -1691,15 +1711,16 @@ const ProductOverviewScreen = () => {
                             <ProductCard
                               product={sp}
                               accentColor={primary}
-                              onAdd={(p, tier) => add(p, 1, tier)}
+                              onAdd={(p, tier, vid) => add(p, 1, tier, vid)}
                               onCardPress={p =>
-                                navigation.navigate('ProductOverview', {
+                                navigation.push('ProductOverview', {
                                   division,
                                   productId: p.id,
                                   subCategory: subCategoryFilter,
                                   brand: brandFilter,
                                   company: companyFilter,
                                   categoryFilter,
+                                  initialProduct: p,
                                 })
                               }
                             />
@@ -1734,7 +1755,7 @@ const ProductOverviewScreen = () => {
                   <ProductCard
                     product={item}
                     accentColor={primary}
-                    onAdd={(p, tier) => add(p, 1, tier)}
+                    onAdd={(p, tier, vid) => add(p, 1, tier, vid)}
                     onCardPress={() =>
                       navigation.navigate('ProductOverview', {
                         division,
@@ -2014,6 +2035,20 @@ const styles = StyleSheet.create({
     color: '#64748B',
     textAlign: 'center',
     lineHeight: 19,
+  },
+  retryButton: {
+    marginTop: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1.5,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '800',
   },
   detailWrap: {
     marginTop: 4,

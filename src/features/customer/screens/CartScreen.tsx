@@ -38,6 +38,7 @@ const formatInrAmount = (value: number) => {
 
 /** Same step logic as useCart increment/decrement — kept here for optimistic UI. */
 const cartItemStep = (item: CartLineItem): number => {
+  if (item.variantId) return 1;
   if (item.priceOptionKey === 'set' || item.priceOptionKey === 'remaining') return 1;
   const pcs = Math.max(1, item.product.piecesPerSet ?? 1);
   const minO = Math.max(1, Math.trunc(Number(item.product.minOrderQuantity) || 1));
@@ -240,9 +241,9 @@ const CartScreen = () => {
         ]}
         renderItem={({ item }) => {
           const isMutating = mutatingIds.has(item.cartItemId) || clearing;
-          const stepColor = isMutating ? '#CBD5E1' : primary;
           const step = cartItemStep(item);
           const effectiveQty = pendingQtys[item.cartItemId] ?? item.quantity;
+          const stepColor = (isMutating || effectiveQty <= 0) ? '#CBD5E1' : primary;
           return (
             <View style={[styles.rowCard, isMutating && styles.rowCardMutating]}>
               <View style={styles.rowInfo}>
@@ -275,8 +276,9 @@ const CartScreen = () => {
                   <View style={styles.cartStepSideCol}>
                     <TouchableOpacity
                       style={styles.cartStepSideHit}
-                      disabled={isMutating}
+                      disabled={isMutating || effectiveQty <= 0}
                       onPress={() => {
+                        if (effectiveQty <= 0) return;
                         const nextQty = Math.max(0, effectiveQty - step);
                         setPendingQty(item.cartItemId, nextQty);
                         setMutating(item.cartItemId, true);

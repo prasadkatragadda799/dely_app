@@ -210,6 +210,10 @@ const OngoingScreen = () => {
     setActionLoadingId(order.id);
     try {
       await setStatus(order.id, 'en_route');
+      Toast.show({ type: 'success', text1: 'Trip started' });
+      await refetchOrders();
+    } catch {
+      Toast.show({ type: 'error', text1: 'Could not start trip', text2: 'Please try again.' });
     } finally {
       setActionLoadingId(null);
     }
@@ -377,8 +381,14 @@ const OngoingScreen = () => {
             disabled={isLoading}
             activeOpacity={0.85}
           >
-            <Icon name="undo-variant" size={16} color={AMBER} />
-            <Text style={styles.actionSecondaryText}>Return to Hub</Text>
+            {isLoading ? (
+              <ActivityIndicator size="small" color={AMBER} />
+            ) : (
+              <>
+                <Icon name="undo-variant" size={16} color={AMBER} />
+                <Text style={styles.actionSecondaryText}>Return to Hub</Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
       </View>
