@@ -381,7 +381,7 @@ const ProductOverviewScreen = () => {
   const { data: allProducts = [] } = useGetProductsQuery(
     defaultPincode ? { pincode: defaultPincode } : undefined,
   );
-  const { add, decrement, items: cartItems } = useCart();
+  const { add, increment, decrement, items: cartItems } = useCart();
   const { toggle, isWishlisted } = useWishlist();
   const dispatch = useAppDispatch();
 
@@ -614,8 +614,9 @@ const ProductOverviewScreen = () => {
     setSelectedDetailImageIndex(0);
   }, [selectedProductId]);
 
-  // Reset stepper to 1 every time the screen comes into focus so stale
-  // quantities from a previous visit don't persist after Cart → back.
+  // Reset the batch-add stepper to 1 on focus, but only when nothing is in cart.
+  // When items are already in cart the stepper shows live cart quantity, so resetting
+  // it would cause the "1 set" / "4 in cart" desync the user reported.
   useFocusEffect(
     React.useCallback(() => {
       setSelectedSets(1);
@@ -1653,37 +1654,53 @@ const ProductOverviewScreen = () => {
                       <View style={styles.qtyRow}>
                         <TouchableOpacity
                           style={styles.qtyBtn}
-                          disabled={!canPurchase}
-                          onPress={() => setSelectedSets(prev => Math.max(1, prev - 1))}
+                          disabled={!canPurchase || (detailTierCartBinding.displayQty > 0 && !detailTierCartBinding.decrementTier)}
+                          onPress={() => {
+                            if (detailTierCartBinding.displayQty > 0) {
+                              // In-cart mode: decrement the actual cart line
+                              decrement(selectedProduct.id, detailTierCartBinding.decrementTier!);
+                            } else {
+                              setSelectedSets(prev => Math.max(1, prev - 1));
+                            }
+                          }}
                           activeOpacity={0.9}>
                           <Icon name="minus" size={18} color={primaryText} />
                         </TouchableOpacity>
                         <Text style={[styles.qtyValue, { color: primaryText }]}>
                           {stepperQuantityCaption(
                             selectedProduct,
-                            selectedSets,
+                            detailTierCartBinding.displayQty > 0
+                              ? detailTierCartBinding.displayQty
+                              : selectedSets,
                             detailUiTier,
                           )}
                         </Text>
                         <TouchableOpacity
                           style={styles.qtyBtn}
                           disabled={!canPurchase}
-                          onPress={() =>
-                            setSelectedSets(prev => Math.min(MAX_SETS_PER_ADD, prev + 1))
-                          }
+                          onPress={() => {
+                            if (detailTierCartBinding.displayQty > 0) {
+                              // In-cart mode: increment the actual cart line
+                              increment(selectedProduct.id, detailTierCartBinding.decrementTier ?? detailTierKey);
+                            } else {
+                              setSelectedSets(prev => Math.min(MAX_SETS_PER_ADD, prev + 1));
+                            }
+                          }}
                           activeOpacity={0.9}>
                           <Icon name="plus" size={18} color={primaryText} />
                         </TouchableOpacity>
                       </View>
                     </View>
-                    <Text style={[styles.maxInfo, { color: primary }]}>
-                      Up to {MAX_SETS_PER_ADD}{' '}
-                      {quantityLabelForTier(
-                        detailUiTier,
-                        selectedProduct.unit,
-                      )}{' '}
-                      per add.
-                    </Text>
+                    {detailTierCartBinding.displayQty <= 0 ? (
+                      <Text style={[styles.maxInfo, { color: primary }]}>
+                        Up to {MAX_SETS_PER_ADD}{' '}
+                        {quantityLabelForTier(
+                          detailUiTier,
+                          selectedProduct.unit,
+                        )}{' '}
+                        per add.
+                      </Text>
+                    ) : null}
                   </View>
 
                   {selectedProduct.cancelPolicy ? (

@@ -484,6 +484,27 @@ export const mobileApi = createApi({
         body,
       }),
       invalidatesTags: ['Cart'],
+      async onQueryStarted({ cartItemId, quantity }, { dispatch, queryFulfilled }) {
+        // Patch the cart cache immediately when the PUT resolves so that the next
+        // rapid tap reads the updated quantity instead of the stale server value.
+        // Without this, every tap in a burst computes nextQty = stale_qty + step
+        // and all PUTs land on the same number (the "sets stuck at 2" race).
+        try {
+          await queryFulfilled;
+          for (const div of ['fmcg', 'homeKitchen'] as const) {
+            dispatch(
+              mobileApi.util.updateQueryData('getCart', div, draft => {
+                const items = (draft as any)?.data?.items;
+                if (!Array.isArray(items)) return;
+                const item = items.find((i: any) => String(i.id) === String(cartItemId));
+                if (item) (item as any).quantity = quantity;
+              }),
+            );
+          }
+        } catch {
+          /* PUT error surfaces via .unwrap() in callers */
+        }
+      },
     }),
     deleteCartItemApi: builder.mutation<ApiEnvelope<unknown>, CartItemIdParam>({
       query: ({ cartItemId }) => ({
