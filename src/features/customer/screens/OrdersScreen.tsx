@@ -6,6 +6,7 @@ import {
   Modal,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -141,6 +142,42 @@ const OrdersScreen = () => {
   const tabBarHeight = useBottomTabBarHeight();
   const insets = useSafeAreaInsets();
   const [invoiceOrderId, setInvoiceOrderId] = React.useState<string | null>(null);
+
+  const shareInvoice = React.useCallback(async (inv: any) => {
+    if (!inv) return;
+    const fmtAmt = (n: number) =>
+      Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const lines = [
+      `INVOICE — ${inv.invoice_number ?? ''}`,
+      `Order No  : ${inv.order_number ?? ''}`,
+      `Date      : ${inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString('en-IN') : ''}`,
+      ``,
+      `BILL FROM : ${inv.seller?.company_name ?? inv.seller?.name ?? ''}`,
+      `GSTIN     : ${inv.seller?.gstin ?? ''}`,
+      ``,
+      `BILL TO   : ${inv.buyer?.name ?? ''}`,
+      inv.buyer?.email ? `Email     : ${inv.buyer.email}` : null,
+      `Mobile    : ${inv.buyer?.phone ?? ''}`,
+      inv.buyer?.gstin ? `GSTIN     : ${inv.buyer.gstin}` : null,
+      `State     : ${inv.buyer?.state_with_code ?? inv.buyer?.state ?? ''}`,
+      ``,
+      `Place of Supply : ${inv.place_of_supply ?? ''}`,
+      ``,
+      ...(Array.isArray(inv.items) ? inv.items.map((it: any) =>
+        `• ${it?.product?.name ?? 'Product'} × ${it.quantity} — ₹${fmtAmt(it.total_amount ?? 0)}`
+      ) : []),
+      ``,
+      `Subtotal  : ₹${fmtAmt(inv.subtotal ?? 0)}`,
+      `Tax       : ₹${fmtAmt(inv.total_tax ?? 0)}`,
+      inv.delivery_charge ? `Delivery  : ₹${fmtAmt(inv.delivery_charge)}` : null,
+      `TOTAL     : ₹${fmtAmt(inv.grand_total ?? inv.total ?? 0)}`,
+    ].filter(l => l !== null).join('\n');
+    try {
+      await Share.share({ message: lines, title: `Invoice ${inv.invoice_number ?? ''}` });
+    } catch {
+      // user cancelled share sheet
+    }
+  }, []);
   const [cancellingOrderId, setCancellingOrderId] = React.useState<string | null>(null);
   const confirmingRef = useRef<Set<string>>(new Set());
 
@@ -510,9 +547,16 @@ const OrdersScreen = () => {
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Invoice</Text>
-              <TouchableOpacity onPress={() => setInvoiceOrderId(null)} activeOpacity={0.9}>
-                <Icon name="close" size={20} color="#334155" />
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                {invoice ? (
+                  <TouchableOpacity onPress={() => shareInvoice(invoice)} activeOpacity={0.85}>
+                    <Icon name="download-outline" size={22} color="#1D4ED8" />
+                  </TouchableOpacity>
+                ) : null}
+                <TouchableOpacity onPress={() => setInvoiceOrderId(null)} activeOpacity={0.9}>
+                  <Icon name="close" size={20} color="#334155" />
+                </TouchableOpacity>
+              </View>
             </View>
             {isInvoiceLoading ? (
               <View style={styles.loaderWrap}>
@@ -535,7 +579,7 @@ const OrdersScreen = () => {
                     <Text style={styles.invMeta}>Order No : {invoice?.order_number ?? '—'}</Text>
                     <Text style={styles.invMeta}>Shipment No : {invoice?.shipment_number ?? invoice?.shipmentNumber ?? '—'}</Text>
                     <Text style={styles.invMeta}>Invoice Date : {invoiceDate}</Text>
-                    <Text style={styles.invMeta}>Place of Supply : {String(invoice?.place_of_supply ?? '—').toUpperCase()}</Text>
+                    <Text style={styles.invMeta}>Place of Supply : {invoice?.place_of_supply ?? '—'}</Text>
                     <Text style={styles.invMeta}>Supply Type : {invoice?.supply_type ?? '—'}</Text>
                     <Text style={styles.invMeta}>Page No : {invoice?.page_number ?? invoice?.pageNumber ?? '1/1'}</Text>
                   </View>
@@ -565,8 +609,11 @@ const OrdersScreen = () => {
                         </Text>
                       : null}
                     <Text style={styles.invBillText}>Mobile: {invoice?.buyer?.phone ?? '—'}</Text>
+                    {invoice?.buyer?.email ? <Text style={styles.invBillText}>Email: {invoice.buyer.email}</Text> : null}
                     {invoice?.buyer?.gstin ? <Text style={styles.invBillText}>GSTIN: {invoice.buyer.gstin}</Text> : null}
-                    <Text style={styles.invBillText}>State Code: {invoice?.buyer?.state_code ?? '—'}</Text>
+                    <Text style={styles.invBillText}>
+                      State Code: {invoice?.buyer?.state_with_code ?? invoice?.buyer?.state_code ?? '—'}
+                    </Text>
                   </View>
                 </View>
 

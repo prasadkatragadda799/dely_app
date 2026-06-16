@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -578,18 +578,27 @@ const ProductOverviewScreen = () => {
   const showDetailSpinner = Boolean(
     selectedProductId && !selectedProduct && (isProductFetching || !productFetchInFlightRef.current),
   );
-  const showDetailError = Boolean(
+
+  // Only surface the error after a 2-second grace period — parsing latency can
+  // cause a transient error state even when the product is about to load successfully.
+  const [errorGracePassed, setErrorGracePassed] = useState(false);
+  const rawDetailError = Boolean(
     selectedProductId &&
       !selectedProduct &&
       productFetchInFlightRef.current &&
       !isProductFetching &&
       isProductError,
   );
+  useEffect(() => {
+    if (!rawDetailError) {
+      setErrorGracePassed(false);
+      return;
+    }
+    const t = setTimeout(() => setErrorGracePassed(true), 2000);
+    return () => clearTimeout(t);
+  }, [rawDetailError]);
+  const showDetailError = rawDetailError && errorGracePassed;
 
-  const selectedPackagingDetail = useMemo(
-    () => (selectedProduct ? packagingDetailLine(selectedProduct) : null),
-    [selectedProduct],
-  );
   const isDetailMode = Boolean(selectedProductId);
 
   const priceOptionsKeySig = useMemo(
@@ -626,6 +635,15 @@ const ProductOverviewScreen = () => {
     () => purchasableVariants.find(v => v.id === selectedVariantId) ?? null,
     [purchasableVariants, selectedVariantId],
   );
+
+  const selectedPackagingDetail = useMemo(() => {
+    if (!selectedProduct) return null;
+    if (selectedVariant) {
+      const label = composeVariantPackagingFromApi(selectedVariant as any);
+      return label ? `Packaging: ${label}` : null;
+    }
+    return packagingDetailLine(selectedProduct);
+  }, [selectedProduct, selectedVariant]);
 
   React.useEffect(() => {
     if (!selectedProduct) return;
@@ -664,11 +682,17 @@ const ProductOverviewScreen = () => {
     return { sell, disc, mrp, savings };
   }, [selectedProduct, detailTierKey, selectedVariant]);
   const detailImages = useMemo(() => {
-    // Swap the gallery to the selected variant's own images when present.
+    const productImages = selectedProduct ? getProductImages(selectedProduct) : [];
     if (selectedVariant?.images && selectedVariant.images.length > 0) {
-      return selectedVariant.images;
+      // Main product image(s) always first; append variant-specific images after,
+      // deduped so the same URL doesn't appear twice.
+      const productImageSet = new Set(productImages);
+      const variantOnly = selectedVariant.images
+        .map((u: string) => String(u || '').trim())
+        .filter((u: string) => u && !productImageSet.has(u));
+      return [...productImages, ...variantOnly];
     }
-    return selectedProduct ? getProductImages(selectedProduct) : [];
+    return productImages;
   }, [selectedProduct, selectedVariant]);
 
   // Reset gallery to the first image whenever the selected variant changes.

@@ -18,7 +18,7 @@ type CartItemIdParam = { cartItemId: string };
 
 type LoginBody = { phone: string; password: string };
 type DeliveryLoginBody = { phone: string; password: string };
-type SendOtpBody = { phone: string };
+type SendOtpBody = { phone: string; purpose?: string };
 type SendOtpData = { request_id: string };
 type VerifyOtpBody = { phone: string; requestId: string; otp: string };
 type VerifyOtpData = {

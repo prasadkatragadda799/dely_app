@@ -47,10 +47,15 @@ const LoginScreen = ({ navigation }: Props) => {
   const accent = isDelivery ? DELIVERY : CUSTOMER;
 
   const onSubmitCustomer = async (values: LoginForm) => {
+    const digits = values.phone.replace(/\D/g, '');
+    if (digits.length !== 10) {
+      Toast.show({ type: 'error', text1: 'Invalid phone number', text2: 'Please enter a 10-digit mobile number.' });
+      return;
+    }
     try {
       setLoading(true);
-      const res = await sendCustomerOtp({ phone: values.phone });
-      navigation.navigate('Otp', { phone: values.phone, requestId: res.requestId });
+      const res = await sendCustomerOtp({ phone: digits });
+      navigation.navigate('Otp', { phone: digits, requestId: res.requestId });
     } catch (e) {
       Toast.show({
         type: 'error',
@@ -63,9 +68,13 @@ const LoginScreen = ({ navigation }: Props) => {
   };
 
   const onSubmitDelivery = async () => {
+    const digitsOnly = deliveryPhone.replace(/\D/g, '');
+    if (digitsOnly.length !== 10) {
+      Toast.show({ type: 'error', text1: 'Invalid phone number', text2: 'Please enter a 10-digit mobile number.' });
+      return;
+    }
     try {
       setLoading(true);
-      const digitsOnly = deliveryPhone.replace(/\D/g, '');
       await loginAsDelivery({
         phone: digitsOnly,
         password: deliveryPassword,
@@ -183,7 +192,7 @@ const LoginScreen = ({ navigation }: Props) => {
                     keyboardType="phone-pad"
                     autoCapitalize="none"
                     autoCorrect={false}
-                    maxLength={15}
+                    maxLength={10}
                   />
                 </View>
 
@@ -262,13 +271,14 @@ const LoginScreen = ({ navigation }: Props) => {
                     <View style={styles.inputRow}>
                       <Icon name="phone-outline" size={18} color={palette.faint} />
                       <TextInput
-                        placeholder="Enter phone number"
+                        placeholder="10-digit mobile number"
                         placeholderTextColor={palette.faint}
                         value={value ?? ''}
-                        onChangeText={onChange}
+                        onChangeText={v => onChange(v.replace(/\D/g, '').slice(0, 10))}
                         style={styles.input}
                         keyboardType="phone-pad"
                         autoCapitalize="none"
+                        maxLength={10}
                       />
                     </View>
                   )}

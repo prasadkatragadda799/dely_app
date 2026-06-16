@@ -340,9 +340,9 @@ export const useAuth = () => {
         })().catch((err: unknown) => {
           throw new Error(getApiErrorMessage(err, 'Registration failed'));
         }),
-      sendCustomerOtp: async ({ phone }: { phone: string }) => {
+      sendCustomerOtp: async ({ phone, purpose = 'login' }: { phone: string; purpose?: string }) => {
         try {
-          const res = await sendOtpApi({ phone }).unwrap();
+          const res = await sendOtpApi({ phone, purpose }).unwrap();
           const requestId = res?.data?.request_id;
           if (!res?.success || !requestId) {
             const envMsg =

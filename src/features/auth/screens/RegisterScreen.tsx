@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -23,6 +24,7 @@ import TermsAndConditionsModal from '../../../shared/ui/TermsAndConditionsModal'
 import { getApiErrorMessage } from '../../../utils/apiErrorMessage';
 import {
   launchImageLibrary,
+  launchCamera,
   type Asset,
 } from 'react-native-image-picker';
 import { useAppAlert } from '../../../shared/alert/AppAlertProvider';
@@ -129,10 +131,25 @@ const RegisterScreen = ({ navigation }: Props) => {
   const [tradeCertUri, setTradeCertUri] = useState<string | undefined>(undefined);
 
   const pickImage = (setter: (uri?: string) => void) => {
-    launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 }, resp => {
-      const asset: Asset | undefined = resp.assets?.[0];
-      setter(asset?.uri);
-    });
+    Alert.alert('Select Image', 'Choose a source', [
+      {
+        text: 'Camera',
+        onPress: () =>
+          launchCamera({ mediaType: 'photo', saveToPhotos: false }, resp => {
+            const asset: Asset | undefined = resp.assets?.[0];
+            if (asset?.uri) setter(asset.uri);
+          }),
+      },
+      {
+        text: 'Gallery',
+        onPress: () =>
+          launchImageLibrary({ mediaType: 'photo', selectionLimit: 1 }, resp => {
+            const asset: Asset | undefined = resp.assets?.[0];
+            if (asset?.uri) setter(asset.uri);
+          }),
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   const hasAtLeastOneDoc = !!(gstCertUri || fssaiLicenseUri || udyamRegUri || tradeCertUri);
@@ -147,6 +164,11 @@ const RegisterScreen = ({ navigation }: Props) => {
         title: 'Delivery registration unavailable',
         message: 'Delivery partners are created by admin. Please use "Continue as Partner" to login, or contact support.',
       });
+      return;
+    }
+    const phoneDigits = form.phone.replace(/\D/g, '');
+    if (phoneDigits.length !== 10) {
+      await appAlert({ title: 'Invalid phone number', message: 'Please enter a valid 10-digit mobile number.' });
       return;
     }
     if (selectedRole === 'customer') {
@@ -185,10 +207,10 @@ const RegisterScreen = ({ navigation }: Props) => {
         udyamRegistration: udyamRegUri,
         tradeCertificate: tradeCertUri,
       } : null;
-      const autoPassword = `DC_${form.phone.replace(/\D/g, '')}_vendor`;
+      const autoPassword = `DC_${phoneDigits}_vendor`;
       const next = await registerWithRole({
         name: form.name,
-        phone: form.phone,
+        phone: phoneDigits,
         password: autoPassword,
         role: selectedRole,
         businessProfile,
@@ -291,7 +313,7 @@ const RegisterScreen = ({ navigation }: Props) => {
             <FieldLabel label="Phone number" />
             <Controller control={control} name="phone" render={({ field: { onChange, value } }) => (
               <InputBox icon="phone-outline">
-                <TextInput style={styles.input} placeholder="+91 XXXXX XXXXX" placeholderTextColor="#CBD5E1" value={value} onChangeText={onChange} keyboardType="phone-pad" />
+                <TextInput style={styles.input} placeholder="10-digit mobile number" placeholderTextColor="#CBD5E1" value={value} onChangeText={v => onChange(v.replace(/\D/g, '').slice(0, 10))} keyboardType="number-pad" maxLength={10} />
               </InputBox>
             )} />
           </SectionCard>
