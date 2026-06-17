@@ -110,8 +110,13 @@ function mapServerProfileToBusinessProfile(
   };
 }
 
-/** Load persisted business/KYC fields for the logged-in user from the server (per-account source of truth). */
-async function refreshBusinessProfileFromServer(dispatch: AppDispatch) {
+/** Load persisted business/KYC fields for the logged-in user from the server (per-account source of truth).
+ *  Pass `existing` to preserve locally-stored address fields when the server doesn't return them
+ *  (e.g. immediately after registration before the server has propagated the data). */
+async function refreshBusinessProfileFromServer(
+  dispatch: AppDispatch,
+  existing?: BusinessProfile | null,
+) {
   try {
     const envelope = await dispatch(
       mobileApi.endpoints.getProfile.initiate(undefined, {
@@ -123,21 +128,38 @@ async function refreshBusinessProfileFromServer(dispatch: AppDispatch) {
     if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
       const bp = mapServerProfileToBusinessProfile(raw as Record<string, unknown>);
       if (bp) {
-        dispatch(setBusinessProfile(bp));
+        // Prefer server fields; fall back to locally-stored address when server omits them.
+        dispatch(setBusinessProfile({
+          ...bp,
+          addressLine1: bp.addressLine1 || existing?.addressLine1,
+          addressLine2: bp.addressLine2 || existing?.addressLine2,
+          city: bp.city || existing?.city,
+          state: bp.state || existing?.state,
+          pincode: bp.pincode || existing?.pincode,
+        }));
+      } else if (existing) {
+        dispatch(setBusinessProfile(existing));
       } else {
         dispatch(clearBusinessProfile());
       }
+    } else if (existing) {
+      dispatch(setBusinessProfile(existing));
     } else {
       dispatch(clearBusinessProfile());
     }
   } catch {
-    dispatch(clearBusinessProfile());
+    if (existing) {
+      dispatch(setBusinessProfile(existing));
+    } else {
+      dispatch(clearBusinessProfile());
+    }
   }
 }
 
 export const useAuth = () => {
   const dispatch = useAppDispatch();
   const user = useAppSelector(state => state.auth?.user ?? null);
+  const currentBusinessProfile = useAppSelector(state => state.businessProfile?.profile ?? null);
   const [loginApi] = useLoginMutation();
   const [logoutApi] = useLogoutApiMutation();
   const [deliveryLoginApi] = useDeliveryLoginMutation();
@@ -395,7 +417,7 @@ export const useAuth = () => {
             }),
           );
           if ((role ?? 'customer') === 'customer') {
-            await refreshBusinessProfileFromServer(dispatch);
+            await refreshBusinessProfileFromServer(dispatch, currentBusinessProfile);
           }
         } catch (err: unknown) {
           throw new Error(getApiErrorMessage(err, 'OTP verification failed'));
@@ -419,6 +441,7 @@ export const useAuth = () => {
     [
       dispatch,
       user,
+      currentBusinessProfile,
       loginApi,
       logoutApi,
       deliveryLoginApi,

@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import {
   useGetProductQuery,
   useGetProductsQuery,
@@ -47,12 +47,8 @@ import {
   cartLineQuantityCaption,
   cartQuantityCaption,
   displayTierAndQtyForLine,
-  minOrderCaption,
   packagingDetailLine,
   packagingShortLine,
-  quantityLabelForTier,
-  quantityStepperTitleForTier,
-  stepperQuantityCaption,
 } from '../../../utils/productPackaging';
 import { formatRs } from '../../../utils/formatMoney';
 import AddPriceTierModal from '../../../shared/ui/AddPriceTierModal';
@@ -60,7 +56,6 @@ import ProductCard from '../../../shared/ui/ProductCard';
 import AppImage from '../../../shared/ui/AppImage';
 
 type DivisionKey = 'fmcg' | 'homeKitchen';
-const MAX_SETS_PER_ADD = 5;
 
 function mergeProductFromApi(
   list: Product | undefined,
@@ -381,13 +376,13 @@ const ProductOverviewScreen = () => {
   const { data: allProducts = [] } = useGetProductsQuery(
     defaultPincode ? { pincode: defaultPincode } : undefined,
   );
-  const { add, increment, decrement, items: cartItems } = useCart();
+  const { add, decrement, items: cartItems } = useCart();
   const { toggle, isWishlisted } = useWishlist();
   const dispatch = useAppDispatch();
 
   const [query, setQuery] = useState(searchParam ?? '');
   const [isListening, setIsListening] = useState(false);
-  const [selectedSets, setSelectedSets] = useState(1);
+  const selectedSets = 1;
   const [detailTierKey, setDetailTierKey] = useState<PriceOptionKey>('unit');
   // Selected purchasable variant SKU (Swiggy-style cards). Null when the product
   // has no variants (falls back to the unit/set/remaining tier flow).
@@ -610,18 +605,8 @@ const ProductOverviewScreen = () => {
   );
 
   React.useEffect(() => {
-    setSelectedSets(1);
     setSelectedDetailImageIndex(0);
   }, [selectedProductId]);
-
-  // Reset the batch-add stepper to 1 on focus, but only when nothing is in cart.
-  // When items are already in cart the stepper shows live cart quantity, so resetting
-  // it would cause the "1 set" / "4 in cart" desync the user reported.
-  useFocusEffect(
-    React.useCallback(() => {
-      setSelectedSets(1);
-    }, []),
-  );
 
   // Purchasable variants (each a SKU with its own price + image gallery).
   const purchasableVariants = useMemo(
@@ -746,15 +731,7 @@ const ProductOverviewScreen = () => {
 
   const detailMultiTier = (selectedProduct?.priceOptions?.length ?? 0) > 1;
   const detailShowPackChips =
-    Boolean(selectedProduct) && detailMultiTier && detailProductCartTotal > 0;
-
-  const detailUiTier = useMemo(
-    () =>
-      selectedProduct
-        ? uiTierForQuantityCopy(selectedProduct, detailTierKey)
-        : ('unit' as PriceOptionKey),
-    [selectedProduct, detailTierKey],
-  );
+    Boolean(selectedProduct) && detailMultiTier && detailProductCartTotal > 0 && !hasVariants;
 
   /**
    * Cart line for the selected pack tier. When the API stored a set as `unit` with qty = n×pcs,
@@ -1633,75 +1610,6 @@ const ProductOverviewScreen = () => {
                       </View>
                     </View>
                   ) : null}
-
-                  <View
-                    style={[
-                      styles.qtyBlock,
-                      !canPurchase && styles.qtyBlockDisabled,
-                    ]}>
-                    <View style={styles.qtyBlockHeader}>
-                      <View style={styles.qtyBlockTitles}>
-                        <Text style={[styles.qtyTitle, { color: primaryText }]}>
-                          {quantityStepperTitleForTier(
-                            detailUiTier,
-                            selectedProduct.unit,
-                          )}
-                        </Text>
-                        <Text style={styles.detailMinOrderText}>
-                          Min. order {minOrderCaption(selectedProduct, detailUiTier)}
-                        </Text>
-                      </View>
-                      <View style={styles.qtyRow}>
-                        <TouchableOpacity
-                          style={styles.qtyBtn}
-                          disabled={!canPurchase || (detailTierCartBinding.displayQty > 0 && !detailTierCartBinding.decrementTier)}
-                          onPress={() => {
-                            if (detailTierCartBinding.displayQty > 0) {
-                              // In-cart mode: decrement the actual cart line
-                              decrement(selectedProduct.id, detailTierCartBinding.decrementTier!);
-                            } else {
-                              setSelectedSets(prev => Math.max(1, prev - 1));
-                            }
-                          }}
-                          activeOpacity={0.9}>
-                          <Icon name="minus" size={18} color={primaryText} />
-                        </TouchableOpacity>
-                        <Text style={[styles.qtyValue, { color: primaryText }]}>
-                          {stepperQuantityCaption(
-                            selectedProduct,
-                            detailTierCartBinding.displayQty > 0
-                              ? detailTierCartBinding.displayQty
-                              : selectedSets,
-                            detailUiTier,
-                          )}
-                        </Text>
-                        <TouchableOpacity
-                          style={styles.qtyBtn}
-                          disabled={!canPurchase}
-                          onPress={() => {
-                            if (detailTierCartBinding.displayQty > 0) {
-                              // In-cart mode: increment the actual cart line
-                              increment(selectedProduct.id, detailTierCartBinding.decrementTier ?? detailTierKey);
-                            } else {
-                              setSelectedSets(prev => Math.min(MAX_SETS_PER_ADD, prev + 1));
-                            }
-                          }}
-                          activeOpacity={0.9}>
-                          <Icon name="plus" size={18} color={primaryText} />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                    {detailTierCartBinding.displayQty <= 0 ? (
-                      <Text style={[styles.maxInfo, { color: primary }]}>
-                        Up to {MAX_SETS_PER_ADD}{' '}
-                        {quantityLabelForTier(
-                          detailUiTier,
-                          selectedProduct.unit,
-                        )}{' '}
-                        per add.
-                      </Text>
-                    ) : null}
-                  </View>
 
                   {selectedProduct.cancelPolicy ? (
                     <View style={styles.detailSubsection}>
