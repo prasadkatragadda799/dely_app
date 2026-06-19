@@ -27,6 +27,8 @@ export interface ProductVariant {
   specialPrice?: number;
   discountPercentage?: number;
   freeItem?: string;
+  cgst?: number;
+  sgst?: number;
   /** Variant's own gallery (primary first). Selecting the variant swaps the product gallery. */
   images?: string[];
 }

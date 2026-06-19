@@ -82,6 +82,8 @@ type ProductApiEntity = {
     discountPercentage?: number | string | null;
     freeItem?: string | null;
     free_item?: string | null;
+    cgst?: number | string | null;
+    sgst?: number | string | null;
     images?: Array<string | { url?: string | null; image_url?: string | null }> | null;
   }> | null;
   priceOptions?: Array<{
@@ -106,6 +108,10 @@ type ProductApiEntity = {
   isAvailable?: boolean | null;
   is_available?: boolean | null;
   deliverable?: boolean | null;
+  cancelPolicy?: string | null;
+  cancel_policy?: string | null;
+  returnPolicy?: string | null;
+  return_policy?: string | null;
 };
 
 function normalizeSpecifications(raw: unknown): ProductSpecifications | undefined {
@@ -438,6 +444,14 @@ export const mapProductFromApi = (
             const fi = v.freeItem ?? v.free_item;
             if (fi != null && String(fi).trim()) {
               row.freeItem = String(fi).trim();
+            }
+            const cgst = maybeAsNumber(v.cgst);
+            if (cgst != null) {
+              row.cgst = cgst;
+            }
+            const sgst = maybeAsNumber(v.sgst);
+            if (sgst != null) {
+              row.sgst = sgst;
             }
             const rawImgs = Array.isArray(v.images) ? v.images : [];
             const imgs = rawImgs

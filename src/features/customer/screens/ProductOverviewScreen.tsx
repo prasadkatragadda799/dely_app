@@ -1736,13 +1736,11 @@ const ProductOverviewScreen = () => {
               // cart qty. Fall back to the product-level total when an item was added
               // without a variant (e.g. from HomeScreen's quick-add button).
               const footerQty = hasVariants
-                ? selectedVariantCartQty > 0
-                  ? selectedVariantCartQty
-                  : detailProductCartTotal
+                ? selectedVariantCartQty
                 : detailTierCartBinding.displayQty;
               const showMinus = footerQty > 0 && canPurchase && (
                 hasVariants
-                  ? (selectedVariantCartQty > 0 && !!selectedVariantId) || detailProductCartTotal > 0
+                  ? selectedVariantCartQty > 0 && !!selectedVariantId
                   : !!detailTierCartBinding.decrementTier
               );
               const onPressMinus = () => {

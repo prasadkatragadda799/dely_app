@@ -14,6 +14,7 @@ import {
 import { formatRs } from '../../utils/formatMoney';
 import { useWishlist } from '../../hooks/useWishlist';
 import AddPriceTierModal from './AddPriceTierModal';
+import SelectVariantModal from './SelectVariantModal';
 import { sizedImageUrl } from './AppImage';
 
 const hexToRgba = (hex: string, alpha: number) => {
@@ -138,6 +139,8 @@ const ProductCard = ({
   /** After the first line exists, chips switch which tier the stepper edits. */
   const showTierChips = multiTier && totalQtyAllTiers > 0;
   const [tierModalVisible, setTierModalVisible] = useState(false);
+  const [variantModalVisible, setVariantModalVisible] = useState(false);
+  const hasVariants = (product.variants?.length ?? 0) > 0;
   const originalPrice = Math.round(
     (displayPrice / Math.max(1 - discountPct / 100, 0.01)) * 100,
   ) / 100;
@@ -176,7 +179,7 @@ const ProductCard = ({
             />
           </>
         )}
-        {discountPct > 0 ? (
+        {discountPct > 0 && !hasVariants ? (
           <View style={[styles.discountPill, { backgroundColor: accentColor }]}>
             <Text style={styles.discountPillText}>{Math.round(discountPct)}% off</Text>
           </View>
@@ -218,17 +221,23 @@ const ProductCard = ({
           {product.name}
         </Text>
       )}
-      <View style={styles.priceBlock}>
-        {opts && opts.length > 1 ? (
-          <Text style={styles.fromHint}>From</Text>
-        ) : null}
-        <View style={styles.priceLine}>
-          <Text style={styles.price}>Rs {formatRs(displayPrice)}</Text>
-          {originalPrice > displayPrice + 0.001 ? (
-            <Text style={styles.mrp}>Rs {formatRs(originalPrice)}</Text>
-          ) : null}
+      {hasVariants ? (
+        <View style={styles.priceBlock}>
+          <Text style={styles.variantHint}>Multiple variants</Text>
         </View>
-      </View>
+      ) : (
+        <View style={styles.priceBlock}>
+          {opts && opts.length > 1 ? (
+            <Text style={styles.fromHint}>From</Text>
+          ) : null}
+          <View style={styles.priceLine}>
+            <Text style={styles.price}>Rs {formatRs(displayPrice)}</Text>
+            {originalPrice > displayPrice + 0.001 ? (
+              <Text style={styles.mrp}>Rs {formatRs(originalPrice)}</Text>
+            ) : null}
+          </View>
+        </View>
+      )}
       {showTierChips ? (
         <View style={styles.tierRow}>
           {opts!.map(opt => {
@@ -274,7 +283,9 @@ const ProductCard = ({
             onPress={e => {
               e.stopPropagation?.();
               if (addMutatingRef.current || mutating) return;
-              if (multiTier && totalQtyAllTiers === 0) {
+              if (hasVariants) {
+                setVariantModalVisible(true);
+              } else if (multiTier && totalQtyAllTiers === 0) {
                 setTierModalVisible(true);
               } else {
                 addMutatingRef.current = true;
@@ -289,10 +300,7 @@ const ProductCard = ({
                     : minOrder;
                 setLocalQty(minLineQty);
                 setMutating(true);
-                // Variant products: use the first variant's id so the cart row
-                // matches the one created from the PDP, preventing duplicates.
-                const defaultVariantId = product.variants?.[0]?.id;
-                Promise.resolve(onAdd(product, tierKey, defaultVariantId))
+                Promise.resolve(onAdd(product, tierKey))
                   .catch(() => {
                     setLocalQty(null);
                     setMutating(false);
@@ -418,8 +426,22 @@ const ProductCard = ({
           setTierKey(tier);
           setLocalQty(1);
           setMutating(true);
-          const defaultVariantId = product.variants?.[0]?.id;
-          Promise.resolve(onAdd(product, tier, defaultVariantId))
+          Promise.resolve(onAdd(product, tier))
+            .catch(() => { setLocalQty(null); setMutating(false); })
+            .finally(() => { addMutatingRef.current = false; });
+        }}
+      />
+      <SelectVariantModal
+        visible={variantModalVisible}
+        onClose={() => setVariantModalVisible(false)}
+        product={product}
+        accentColor={accentColor}
+        onSelectVariant={variant => {
+          if (addMutatingRef.current || mutating) return;
+          addMutatingRef.current = true;
+          setLocalQty(1);
+          setMutating(true);
+          Promise.resolve(onAdd(product, tierKey, variant.id))
             .catch(() => { setLocalQty(null); setMutating(false); })
             .finally(() => { addMutatingRef.current = false; });
         }}
@@ -538,6 +560,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#64748B',
     marginBottom: -2,
+  },
+  variantHint: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+    fontStyle: 'italic',
   },
   priceBlock: {
     marginTop: 6,
