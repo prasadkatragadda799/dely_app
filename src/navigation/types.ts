@@ -7,6 +7,7 @@ export type AuthStackParamList = {
 export type CustomerTabParamList = {
   Home: undefined;
   Cart: undefined;
+  Orders: undefined;
   Profile: undefined;
 };
 

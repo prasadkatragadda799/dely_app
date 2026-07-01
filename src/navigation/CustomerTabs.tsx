@@ -57,9 +57,9 @@ type HomeStackParamList = {
   CategoryBrowse: {
     division: 'fmcg' | 'homeKitchen';
     mode?: 'categories' | 'brands' | 'companies';
+    company?: string;
   };
   Notifications: undefined;
-  Orders: undefined;
   Wishlist: undefined;
 };
 
@@ -71,6 +71,10 @@ type CartStackParamList = {
 };
 const CartStack = createNativeStackNavigator<CartStackParamList>();
 const ProfileStack = createNativeStackNavigator<CustomerProfileStackParamList>();
+type OrdersStackParamList = {
+  OrdersMain: undefined;
+};
+const OrdersStack = createNativeStackNavigator<OrdersStackParamList>();
 
 const HomeStackNavigator = () => {
   return (
@@ -88,7 +92,6 @@ const HomeStackNavigator = () => {
         name="Notifications"
         component={NotificationsScreen}
       />
-      <HomeStack.Screen name="Orders" component={OrdersScreen} />
       <HomeStack.Screen name="Wishlist" component={WishlistScreen} />
       <HomeStack.Screen name="LocationPicker" component={LocationPickerScreen} />
     </HomeStack.Navigator>
@@ -102,6 +105,14 @@ const CartStackNavigator = () => {
       <CartStack.Screen name="Checkout" component={CheckoutScreen} />
       <CartStack.Screen name="OrderSuccess" component={OrderSuccessScreen} />
     </CartStack.Navigator>
+  );
+};
+
+const OrdersStackNavigator = () => {
+  return (
+    <OrdersStack.Navigator screenOptions={{ headerShown: false }}>
+      <OrdersStack.Screen name="OrdersMain" component={OrdersScreen} />
+    </OrdersStack.Navigator>
   );
 };
 
@@ -157,12 +168,14 @@ const tabIcons: Record<
 > = {
   Home: { outline: 'home-outline', solid: 'home' },
   Cart: { outline: 'cart-outline', solid: 'cart' },
+  Orders: { outline: 'truck-outline', solid: 'truck' },
   Profile: { outline: 'account-outline', solid: 'account' },
 };
 
 const defaultTabLabels: Record<keyof CustomerTabParamList, string> = {
   Home: 'Home',
   Cart: 'Cart',
+  Orders: 'Orders',
   Profile: 'Account',
 };
 
@@ -317,7 +330,6 @@ const CustomerTabs = () => {
     const routeName = getFocusedRouteNameFromRoute(route) ?? 'Home';
     const tabBarVisibleRoutes = new Set([
       'Home',
-      'Orders',
       'Wishlist',
     ]);
     return !tabBarVisibleRoutes.has(routeName);
@@ -331,6 +343,11 @@ const CustomerTabs = () => {
   const shouldHideForProfileStack = (route: any) => {
     const routeName = getFocusedRouteNameFromRoute(route) ?? 'ProfileMain';
     return routeName !== 'ProfileMain';
+  };
+
+  const shouldHideForOrdersStack = (route: any) => {
+    const routeName = getFocusedRouteNameFromRoute(route) ?? 'OrdersMain';
+    return routeName !== 'OrdersMain';
   };
 
   return (
@@ -356,6 +373,14 @@ const CustomerTabs = () => {
         options={({ route }) => ({
           tabBarStyle: getTabBarStyle(shouldHideForCartStack(route)),
           tabBarLabel: 'Cart',
+        })}
+      />
+      <Tab.Screen
+        name="Orders"
+        component={OrdersStackNavigator}
+        options={({ route }) => ({
+          tabBarStyle: getTabBarStyle(shouldHideForOrdersStack(route)),
+          tabBarLabel: 'Orders',
         })}
       />
       <Tab.Screen

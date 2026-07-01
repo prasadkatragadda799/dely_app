@@ -986,8 +986,9 @@ const HomeScreen = () => {
                           },
                         ]}
                         onPress={() =>
-                          navigation.navigate('ProductOverview', {
+                          navigation.navigate('CategoryBrowse', {
                             division: activeDivision,
+                            mode: 'brands',
                             company: c,
                           })
                         }

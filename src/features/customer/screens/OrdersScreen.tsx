@@ -153,7 +153,12 @@ const OrdersScreen = () => {
       `Date      : ${inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString('en-IN') : ''}`,
       ``,
       `BILL FROM : ${inv.seller?.company_name ?? inv.seller?.name ?? ''}`,
+      inv.seller?.address_line1 ? `Add       : ${inv.seller.address_line1}` : null,
+      inv.seller?.state ? `           ${inv.seller.state}` : null,
+      inv.seller?.phone ? `Phone     : ${inv.seller.phone}` : null,
+      inv.seller?.email ? `Email     : ${inv.seller.email}` : null,
       `GSTIN     : ${inv.seller?.gstin ?? ''}`,
+      inv.seller?.fssai ? `FSSAI NO  : ${inv.seller.fssai}` : null,
       ``,
       `BILL TO   : ${inv.buyer?.name ?? ''}`,
       inv.buyer?.email ? `Email     : ${inv.buyer.email}` : null,
@@ -595,6 +600,7 @@ const OrdersScreen = () => {
                       ? <Text style={styles.invBillText}>{[invoice?.seller?.city, invoice?.seller?.state, invoice?.seller?.pincode].filter(Boolean).join(', ')}</Text>
                       : null}
                     <Text style={styles.invBillText}>GSTIN: {invoice?.seller?.gstin ?? '—'}</Text>
+                    {invoice?.seller?.fssai ? <Text style={styles.invBillText}>FSSAI: {invoice.seller.fssai}</Text> : null}
                     {invoice?.seller?.phone ? <Text style={styles.invBillText}>Phone: {invoice.seller.phone}</Text> : null}
                     {invoice?.seller?.email ? <Text style={styles.invBillText}>{invoice.seller.email}</Text> : null}
                   </View>

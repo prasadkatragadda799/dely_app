@@ -30,6 +30,8 @@ type RouteParams = {
   mode?: 'categories' | 'brands' | 'companies';
   /** When set, sidebar shows children of this category node instead of all root categories. */
   parentNodeId?: string;
+  /** When set with mode 'brands', scopes the brand rail to this company's brands only. */
+  company?: string;
 };
 
 type SortKey = 'relevance' | 'priceAsc' | 'priceDesc';
@@ -271,6 +273,8 @@ const CategoryBrowseScreen = () => {
         : 'categories';
   const parentNodeId: string | undefined =
     typeof p?.parentNodeId === 'string' ? p.parentNodeId : undefined;
+  const companyScope: string | undefined =
+    typeof p?.company === 'string' && p.company.trim() ? p.company.trim() : undefined;
 
   const { data: fmcgProducts = [], isLoading: isFmcgLoading } = useGetProductsQuery(
     { category: 'fmcg' },
@@ -316,7 +320,7 @@ const CategoryBrowseScreen = () => {
   React.useEffect(() => {
     setSelectedKey('all');
     setDrillNode(null);
-  }, [browseMode, division, parentNodeId]);
+  }, [browseMode, division, parentNodeId, companyScope]);
 
   const isHomeKitchen = division === 'homeKitchen';
   const primary = isHomeKitchen ? '#16A34A' : '#1D4ED8';
@@ -329,7 +333,13 @@ const CategoryBrowseScreen = () => {
   const primaryText = isHomeKitchen ? '#14532D' : '#0B3B8F';
   const discountGreen = '#16A34A';
 
-  const divisionProducts = allProducts;
+  const divisionProducts = useMemo(
+    () =>
+      browseMode === 'brands' && companyScope
+        ? allProducts.filter(pr => pr.companyName === companyScope)
+        : allProducts,
+    [allProducts, browseMode, companyScope],
+  );
 
   const brandCountMap = useMemo(() => {
     const map: Record<string, number> = {};
@@ -504,7 +514,9 @@ const CategoryBrowseScreen = () => {
     selectedLeaf?.label ??
     effectiveParentNode?.name ??
     (browseMode === 'brands'
-      ? 'Brands'
+      ? companyScope
+        ? `${companyScope} brands`
+        : 'Brands'
       : browseMode === 'companies'
         ? 'Companies'
         : isHomeKitchen
@@ -928,6 +940,7 @@ const CategoryBrowseScreen = () => {
                       ...(selectedLeaf && isBrandLeaf(selectedLeaf)
                         ? { brand: selectedLeaf.brandName }
                         : {}),
+                      ...(companyScope ? { company: companyScope } : {}),
                     });
                     return;
                   }
@@ -966,7 +979,9 @@ const CategoryBrowseScreen = () => {
                 ]}>
                 <Text style={styles.emptyText}>
                   {browseMode === 'brands'
-                    ? 'No products for this brand yet.'
+                    ? companyScope
+                      ? `No ${companyScope} brands yet.`
+                      : 'No products for this brand yet.'
                     : browseMode === 'companies'
                       ? 'No products for this company yet.'
                       : 'No products in this category yet.'}
