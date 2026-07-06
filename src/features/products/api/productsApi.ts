@@ -120,8 +120,11 @@ export const productsApi = createApi({
     }),
     /** Single product — `GET /products/{id}` (description, specifications, full gallery). */
     getProduct: builder.query<Product, string>({
-      async queryFn(id, _api, _extraOptions, baseQuery) {
-        const result = await baseQuery(`/products/${encodeURIComponent(id)}`);
+      async queryFn(id, api, _extraOptions, baseQuery) {
+        const result = await baseQuery({
+          url: `/products/${encodeURIComponent(id)}`,
+          signal: api.signal,
+        });
         if ('error' in result) {
           return { error: result.error as { status: number; data?: unknown } };
         }

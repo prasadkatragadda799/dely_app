@@ -937,6 +937,7 @@ const CategoryBrowseScreen = () => {
                     navigation.navigate('ProductOverview', {
                       division,
                       productId: item.id,
+                      initialProduct: item,
                       ...(selectedLeaf && isBrandLeaf(selectedLeaf)
                         ? { brand: selectedLeaf.brandName }
                         : {}),
@@ -948,6 +949,7 @@ const CategoryBrowseScreen = () => {
                     navigation.navigate('ProductOverview', {
                       division,
                       productId: item.id,
+                      initialProduct: item,
                       ...(selectedLeaf && isCompanyLeaf(selectedLeaf)
                         ? { company: selectedLeaf.companyName }
                         : {}),
@@ -957,6 +959,7 @@ const CategoryBrowseScreen = () => {
                   navigation.navigate('ProductOverview', {
                     division,
                     productId: item.id,
+                    initialProduct: item,
                     ...(selectedLeaf && isCategoryLeaf(selectedLeaf)
                       ? {
                           subCategory: selectedLeaf.label,

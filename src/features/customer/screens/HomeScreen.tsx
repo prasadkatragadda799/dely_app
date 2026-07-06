@@ -1174,6 +1174,7 @@ const HomeScreen = () => {
               navigation.navigate('ProductOverview', {
                 division: activeDivision,
                 productId: item.id,
+                initialProduct: item,
               })
             }
           />

@@ -55,6 +55,68 @@ import AppImage from '../../../shared/ui/AppImage';
 
 type DivisionKey = 'fmcg' | 'homeKitchen';
 
+function DetailFetchErrorBanner({
+  onRetry,
+  primary,
+  compact,
+}: {
+  onRetry: () => void;
+  primary: string;
+  compact?: boolean;
+}) {
+  return (
+    <View style={[styles.detailFetchBanner, compact && styles.detailFetchBannerCompact]}>
+      <Icon name="alert-circle-outline" size={compact ? 18 : 22} color="#DC2626" />
+      <View style={styles.detailFetchBannerCopy}>
+        <Text style={styles.detailFetchBannerTitle}>
+          {compact ? "Couldn't refresh details" : "Couldn't load this product"}
+        </Text>
+        <Text style={styles.detailFetchBannerSub}>
+          {compact
+            ? 'Showing saved info from the list. Check your connection and retry.'
+            : 'Check your connection and try again.'}
+        </Text>
+      </View>
+      <TouchableOpacity
+        style={[styles.detailFetchBannerRetry, { borderColor: primary }]}
+        onPress={onRetry}
+        activeOpacity={0.85}>
+        <Icon name="refresh" size={14} color={primary} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function ProductDetailSkeleton({
+  carouselWidth,
+  carouselHeight,
+}: {
+  carouselWidth: number;
+  carouselHeight: number;
+}) {
+  return (
+    <View style={styles.detailSkeletonWrap}>
+      <View
+        style={[
+          styles.detailSkeletonBlock,
+          { width: carouselWidth, height: carouselHeight, borderRadius: 0 },
+        ]}
+      />
+      <View style={styles.detailSkeletonBody}>
+        <View style={[styles.detailSkeletonLine, styles.detailSkeletonLineWide]} />
+        <View style={[styles.detailSkeletonLine, styles.detailSkeletonLineMedium]} />
+        <View style={styles.detailSkeletonPriceRow}>
+          <View style={[styles.detailSkeletonLine, styles.detailSkeletonLineShort]} />
+          <View style={[styles.detailSkeletonLine, styles.detailSkeletonLineTiny]} />
+        </View>
+        <View style={[styles.detailSkeletonLine, styles.detailSkeletonLineFull]} />
+        <View style={[styles.detailSkeletonLine, styles.detailSkeletonLineFull]} />
+        <View style={[styles.detailSkeletonLine, styles.detailSkeletonLineMedium]} />
+      </View>
+    </View>
+  );
+}
+
 function mergeProductFromApi(
   list: Product | undefined,
   api: Product | undefined,
@@ -100,6 +162,31 @@ const getProductImages = (product: Product): string[] => {
   const primary = String(product.image || '').trim();
   if (primary) return [primary, ...fromGallery.filter((u) => u !== primary)];
   return fromGallery;
+};
+
+/** Thumbnail for a variant card — variant gallery first, else product hero. */
+const variantPreviewImage = (v: ProductVariant, product: Product): string | undefined => {
+  const fromVariant = (v.images ?? [])
+    .map(u => String(u || '').trim())
+    .find(Boolean);
+  if (fromVariant) return fromVariant;
+  return getProductImages(product)[0];
+};
+
+/** Gallery URLs when a variant is active — variant shots lead the hero carousel. */
+const imagesForVariantSelection = (
+  product: Product,
+  variant: ProductVariant | null,
+): string[] => {
+  const productImages = getProductImages(product);
+  if (!variant) return productImages;
+  const variantImages = (variant.images ?? [])
+    .map(u => String(u || '').trim())
+    .filter(Boolean);
+  if (variantImages.length === 0) return productImages;
+  const seen = new Set(variantImages);
+  const extras = productImages.filter(u => !seen.has(u));
+  return [...variantImages, ...extras];
 };
 
 /** Short label for a variant card (e.g. "2 x 300 ml", "Set: 6×100g · 500ml"). */
@@ -495,6 +582,14 @@ const ProductOverviewScreen = () => {
     [allProducts, selectedProductId],
   );
 
+  const routeInitialProduct =
+    initialProductFromParams?.id === selectedProductId
+      ? initialProductFromParams
+      : undefined;
+
+  const previewProduct =
+    listProduct?.id === selectedProductId ? listProduct : routeInitialProduct;
+
   const {
     data: fetchedProduct,
     isFetching: isProductFetching,
@@ -508,51 +603,28 @@ const ProductOverviewScreen = () => {
   const selectedProduct = useMemo(() => {
     if (!selectedProductId) return undefined;
     if (fetchedProduct) {
-      return mergeProductFromApi(listProduct ?? initialProductFromParams, fetchedProduct) ?? fetchedProduct;
+      return mergeProductFromApi(previewProduct, fetchedProduct) ?? fetchedProduct;
     }
-    return listProduct ?? initialProductFromParams;
-  }, [selectedProductId, listProduct, fetchedProduct, initialProductFromParams]);
+    return previewProduct;
+  }, [selectedProductId, previewProduct, fetchedProduct]);
 
-  // RTK Query can return a stale cached error (isFetching=false, isError=true) for
-  // several renders before the new fetch actually starts. A single-render ref guard
-  // is not enough — any intervening re-render (cart update, list loading, etc.) flips
-  // productIdJustChanged to false and flashes the error UI.
-  // Fix: also track whether isFetching=true has been observed for the current ID.
-  // Until it has, treat the state as "loading" regardless of the cached error flag.
-  const lastSeenProductIdRef = useRef<string | undefined>(undefined);
-  const productFetchInFlightRef = useRef(false);
-
-  if (lastSeenProductIdRef.current !== selectedProductId) {
-    lastSeenProductIdRef.current = selectedProductId;
-    productFetchInFlightRef.current = false;
-  }
-  if (isProductFetching) {
-    productFetchInFlightRef.current = true;
-  }
-
-  const showDetailSpinner = Boolean(
-    selectedProductId && !selectedProduct && (isProductFetching || !productFetchInFlightRef.current),
+  const hasUsablePreview = Boolean(
+    previewProduct && previewProduct.id === selectedProductId,
   );
 
-  // Only surface the error after a 2-second grace period — parsing latency can
-  // cause a transient error state even when the product is about to load successfully.
-  const [errorGracePassed, setErrorGracePassed] = useState(false);
-  const rawDetailError = Boolean(
+  const showFullFetchError = Boolean(
     selectedProductId &&
+      !hasUsablePreview &&
       !selectedProduct &&
-      productFetchInFlightRef.current &&
       !isProductFetching &&
       isProductError,
   );
-  useEffect(() => {
-    if (!rawDetailError) {
-      setErrorGracePassed(false);
-      return;
-    }
-    const t = setTimeout(() => setErrorGracePassed(true), 2000);
-    return () => clearTimeout(t);
-  }, [rawDetailError]);
-  const showDetailError = rawDetailError && errorGracePassed;
+  const showDetailSkeleton = Boolean(
+    selectedProductId && !selectedProduct && !showFullFetchError,
+  );
+  const isEnrichingDetail = Boolean(
+    selectedProductId && hasUsablePreview && isProductFetching && !fetchedProduct,
+  );
 
   const isDetailMode = Boolean(selectedProductId);
 
@@ -566,6 +638,7 @@ const ProductOverviewScreen = () => {
 
   React.useEffect(() => {
     setSelectedDetailImageIndex(0);
+    setSelectedVariantId(null);
   }, [selectedProductId]);
 
   // Purchasable variants (each a SKU with its own price + image gallery).
@@ -628,17 +701,8 @@ const ProductOverviewScreen = () => {
     return { sell, disc, mrp, savings };
   }, [selectedProduct, detailTierKey, selectedVariant]);
   const detailImages = useMemo(() => {
-    const productImages = selectedProduct ? getProductImages(selectedProduct) : [];
-    if (selectedVariant?.images && selectedVariant.images.length > 0) {
-      // Main product image(s) always first; append variant-specific images after,
-      // deduped so the same URL doesn't appear twice.
-      const productImageSet = new Set(productImages);
-      const variantOnly = selectedVariant.images
-        .map((u: string) => String(u || '').trim())
-        .filter((u: string) => u && !productImageSet.has(u));
-      return [...productImages, ...variantOnly];
-    }
-    return productImages;
+    if (!selectedProduct) return [];
+    return imagesForVariantSelection(selectedProduct, selectedVariant);
   }, [selectedProduct, selectedVariant]);
 
   // Reset gallery to the first image whenever the selected variant changes.
@@ -1028,36 +1092,30 @@ const ProductOverviewScreen = () => {
         keyboardShouldPersistTaps="handled"
         bounces>
         {isDetailMode ? (
-          showDetailSpinner ? (
-            <View style={styles.detailLoading}>
-              <ActivityIndicator size="large" color={primary} />
-              <Text style={[styles.detailLoadingText, { color: primaryText }]}>
-                Loading product…
-              </Text>
-            </View>
-          ) : showDetailError ? (
+          showDetailSkeleton ? (
+            <ProductDetailSkeleton
+              carouselWidth={carouselWidth}
+              carouselHeight={carouselHeight}
+            />
+          ) : showFullFetchError ? (
             <View style={styles.detailErrorBox}>
-              <Icon name="alert-circle-outline" size={40} color="#DC2626" />
-              <Text style={[styles.detailErrorTitle, { color: primaryText }]}>
-                {"Couldn't load this product"}
-              </Text>
-              <Text style={styles.detailErrorSub}>
-                Check your connection and try again.
-              </Text>
-              <TouchableOpacity
-                style={[styles.retryButton, { borderColor: primary }]}
-                onPress={refetchProduct}
-                activeOpacity={0.85}>
-                <Icon name="refresh" size={15} color={primary} />
-                <Text style={[styles.retryButtonText, { color: primary }]}>Retry</Text>
-              </TouchableOpacity>
+              <DetailFetchErrorBanner onRetry={refetchProduct} primary={primary} />
             </View>
           ) : selectedProduct ? (
             <View style={styles.detailWrap}>
+              {isEnrichingDetail ? (
+                <View style={styles.detailEnrichingBar}>
+                  <ActivityIndicator size="small" color={primary} />
+                  <Text style={[styles.detailEnrichingText, { color: primaryText }]}>
+                    Updating details…
+                  </Text>
+                </View>
+              ) : null}
               {/* Hero image — full bleed, goes under status bar */}
               <View style={[styles.detailGalleryBleed, { width: carouselWidth, height: carouselHeight }]}>
                 {detailImages.length > 0 ? (
                   <FlatList
+                    key={selectedVariantId ?? 'default-gallery'}
                     ref={galleryRef}
                     data={detailImages}
                     horizontal
@@ -1209,13 +1267,13 @@ const ProductOverviewScreen = () => {
                   </View>
                 ) : null}
 
-                {/* Variant / pack-size chips (Swiggy-style compact cards) */}
+                {/* Variant cards — image + price; tap swaps hero gallery */}
                 {hasVariants ? (
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.variantChipsScrollContent}
-                    style={styles.variantChipsScroll}>
+                    contentContainerStyle={styles.variantCardRow}
+                    style={styles.variantCardRowOuter}>
                     {purchasableVariants.map((v, idx) => {
                       const sel = v.id === selectedVariantId;
                       const vSell = Number(v.specialPrice ?? v.mrp ?? 0);
@@ -1225,36 +1283,63 @@ const ProductOverviewScreen = () => {
                           (vMrp > vSell ? ((vMrp - vSell) / vMrp) * 100 : 0),
                       );
                       const vPerUnit = variantPerUnitText(v, vSell);
+                      const thumbUri =
+                        selectedProduct != null
+                          ? variantPreviewImage(v, selectedProduct)
+                          : undefined;
                       return (
                         <TouchableOpacity
                           key={v.id ?? `v-${idx}`}
                           style={[
-                            styles.variantChipCard,
-                            sel
-                              ? { borderColor: primary, borderWidth: 2 }
-                              : { borderColor: '#CBD5E1', borderWidth: 1 },
+                            styles.variantCard,
+                            sel && styles.variantCardSelected,
+                            {
+                              borderColor: sel ? primary : '#E2E8F0',
+                              borderWidth: sel ? 2.5 : 1,
+                            },
                           ]}
                           onPress={() => setSelectedVariantId(v.id ?? null)}
                           activeOpacity={0.85}>
-                          <Text style={[styles.variantChipCardLabel, { color: primaryText }]}>
+                          <View style={styles.variantCardImageWrap}>
+                            {thumbUri ? (
+                              <AppImage
+                                uri={thumbUri}
+                                width={130}
+                                style={styles.variantCardImage}
+                                resizeMode="contain"
+                                backgroundColor="#F5F7FA"
+                              />
+                            ) : (
+                              <View style={styles.variantCardImagePlaceholder}>
+                                <Icon name="image-off-outline" size={28} color="#94A3B8" />
+                              </View>
+                            )}
+                          </View>
+                          <Text
+                            numberOfLines={2}
+                            style={[styles.variantCardLabel, { color: primaryText }]}>
                             {variantCardLabel(v)}
                           </Text>
                           {vDisc > 0 ? (
-                            <Text style={[styles.variantChipCardDisc, { color: primary }]}>
+                            <Text style={[styles.variantCardDisc, { color: primary }]}>
                               {Math.round(vDisc)}% OFF
                             </Text>
-                          ) : null}
-                          <View style={styles.variantChipCardPriceRow}>
-                            <Text style={[styles.variantChipCardPrice, { color: primaryText }]}>
+                          ) : (
+                            <View style={styles.variantCardDiscSpacer} />
+                          )}
+                          <View style={styles.variantCardPriceRow}>
+                            <Text style={[styles.variantCardPrice, { color: primaryText }]}>
                               ₹{formatRs(vSell)}
                             </Text>
                             {vMrp > vSell ? (
-                              <Text style={styles.variantChipCardMrp}>₹{formatRs(vMrp)}</Text>
+                              <Text style={styles.variantCardMrp}>₹{formatRs(vMrp)}</Text>
                             ) : null}
                           </View>
                           {vPerUnit ? (
-                            <Text style={styles.variantChipCardPerUnit}>{vPerUnit}</Text>
-                          ) : null}
+                            <Text style={styles.variantCardPerUnit}>{vPerUnit}</Text>
+                          ) : (
+                            <View style={styles.variantCardPerUnitSpacer} />
+                          )}
                         </TouchableOpacity>
                       );
                     })}
@@ -1648,6 +1733,7 @@ const ProductOverviewScreen = () => {
                         brand: brandFilter,
                         company: companyFilter,
                         categoryFilter,
+                        initialProduct: item,
                       })
                     }
                   />
@@ -1776,40 +1862,92 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 18, fontWeight: '900' },
   itemSeparator: { height: 10 },
   browseCardWrap: { marginBottom: 10 },
-  detailLoading: {
-    marginTop: 40,
-    paddingVertical: 48,
+  detailSkeletonWrap: {
+    marginTop: 4,
+  },
+  detailSkeletonBlock: {
+    backgroundColor: '#E2E8F0',
+  },
+  detailSkeletonBody: {
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    gap: 10,
+  },
+  detailSkeletonLine: {
+    height: 14,
+    borderRadius: 8,
+    backgroundColor: '#E2E8F0',
+  },
+  detailSkeletonLineWide: { width: '88%' },
+  detailSkeletonLineMedium: { width: '62%' },
+  detailSkeletonLineShort: { width: 72, height: 22 },
+  detailSkeletonLineTiny: { width: 48, height: 18 },
+  detailSkeletonLineFull: { width: '100%' },
+  detailSkeletonPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 4,
+    marginBottom: 6,
+  },
+  detailFetchBanner: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  detailFetchBannerCompact: {
+    marginTop: 0,
+    marginBottom: 12,
+  },
+  detailFetchBannerCopy: { flex: 1 },
+  detailFetchBannerTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#991B1B',
+  },
+  detailFetchBannerSub: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#B91C1C',
+    lineHeight: 17,
+  },
+  detailFetchBannerRetry: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
   },
-  detailLoadingText: { marginTop: 12, fontWeight: '700', fontSize: 14 },
+  detailEnrichingBar: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailEnrichingText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
   detailErrorBox: {
     marginTop: 32,
     paddingHorizontal: 20,
     alignItems: 'center',
-  },
-  detailErrorTitle: { marginTop: 12, fontSize: 18, fontWeight: '900', textAlign: 'center' },
-  detailErrorSub: {
-    marginTop: 8,
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#64748B',
-    textAlign: 'center',
-    lineHeight: 19,
-  },
-  retryButton: {
-    marginTop: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1.5,
-  },
-  retryButtonText: {
-    fontSize: 14,
-    fontWeight: '800',
   },
   detailWrap: {
     marginTop: 4,
@@ -2547,36 +2685,26 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   variantCardRowOuter: {
-    marginTop: 10,
-    marginHorizontal: -14,
-    paddingHorizontal: 14,
-    minHeight: 188,
+    marginTop: 4,
+    marginHorizontal: -16,
+    marginBottom: 4,
   },
   variantCardRow: {
-    paddingVertical: 4,
-    paddingRight: 14,
-    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    gap: 12,
     flexDirection: 'row',
   },
   variantCard: {
-    width: 150,
-    minHeight: 176,
-    borderRadius: 16,
+    width: 148,
+    minHeight: 210,
+    borderRadius: 14,
     padding: 10,
     backgroundColor: '#FFFFFF',
     position: 'relative',
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
   },
   variantCardSelected: {
-    shadowColor: '#1D4ED8',
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    backgroundColor: '#FAFCFF',
   },
   variantCardBadge: {
     position: 'absolute',
@@ -2600,11 +2728,10 @@ const styles = StyleSheet.create({
   },
   variantCardImageWrap: {
     width: '100%',
-    height: 96,
+    height: 88,
     marginBottom: 8,
-    borderRadius: 12,
+    borderRadius: 10,
     backgroundColor: '#F5F7FA',
-    position: 'relative',
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2620,10 +2747,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   variantCardLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+    minHeight: 32,
+    lineHeight: 16,
+  },
+  variantCardDisc: {
     fontSize: 12,
     fontWeight: '800',
-    minHeight: 30,
-    lineHeight: 15,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  variantCardDiscSpacer: {
+    height: 18,
   },
   variantCardPriceRow: {
     marginTop: 6,

@@ -100,6 +100,7 @@ const WishlistScreen = () => {
                 navigation.navigate('ProductOverview', {
                   division: homeDivision,
                   productId: item.id,
+                  initialProduct: item,
                 })
               }
             />
