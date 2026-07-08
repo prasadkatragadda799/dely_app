@@ -62,7 +62,7 @@ export const productsApi = createApi({
     },
   }),
   endpoints: builder => ({
-    getProducts: builder.query<Product[], { category?: string; pincode?: string } | void>({
+    getProducts: builder.query<Product[], { category?: string; pincode?: string; limit?: number } | void>({
       async queryFn(args, api, _extraOptions, baseQuery) {
         const requestedCategory =
           args && 'category' in args ? (args.category as Product['category'] | undefined) : undefined;
@@ -73,7 +73,10 @@ export const productsApi = createApi({
           ? [requestedCategory]
           : ['fmcg', 'kitchen', 'home'];
 
-        const limit = 50;
+        // Default is generous enough to cover a full category listing (not just a home-feed
+        // preview) since these screens don't implement infinite scroll — callers doing a
+        // lightweight preview (e.g. HomeScreen picks) can still pass a smaller `limit`.
+        const limit = (args && 'limit' in args && args.limit) || 500;
         const page = 1;
 
         const pincodeParam = pincode ? `&pincode=${encodeURIComponent(pincode)}` : '';
