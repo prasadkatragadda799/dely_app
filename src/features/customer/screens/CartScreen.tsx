@@ -26,6 +26,7 @@ import { setHomeDivision } from '../homeDivisionSlice';
 import {
   useCheckServiceLocationQuery,
   useGetDeliveryLocationsQuery,
+  useGetDivisionsQuery,
 } from '../../../services/api/mobileApi';
 import { palette, shadow, getDivision } from '../../../utils/theme';
 
@@ -91,6 +92,13 @@ const CartScreen = () => {
     !!locationCheckData &&
     locationCheckData.restricted &&
     !locationCheckData.available;
+
+  const { data: divisionsEnvelope } = useGetDivisionsQuery();
+  const divisions = (divisionsEnvelope?.data as any[]) ?? [];
+  const activeDivisionSlug = isHomeKitchen ? 'kitchen' : 'default';
+  const minOrderValue = Number(
+    divisions.find(d => d.slug === activeDivisionSlug)?.min_order_value ?? 0,
+  );
 
   const setMutating = useCallback((cartItemId: string, on: boolean) => {
     setMutatingIds(prev => {
@@ -164,6 +172,9 @@ const CartScreen = () => {
     const qty = pendingQtys[item.cartItemId] ?? item.quantity;
     return paise + Math.round(item.product.price * 100) * qty;
   }, 0) / 100;
+
+  const belowMinOrderValue = visibleItems.length > 0 && visibleTotal < minOrderValue;
+  const minOrderShortfall = minOrderValue - visibleTotal;
 
   return (
     <View style={styles.container}>
@@ -358,12 +369,28 @@ const CartScreen = () => {
           <Text style={styles.total}>Total</Text>
           <Text style={styles.total}>Rs {formatInrAmount(visibleTotal)}</Text>
         </View>
+        {belowMinOrderValue && (
+          <Text style={styles.minOrderHint}>
+            Add Rs {formatInrAmount(minOrderShortfall)} more to reach the Rs{' '}
+            {formatInrAmount(minOrderValue)} minimum order value for{' '}
+            {isHomeKitchen ? 'Home & Kitchen' : 'FMCG'}
+          </Text>
+        )}
         {serviceUnavailable ? (
           <View style={[styles.checkout, styles.checkoutUnavailable]}>
             <View style={styles.checkoutRow}>
               <Icon name="map-marker-off-outline" size={18} color="#FFFFFF" />
               <Text style={styles.checkoutText}>
                 We don&apos;t deliver to {defaultPincode} yet
+              </Text>
+            </View>
+          </View>
+        ) : belowMinOrderValue ? (
+          <View style={[styles.checkout, styles.checkoutUnavailable]}>
+            <View style={styles.checkoutRow}>
+              <Icon name="cart-plus" size={18} color="#FFFFFF" />
+              <Text style={styles.checkoutText}>
+                Add Rs {formatInrAmount(minOrderShortfall)} more to checkout
               </Text>
             </View>
           </View>
@@ -540,6 +567,13 @@ const styles = StyleSheet.create({
   freeText: { color: '#16A34A', fontWeight: '800' },
   billDivider: { height: 1, backgroundColor: '#E2E8F0', marginBottom: 10, marginTop: 4 },
   total: { fontSize: 18, fontWeight: '900', marginBottom: 10, color: '#0F172A' },
+  minOrderHint: {
+    color: '#B45309',
+    fontWeight: '700',
+    fontSize: 12,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
   checkout: {
     backgroundColor: '#1D4ED8',
     borderRadius: 16,

@@ -24,6 +24,7 @@ import {
   useCreateDeliveryLocationMutation,
   useCreateOrderApiMutation,
   useGetDeliveryLocationsQuery,
+  useGetDivisionsQuery,
   useGetProfileQuery,
   useLazyReverseGeocodeQuery,
 } from '../../../services/api/mobileApi';
@@ -284,9 +285,26 @@ const CheckoutScreen = () => {
     0,
   );
 
+  const { data: divisionsEnvelope } = useGetDivisionsQuery();
+  const divisions = (divisionsEnvelope?.data as any[]) ?? [];
+  const activeDivisionSlug = homeDivision === 'homeKitchen' ? 'kitchen' : 'default';
+  const minOrderValue = Number(
+    divisions.find(d => d.slug === activeDivisionSlug)?.min_order_value ?? 0,
+  );
+  const belowMinOrderValue = subtotal < minOrderValue;
+
   const handlePlaceOrder = async () => {
     if (!visibleItems.length) {
       Toast.show({ type: 'error', text1: 'Your cart is empty for this division' });
+      return;
+    }
+
+    if (belowMinOrderValue) {
+      Toast.show({
+        type: 'error',
+        text1: 'Minimum order value not met',
+        text2: `Add Rs ${(minOrderValue - subtotal).toFixed(2)} more to place this order.`,
+      });
       return;
     }
 
@@ -752,18 +770,28 @@ const CheckoutScreen = () => {
             <Text style={styles.totalLabel}>Total</Text>
             <Text style={styles.totalValue}>Rs {subtotal.toFixed(2)}</Text>
           </View>
+          {belowMinOrderValue && (
+            <Text style={styles.minOrderHint}>
+              Minimum order value for {homeDivision === 'homeKitchen' ? 'Home & Kitchen' : 'FMCG'} is Rs{' '}
+              {minOrderValue.toFixed(2)}. Add Rs {(minOrderValue - subtotal).toFixed(2)} more.
+            </Text>
+          )}
         </View>
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: tabBarHeight + insets.bottom + 12 }]}>
         <TouchableOpacity
-          style={[styles.placeOrderButton, { backgroundColor: primary }, shadow.accent(primary)]}
+          style={[
+            styles.placeOrderButton,
+            { backgroundColor: belowMinOrderValue ? '#94A3B8' : primary },
+            shadow.accent(primary),
+          ]}
           onPress={handlePlaceOrder}
-          disabled={loading}
+          disabled={loading || belowMinOrderValue}
           activeOpacity={0.92}>
           <Icon name="shield-check-outline" size={18} color="#FFFFFF" />
           <Text style={styles.placeOrderText}>
-            {loading ? 'Placing Order...' : 'Place COD Order'}
+            {loading ? 'Placing Order...' : belowMinOrderValue ? 'Minimum order value not met' : 'Place COD Order'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -887,6 +915,13 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: '#E2E8F0', marginVertical: 4 },
   totalLabel: { color: '#0F172A', fontWeight: '900', fontSize: 16 },
   totalValue: { color: '#0F172A', fontWeight: '900', fontSize: 16 },
+  minOrderHint: {
+    color: '#B45309',
+    fontWeight: '700',
+    fontSize: 12,
+    marginTop: 10,
+    textAlign: 'center',
+  },
   footer: {
     position: 'absolute',
     left: 0,

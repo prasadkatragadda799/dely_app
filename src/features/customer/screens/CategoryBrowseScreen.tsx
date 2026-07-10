@@ -575,8 +575,55 @@ const CategoryBrowseScreen = () => {
       ? navigation.goBack()
       : navigation.navigate('Home');
 
-  const openSearch = () =>
+  // Search stays scoped to what the user is browsing: the selected brand /
+  // company / category (or the parent-category subtree) rides along so the
+  // results page filters the same slice of the catalog this screen shows.
+  const openSearch = () => {
+    if (browseMode === 'brands') {
+      navigation.navigate('ProductOverview', {
+        division,
+        ...(selectedLeaf && isBrandLeaf(selectedLeaf)
+          ? { brand: selectedLeaf.brandName }
+          : {}),
+        ...(companyScope ? { company: companyScope } : {}),
+      });
+      return;
+    }
+    if (browseMode === 'companies') {
+      navigation.navigate('ProductOverview', {
+        division,
+        ...(selectedLeaf && isCompanyLeaf(selectedLeaf)
+          ? { company: selectedLeaf.companyName }
+          : {}),
+      });
+      return;
+    }
+    if (selectedLeaf && isCategoryLeaf(selectedLeaf)) {
+      navigation.navigate('ProductOverview', {
+        division,
+        subCategory: selectedLeaf.label,
+        categoryFilter: {
+          ids: selectedLeaf.matchCategoryIds,
+          names: selectedLeaf.matchNames,
+          slugs: selectedLeaf.matchSlugs,
+        },
+      });
+      return;
+    }
+    if (effectiveParentNode && effectiveParentScope) {
+      navigation.navigate('ProductOverview', {
+        division,
+        subCategory: effectiveParentNode.name,
+        categoryFilter: {
+          ids: effectiveParentScope.ids,
+          names: effectiveParentScope.names,
+          slugs: effectiveParentScope.slugs,
+        },
+      });
+      return;
+    }
     navigation.navigate('ProductOverview', { division });
+  };
 
   /**
    * Fixed max width + % of screen; kept small so the grid stays readable.

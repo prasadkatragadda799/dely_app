@@ -62,12 +62,19 @@ export const productsApi = createApi({
     },
   }),
   endpoints: builder => ({
-    getProducts: builder.query<Product[], { category?: string; pincode?: string; limit?: number } | void>({
+    getProducts: builder.query<
+      Product[],
+      { category?: string; pincode?: string; deliverTo?: string; limit?: number } | void
+    >({
       async queryFn(args, api, _extraOptions, baseQuery) {
         const requestedCategory =
           args && 'category' in args ? (args.category as Product['category'] | undefined) : undefined;
+        // `pincode` FILTERS the catalog to serviceable products; `deliverTo` keeps the
+        // full catalog and annotates each product with a `deliverable` flag instead.
         const pincode =
           args && 'pincode' in args ? (args.pincode as string | undefined) : undefined;
+        const deliverTo =
+          args && 'deliverTo' in args ? (args.deliverTo as string | undefined) : undefined;
 
         const categoriesToFetch: Product['category'][] = requestedCategory
           ? [requestedCategory]
@@ -80,12 +87,15 @@ export const productsApi = createApi({
         const page = 1;
 
         const pincodeParam = pincode ? `&pincode=${encodeURIComponent(pincode)}` : '';
+        const deliverToParam = deliverTo
+          ? `&deliver_to=${encodeURIComponent(deliverTo)}`
+          : '';
         const buildUrlForCategory = (cat: Product['category']): string => {
           if (cat === 'kitchen' || cat === 'home') {
-            return `/products?page=${page}&limit=${limit}&division_slug=${encodeURIComponent(cat)}${pincodeParam}`;
+            return `/products?page=${page}&limit=${limit}&division_slug=${encodeURIComponent(cat)}${pincodeParam}${deliverToParam}`;
           }
           // Backend treats the "default division" as grocery (division_id == None).
-          return `/products?page=${page}&limit=${limit}${pincodeParam}`;
+          return `/products?page=${page}&limit=${limit}${pincodeParam}${deliverToParam}`;
         };
 
         const merged: Product[] = [];

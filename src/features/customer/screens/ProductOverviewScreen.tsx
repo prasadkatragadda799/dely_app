@@ -135,6 +135,9 @@ function mergeProductFromApi(
     ...api,
     images: images && images.length > 0 ? images : list.images,
     image,
+    // The detail endpoint has no `deliver_to` context, so its `deliverable` is
+    // always undefined — keep the zone annotation from the list fetch.
+    deliverable: api.deliverable !== undefined ? api.deliverable : list.deliverable,
   };
 }
 
@@ -458,8 +461,10 @@ const ProductOverviewScreen = () => {
   const defaultDeliveryLocation =
     deliveryLocations.find((l: any) => l.is_default) ?? deliveryLocations[0];
   const defaultPincode: string = defaultDeliveryLocation?.pincode ?? '';
+  // `deliverTo` keeps the full catalog (so counts match the brand/company/category
+  // pages) and marks out-of-zone items `deliverable: false` instead of hiding them.
   const { data: allProducts = [] } = useGetProductsQuery(
-    defaultPincode ? { pincode: defaultPincode } : undefined,
+    defaultPincode ? { deliverTo: defaultPincode } : undefined,
   );
   const { add, decrement, items: cartItems } = useCart();
   const { toggle, isWishlisted } = useWishlist();
@@ -1034,9 +1039,11 @@ const ProductOverviewScreen = () => {
             <TextInput
               style={[styles.search, { color: primaryText }]}
               placeholder={
-                isHomeKitchen
-                  ? 'Search kitchen & home essentials...'
-                  : 'Search FMCG essentials...'
+                companyFilter || brandFilter || subCategoryFilter
+                  ? `Search in ${companyFilter || brandFilter || subCategoryFilter}...`
+                  : isHomeKitchen
+                    ? 'Search kitchen & home essentials...'
+                    : 'Search FMCG essentials...'
               }
               placeholderTextColor="#94A3B8"
               value={query}

@@ -313,10 +313,11 @@ export const mapProductFromApi = (
       ? asNumber(firstOpt.discount, 0)
       : item.discount ?? item.discountPercent ?? item.discount_percent ?? 0;
 
-  const brandName =
+  const brandName = (
     typeof item.brand === 'string'
       ? item.brand
-      : item.brand?.name ?? (typeof item.company === 'string' ? item.company : item.company?.name) ?? undefined;
+      : item.brand?.name ?? (typeof item.company === 'string' ? item.company : item.company?.name) ?? undefined
+  )?.trim() || undefined;
 
   const brandLogoUrl =
     typeof item.brand === 'object' && item.brand !== null
@@ -351,12 +352,13 @@ export const mapProductFromApi = (
       ? String(item.category.name)
       : undefined;
 
-  const companyName =
+  const companyName = (
     typeof item.company === 'string'
       ? item.company
       : item.company?.name
         ? String(item.company.name)
-        : undefined;
+        : undefined
+  )?.trim() || undefined;
 
   const companyLogoUrl =
     typeof item.company === 'object' && item.company !== null
