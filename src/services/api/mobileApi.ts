@@ -758,6 +758,16 @@ export const mobileApi = createApi({
       }),
       invalidatesTags: ['Delivery'],
     }),
+    setDefaultDeliveryLocation: builder.mutation<
+      ApiEnvelope<unknown>,
+      DeliveryLocationIdParam
+    >({
+      query: ({ locationId }) => ({
+        url: `/delivery/${locationId}/default`,
+        method: 'PUT',
+      }),
+      invalidatesTags: ['Delivery'],
+    }),
 
     getDeliveryMe: builder.query<ApiEnvelope<DeliveryPerson>, void>({
       query: () => '/delivery/auth/me',
@@ -973,6 +983,7 @@ export const {
   useCheckServiceLocationQuery,
   useUpdateDeliveryLocationMutation,
   useDeleteDeliveryLocationMutation,
+  useSetDefaultDeliveryLocationMutation,
   useGetDeliveryMeQuery,
   useUpdateDeliveryMeMutation,
   useToggleDeliveryAvailabilityMutation,

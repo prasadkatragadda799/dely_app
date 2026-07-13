@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -27,6 +27,7 @@ import {
   useGetDivisionsQuery,
   useGetProfileQuery,
   useLazyReverseGeocodeQuery,
+  useSetDefaultDeliveryLocationMutation,
 } from '../../../services/api/mobileApi';
 import { getApiErrorMessage } from '../../../utils/apiErrorMessage';
 import { palette, radius, shadow, getDivision } from '../../../utils/theme';
@@ -100,6 +101,21 @@ const CheckoutScreen = () => {
   );
   const [createDeliveryLocation, { isLoading: isSavingAddress }] =
     useCreateDeliveryLocationMutation();
+  const [setDefaultDeliveryLocation] = useSetDefaultDeliveryLocationMutation();
+
+  // Persist whichever address the customer picks as their DB default, so
+  // zone/deliverability checks elsewhere in the app (product listing, cart,
+  // wishlist) match what's actually selected here instead of a stale default.
+  const selectAddress = useCallback(
+    (id: string) => {
+      setSelectedAddressId(id);
+      const addr = savedAddresses.find(a => String(a.id) === id);
+      if (addr && !addr.is_default) {
+        setDefaultDeliveryLocation({ locationId: id }).catch(() => {});
+      }
+    },
+    [savedAddresses, setDefaultDeliveryLocation],
+  );
 
   // Pick the user's default saved address as the initial selection. Falls back
   // to the first saved address if none is marked default; null if list is empty.
@@ -473,7 +489,7 @@ const CheckoutScreen = () => {
                       styles.savedAddressCard,
                       isSelected && { borderColor: primary, backgroundColor: `${primary}0D` },
                     ]}
-                    onPress={() => setSelectedAddressId(id)}
+                    onPress={() => selectAddress(id)}
                     activeOpacity={0.85}
                   >
                     <View

@@ -59,30 +59,40 @@ function DetailFetchErrorBanner({
   onRetry,
   primary,
   compact,
+  unavailable,
 }: {
   onRetry: () => void;
   primary: string;
   compact?: boolean;
+  unavailable?: boolean;
 }) {
   return (
     <View style={[styles.detailFetchBanner, compact && styles.detailFetchBannerCompact]}>
       <Icon name="alert-circle-outline" size={compact ? 18 : 22} color="#DC2626" />
       <View style={styles.detailFetchBannerCopy}>
         <Text style={styles.detailFetchBannerTitle}>
-          {compact ? "Couldn't refresh details" : "Couldn't load this product"}
+          {unavailable
+            ? 'Not available at your location'
+            : compact
+              ? "Couldn't refresh details"
+              : "Couldn't load this product"}
         </Text>
         <Text style={styles.detailFetchBannerSub}>
-          {compact
-            ? 'Showing saved info from the list. Check your connection and retry.'
-            : 'Check your connection and try again.'}
+          {unavailable
+            ? "This product isn't deliverable to your current address."
+            : compact
+              ? 'Showing saved info from the list. Check your connection and retry.'
+              : 'Check your connection and try again.'}
         </Text>
       </View>
-      <TouchableOpacity
-        style={[styles.detailFetchBannerRetry, { borderColor: primary }]}
-        onPress={onRetry}
-        activeOpacity={0.85}>
-        <Icon name="refresh" size={14} color={primary} />
-      </TouchableOpacity>
+      {!unavailable && (
+        <TouchableOpacity
+          style={[styles.detailFetchBannerRetry, { borderColor: primary }]}
+          onPress={onRetry}
+          activeOpacity={0.85}>
+          <Icon name="refresh" size={14} color={primary} />
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -597,6 +607,7 @@ const ProductOverviewScreen = () => {
 
   const {
     data: fetchedProduct,
+    error: productError,
     isFetching: isProductFetching,
     isError: isProductError,
     refetch: refetchProduct,
@@ -605,13 +616,24 @@ const ProductOverviewScreen = () => {
     refetchOnMountOrArgChange: true,
   });
 
+  // A 404 from the backend means this product doesn't exist OR isn't available
+  // to this customer (e.g. zone-restricted) — never fall back to a stale/cached
+  // preview object in that case, since that would show a product the customer
+  // isn't actually allowed to see or buy.
+  const isProductUnavailable = Boolean(
+    isProductError &&
+      !isProductFetching &&
+      (productError as { status?: number } | undefined)?.status === 404,
+  );
+
   const selectedProduct = useMemo(() => {
     if (!selectedProductId) return undefined;
+    if (isProductUnavailable) return undefined;
     if (fetchedProduct) {
       return mergeProductFromApi(previewProduct, fetchedProduct) ?? fetchedProduct;
     }
     return previewProduct;
-  }, [selectedProductId, previewProduct, fetchedProduct]);
+  }, [selectedProductId, previewProduct, fetchedProduct, isProductUnavailable]);
 
   const hasUsablePreview = Boolean(
     previewProduct && previewProduct.id === selectedProductId,
@@ -619,10 +641,10 @@ const ProductOverviewScreen = () => {
 
   const showFullFetchError = Boolean(
     selectedProductId &&
-      !hasUsablePreview &&
       !selectedProduct &&
       !isProductFetching &&
-      isProductError,
+      isProductError &&
+      (isProductUnavailable || !hasUsablePreview),
   );
   const showDetailSkeleton = Boolean(
     selectedProductId && !selectedProduct && !showFullFetchError,
@@ -1106,7 +1128,11 @@ const ProductOverviewScreen = () => {
             />
           ) : showFullFetchError ? (
             <View style={styles.detailErrorBox}>
-              <DetailFetchErrorBanner onRetry={refetchProduct} primary={primary} />
+              <DetailFetchErrorBanner
+                onRetry={refetchProduct}
+                primary={primary}
+                unavailable={isProductUnavailable}
+              />
             </View>
           ) : selectedProduct ? (
             <View style={styles.detailWrap}>
