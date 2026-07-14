@@ -10,7 +10,6 @@ export const navigationRef = createNavigationContainerRef<any>();
 /** Safe nested-navigate that no-ops when the navigator isn't ready yet. */
 function safeNavigate(name: string, params?: any) {
   if (!navigationRef.isReady()) return;
-  // @ts-expect-error — runtime navigation; param shape is route-specific.
   navigationRef.navigate(name, params);
 }
 

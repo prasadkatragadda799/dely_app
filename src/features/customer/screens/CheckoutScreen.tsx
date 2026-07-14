@@ -1,17 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
   Text,
-  Platform,
-  PermissionsAndroid,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Toast from 'react-native-toast-message';
-import Geolocation from 'react-native-geolocation-service';
 import { useNavigation } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,8 +22,6 @@ import {
   useGetDeliveryLocationsQuery,
   useGetDivisionsQuery,
   useGetProfileQuery,
-  useLazyReverseGeocodeQuery,
-  useSetDefaultDeliveryLocationMutation,
 } from '../../../services/api/mobileApi';
 import { getApiErrorMessage } from '../../../utils/apiErrorMessage';
 import { palette, radius, shadow, getDivision } from '../../../utils/theme';
@@ -65,10 +59,6 @@ const CheckoutScreen = () => {
   const { data: profileRes } = useGetProfileQuery();
   const profile = profileRes?.data as any;
 
-  const [reverseGeocode, { isFetching: isReverseGeocoding }] =
-    useLazyReverseGeocodeQuery();
-  const [isLocating, setIsLocating] = useState(false);
-
   const businessAddress = profile?.address;
   const addressLine1 =
     typeof businessAddress === 'object' && businessAddress
@@ -99,43 +89,19 @@ const CheckoutScreen = () => {
     () => ((savedAddressesEnvelope?.data as SavedAddress[]) ?? []) || [],
     [savedAddressesEnvelope],
   );
-  const [createDeliveryLocation, { isLoading: isSavingAddress }] =
-    useCreateDeliveryLocationMutation();
-  const [setDefaultDeliveryLocation] = useSetDefaultDeliveryLocationMutation();
+  const [createDeliveryLocation] = useCreateDeliveryLocationMutation();
 
-  // Persist whichever address the customer picks as their DB default, so
-  // zone/deliverability checks elsewhere in the app (product listing, cart,
-  // wishlist) match what's actually selected here instead of a stale default.
-  const selectAddress = useCallback(
-    (id: string) => {
-      setSelectedAddressId(id);
-      const addr = savedAddresses.find(a => String(a.id) === id);
-      if (addr && !addr.is_default) {
-        setDefaultDeliveryLocation({ locationId: id }).catch(() => {});
-      }
-    },
-    [savedAddresses, setDefaultDeliveryLocation],
+  // Delivery address is not editable from Checkout — customers manage addresses
+  // only from the Profile screen. This always reflects whichever address is
+  // marked default there.
+  const selectedAddress = useMemo(
+    () => savedAddresses.find(a => a.is_default) ?? savedAddresses[0] ?? null,
+    [savedAddresses],
   );
 
-  // Pick the user's default saved address as the initial selection. Falls back
-  // to the first saved address if none is marked default; null if list is empty.
-  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
-  useEffect(() => {
-    if (selectedAddressId) {
-      // Selection already valid?
-      if (savedAddresses.some(a => String(a.id) === selectedAddressId)) return;
-    }
-    if (savedAddresses.length === 0) {
-      setSelectedAddressId(null);
-      return;
-    }
-    const def = savedAddresses.find(a => a.is_default) ?? savedAddresses[0];
-    setSelectedAddressId(String(def.id));
-  }, [savedAddresses, selectedAddressId]);
-
   // Auto-seed the first delivery location from the registration address the very
-  // first time this user hits checkout with no saved addresses. After seeding,
-  // the address is pre-selected so checkout works without any manual input.
+  // first time this user hits checkout with no saved addresses, so checkout works
+  // without forcing a trip to Profile first.
   const hasSeededRef = useRef(false);
   useEffect(() => {
     if (
@@ -160,134 +126,14 @@ const CheckoutScreen = () => {
       is_default: true,
     } as any)
       .unwrap()
-      .then(res => {
-        const created = (res?.data as SavedAddress | undefined) ?? null;
+      .then(() => {
         refetchSavedAddresses();
-        if (created?.id) setSelectedAddressId(String(created.id));
       })
       .catch(() => {
-        // Silently fail — the user can still add an address manually.
+        // Silently fail — the user can still add an address from Profile.
         hasSeededRef.current = false;
       });
   }, [isLoadingSavedAddresses, savedAddresses.length, addressLine1, city, state, pincode]);
-
-  const selectedAddress = useMemo(
-    () =>
-      selectedAddressId
-        ? savedAddresses.find(a => String(a.id) === selectedAddressId) ?? null
-        : null,
-    [savedAddresses, selectedAddressId],
-  );
-
-  // Inline "Add new address" form (replaces the old "Edit address" pattern).
-  const [isAddingAddress, setIsAddingAddress] = useState(false);
-  const [editAddressLine1, setEditAddressLine1] = useState(addressLine1);
-  const [editAddressLine2, setEditAddressLine2] = useState(addressLine2);
-  const [editCity, setEditCity] = useState(city);
-  const [editState, setEditState] = useState(state);
-  const [editPincode, setEditPincode] = useState(pincode);
-  const [newAddressType, setNewAddressType] = useState<'home' | 'office' | 'other'>('home');
-  const [newAddressDefault, setNewAddressDefault] = useState(false);
-
-  useEffect(() => {
-    // Keep edit fields in sync with profile defaults.
-    // If user is mid-edit, they can still cancel and revert.
-    setEditAddressLine1(addressLine1);
-    setEditAddressLine2(addressLine2);
-    setEditCity(city);
-    setEditState(state);
-    setEditPincode(pincode);
-  }, [addressLine1, addressLine2, city, state, pincode]);
-
-  const addressText = [
-    editAddressLine1 ? String(editAddressLine1) : '',
-    editAddressLine2 ? String(editAddressLine2) : '',
-    editCity ? String(editCity) : '',
-    editState ? String(editState) : '',
-    editPincode ? String(editPincode) : '',
-  ]
-    .filter(Boolean)
-    .join(', ');
-
-  const requestLocationPermissionAndroid = async () => {
-    if (Platform.OS !== 'android') return true;
-    try {
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-      );
-      return granted === PermissionsAndroid.RESULTS.GRANTED;
-    } catch {
-      return false;
-    }
-  };
-
-  const handleUseMyLocation = async () => {
-    if (!reverseGeocode) return;
-
-    try {
-      const ok = await requestLocationPermissionAndroid();
-      if (!ok) {
-        Toast.show({
-          type: 'error',
-          text1: 'Location permission denied',
-          text2: 'Please allow location permission and try again.',
-        });
-        return;
-      }
-
-      setIsLocating(true);
-      Geolocation.getCurrentPosition(
-        async (pos: any) => {
-          try {
-            const coords = pos?.coords || {};
-            const lat = coords?.latitude;
-            const lng = coords?.longitude;
-            if (typeof lat !== 'number' || typeof lng !== 'number') {
-              throw new Error('Missing lat/lng from device');
-            }
-
-            const res = await reverseGeocode({ lat, lng }).unwrap();
-            const data = res?.data;
-
-            if (!data?.address_line1) {
-              Toast.show({
-                type: 'error',
-                text1: 'Could not resolve address',
-                text2: 'Google did not return address details for this location.',
-              });
-              return;
-            }
-
-            setEditAddressLine1(data.address_line1 ?? '');
-            setEditAddressLine2(data.address_line2 ?? '');
-            setEditCity(data.city ?? '');
-            setEditState(data.state ?? '');
-            setEditPincode(data.pincode ?? '');
-          } catch (e) {
-            Toast.show({
-              type: 'error',
-              text1: 'Location resolution failed',
-              text2: 'Please try again or enter address manually.',
-            });
-          } finally {
-            setIsLocating(false);
-          }
-        },
-        () => {
-          setIsLocating(false);
-          Toast.show({
-            type: 'error',
-            text1: 'Failed to get your location',
-            text2: 'Please try again.',
-          });
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 },
-      );
-    } catch {
-      Toast.show({ type: 'error', text1: 'Could not fetch location' });
-      setIsLocating(false);
-    }
-  };
 
   const div = getDivision(homeDivision);
   const primary = div.primary;
@@ -327,19 +173,9 @@ const CheckoutScreen = () => {
     try {
       setLoading(true);
 
-      // The user must have either picked a saved address or be in the middle of
-      // adding one. Saved addresses live in /delivery and the order endpoint
-      // accepts `delivery_location_id`; we send that and let the backend resolve
-      // the address dict, which keeps the snapshot in sync with what's saved.
-      if (isAddingAddress) {
-        Toast.show({
-          type: 'error',
-          text1: 'Save your address first',
-          text2: 'Tap "Save & use" on the new address before placing the order.',
-        });
-        return;
-      }
-
+      // Saved addresses live in /delivery and the order endpoint accepts
+      // `delivery_location_id`; we send that and let the backend resolve the
+      // address dict, which keeps the snapshot in sync with what's saved.
       if (!selectedAddress) {
         Toast.show({
           type: 'error',
@@ -443,290 +279,69 @@ const CheckoutScreen = () => {
           { paddingBottom: tabBarHeight + insets.bottom + 120 },
         ]}>
         <View style={styles.card}>
-          <View style={styles.addressHeaderRow}>
-            <Text style={[styles.cardTitle, { color: primaryText, marginBottom: 0 }]}>
-              Delivery Address
-            </Text>
-            {savedAddresses.length > 0 && !isAddingAddress && (
-              <TouchableOpacity
-                style={[styles.addNewAddressBtn, { borderColor: `${primary}66` }]}
-                onPress={() => {
-                  setEditAddressLine1('');
-                  setEditAddressLine2('');
-                  setEditCity('');
-                  setEditState('');
-                  setEditPincode('');
-                  setNewAddressType('home');
-                  setNewAddressDefault(false);
-                  setIsAddingAddress(true);
-                }}
-                activeOpacity={0.85}
-              >
-                <Icon name="plus" size={14} color={primary} />
-                <Text style={[styles.addNewAddressText, { color: primary }]}>Add new</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          <Text style={[styles.cardTitle, { color: primaryText }]}>Delivery Address</Text>
 
-          {/* Saved addresses picker */}
-          {!isAddingAddress && savedAddresses.length > 0 && (
-            <View style={styles.savedAddressList}>
-              {savedAddresses.map(addr => {
-                const id = String(addr.id);
-                const isSelected = id === selectedAddressId;
-                const typeLabel = (addr.type || 'home').toString();
-                const fullAddress = [
-                  addr.address_line1,
-                  addr.address_line2,
-                  [addr.city, addr.state, addr.pincode].filter(Boolean).join(', '),
-                ]
+          {selectedAddress ? (
+            (() => {
+              const typeLabel = (selectedAddress.type || 'home').toString();
+              const fullAddress = [
+                selectedAddress.address_line1,
+                selectedAddress.address_line2,
+                [selectedAddress.city, selectedAddress.state, selectedAddress.pincode]
                   .filter(Boolean)
-                  .join(', ');
-                return (
-                  <TouchableOpacity
-                    key={id}
-                    style={[
-                      styles.savedAddressCard,
-                      isSelected && { borderColor: primary, backgroundColor: `${primary}0D` },
-                    ]}
-                    onPress={() => selectAddress(id)}
-                    activeOpacity={0.85}
-                  >
-                    <View
-                      style={[
-                        styles.radioOuter,
-                        isSelected && { borderColor: primary },
-                      ]}
-                    >
-                      {isSelected && (
-                        <View style={[styles.radioInner, { backgroundColor: primary }]} />
-                      )}
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <View style={styles.savedAddressBadgeRow}>
-                        <View
-                          style={[
-                            styles.typeBadge,
-                            { backgroundColor: `${primary}1A`, borderColor: `${primary}40` },
-                          ]}
-                        >
-                          <Icon
-                            name={
-                              typeLabel === 'office'
-                                ? 'office-building-outline'
-                                : typeLabel === 'other'
-                                  ? 'map-marker-outline'
-                                  : 'home-outline'
-                            }
-                            size={11}
-                            color={primary}
-                          />
-                          <Text style={[styles.typeBadgeText, { color: primary }]}>
-                            {typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1)}
-                          </Text>
-                        </View>
-                        {addr.is_default && (
-                          <View style={styles.defaultBadge}>
-                            <Text style={styles.defaultBadgeText}>Default</Text>
-                          </View>
-                        )}
+                  .join(', '),
+              ]
+                .filter(Boolean)
+                .join(', ');
+              return (
+                <View style={styles.savedAddressCard}>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.savedAddressBadgeRow}>
+                      <View
+                        style={[
+                          styles.typeBadge,
+                          { backgroundColor: `${primary}1A`, borderColor: `${primary}40` },
+                        ]}
+                      >
+                        <Icon
+                          name={
+                            typeLabel === 'office'
+                              ? 'office-building-outline'
+                              : typeLabel === 'other'
+                                ? 'map-marker-outline'
+                                : 'home-outline'
+                          }
+                          size={11}
+                          color={primary}
+                        />
+                        <Text style={[styles.typeBadgeText, { color: primary }]}>
+                          {typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1)}
+                        </Text>
                       </View>
-                      <Text style={styles.savedAddressLine}>{fullAddress || '—'}</Text>
+                      <View style={styles.defaultBadge}>
+                        <Text style={styles.defaultBadgeText}>Default</Text>
+                      </View>
                     </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          )}
-
-          {/* Empty state */}
-          {!isAddingAddress && savedAddresses.length === 0 && (
+                    <Text style={styles.savedAddressLine}>{fullAddress || '—'}</Text>
+                  </View>
+                </View>
+              );
+            })()
+          ) : (
             <View style={styles.emptyAddressBox}>
               <Icon name="map-marker-plus-outline" size={28} color={primary} />
               <Text style={styles.emptyAddressTitle}>No saved addresses</Text>
               <Text style={styles.emptyAddressSubtitle}>
-                Add a delivery address to place this order.
+                Add a delivery address in your profile to place this order.
               </Text>
               <TouchableOpacity
                 style={[styles.emptyAddressBtn, { backgroundColor: primary }]}
-                onPress={() => {
-                  setEditAddressLine1(addressLine1);
-                  setEditAddressLine2(addressLine2);
-                  setEditCity(city);
-                  setEditState(state);
-                  setEditPincode(pincode);
-                  setNewAddressType('home');
-                  setNewAddressDefault(true);
-                  setIsAddingAddress(true);
-                }}
+                onPress={() => navigation.getParent?.()?.navigate('Profile')}
                 activeOpacity={0.9}
               >
                 <Icon name="plus" size={16} color="#FFFFFF" />
                 <Text style={styles.emptyAddressBtnText}>Add address</Text>
               </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Add-new form */}
-          {isAddingAddress && (
-            <View style={styles.editAddressContainer}>
-              <View style={styles.typeRow}>
-                {(['home', 'office', 'other'] as const).map(t => (
-                  <TouchableOpacity
-                    key={t}
-                    style={[
-                      styles.typeChip,
-                      newAddressType === t && { backgroundColor: primary, borderColor: primary },
-                    ]}
-                    onPress={() => setNewAddressType(t)}
-                    activeOpacity={0.85}
-                  >
-                    <Text
-                      style={[
-                        styles.typeChipText,
-                        newAddressType === t && { color: '#FFFFFF' },
-                      ]}
-                    >
-                      {t.charAt(0).toUpperCase() + t.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <Text style={styles.editLabel}>Address line 1 *</Text>
-              <TextInput
-                style={styles.editInput}
-                value={editAddressLine1}
-                onChangeText={setEditAddressLine1}
-                placeholder="House / street / locality"
-                autoCapitalize="none"
-              />
-
-              <Text style={styles.editLabel}>Address line 2</Text>
-              <TextInput
-                style={[styles.editInput, { minHeight: 44 }]}
-                value={editAddressLine2}
-                onChangeText={setEditAddressLine2}
-                placeholder="Landmark (optional)"
-                autoCapitalize="sentences"
-              />
-
-              <View style={styles.editRow}>
-                <View style={styles.editHalf}>
-                  <Text style={styles.editLabel}>City *</Text>
-                  <TextInput
-                    style={styles.editInput}
-                    value={editCity}
-                    onChangeText={setEditCity}
-                    placeholder="City"
-                    autoCapitalize="words"
-                  />
-                </View>
-                <View style={styles.editHalf}>
-                  <Text style={styles.editLabel}>State *</Text>
-                  <TextInput
-                    style={styles.editInput}
-                    value={editState}
-                    onChangeText={setEditState}
-                    placeholder="State"
-                    autoCapitalize="words"
-                  />
-                </View>
-              </View>
-
-              <Text style={styles.editLabel}>Pincode *</Text>
-              <TextInput
-                style={styles.editInput}
-                value={editPincode}
-                onChangeText={setEditPincode}
-                placeholder="Pincode"
-                keyboardType="phone-pad"
-              />
-
-              <TouchableOpacity
-                style={styles.defaultToggleRow}
-                onPress={() => setNewAddressDefault(v => !v)}
-                activeOpacity={0.85}
-              >
-                <View
-                  style={[
-                    styles.checkbox,
-                    newAddressDefault && { backgroundColor: primary, borderColor: primary },
-                  ]}
-                >
-                  {newAddressDefault && <Icon name="check" size={12} color="#FFFFFF" />}
-                </View>
-                <Text style={styles.defaultToggleText}>Set as default delivery address</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.useLocationButton, { borderColor: `${primary}66` }]}
-                onPress={handleUseMyLocation}
-                disabled={isLocating || isReverseGeocoding || loading || isSavingAddress}>
-                <Text style={[styles.useLocationButtonText, { color: primary }]}>
-                  {isLocating || isReverseGeocoding ? 'Getting location...' : 'Use my location'}
-                </Text>
-              </TouchableOpacity>
-
-              <View style={styles.editActions}>
-                <TouchableOpacity
-                  style={[styles.editActionButton, { backgroundColor: 'rgba(148,163,184,0.15)' }]}
-                  onPress={() => setIsAddingAddress(false)}
-                  activeOpacity={0.9}
-                  disabled={isSavingAddress}>
-                  <Text style={[styles.editActionButtonText, { color: '#64748B' }]}>Cancel</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.editActionButton,
-                    { backgroundColor: primary },
-                    isSavingAddress && { opacity: 0.7 },
-                  ]}
-                  onPress={async () => {
-                    if (
-                      !editAddressLine1.trim() ||
-                      !editCity.trim() ||
-                      !editState.trim() ||
-                      editPincode.trim().length !== 6
-                    ) {
-                      Toast.show({
-                        type: 'error',
-                        text1: 'Please complete all required fields',
-                        text2: 'Address line 1, city, state, and a 6-digit pincode are required.',
-                      });
-                      return;
-                    }
-                    try {
-                      const res = await createDeliveryLocation({
-                        address_line1: editAddressLine1.trim(),
-                        address_line2: editAddressLine2.trim() || undefined,
-                        city: editCity.trim(),
-                        state: editState.trim(),
-                        pincode: editPincode.trim(),
-                        type: newAddressType,
-                        is_default: newAddressDefault,
-                      } as any).unwrap();
-                      const created = (res?.data as SavedAddress | undefined) ?? null;
-                      await refetchSavedAddresses();
-                      if (created?.id) setSelectedAddressId(String(created.id));
-                      setIsAddingAddress(false);
-                      Toast.show({ type: 'success', text1: 'Address saved' });
-                    } catch (err) {
-                      Toast.show({
-                        type: 'error',
-                        text1: 'Could not save address',
-                        text2: getApiErrorMessage(err, 'Please try again.'),
-                      });
-                    }
-                  }}
-                  disabled={loading || isSavingAddress}
-                  activeOpacity={0.9}>
-                  <Text style={[styles.editActionButtonText, { color: '#FFFFFF' }]}>
-                    {isSavingAddress ? 'Saving...' : 'Save & use'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
             </View>
           )}
         </View>
@@ -960,25 +575,7 @@ const styles = StyleSheet.create({
   },
   placeOrderText: { color: '#FFFFFF', fontWeight: '900', fontSize: 15 },
 
-  // ─── Saved-address picker (Flipkart/Amazon-style) ───
-  addressHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  addNewAddressBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  addNewAddressText: { fontSize: 12, fontWeight: '700' },
-
-  savedAddressList: { gap: 10 },
+  // ─── Delivery address display (read-only in Checkout) ───
   savedAddressCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -989,17 +586,6 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
     backgroundColor: '#FFFFFF',
   },
-  radioOuter: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#CBD5E1',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 2,
-  },
-  radioInner: { width: 10, height: 10, borderRadius: 5 },
   savedAddressBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',

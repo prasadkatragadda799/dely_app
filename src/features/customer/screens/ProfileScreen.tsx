@@ -1,20 +1,24 @@
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, PermissionsAndroid, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Toast from 'react-native-toast-message';
+import Geolocation from 'react-native-geolocation-service';
 import { useAuth } from '../../../hooks/useAuth';
 import { useAppSelector } from '../../../hooks/redux';
 import { CustomerProfileStackParamList } from '../../../navigation/types';
 import {
   useCreateDeliveryLocationMutation,
+  useDeleteDeliveryLocationMutation,
   useGetDeliveryLocationsQuery,
   useGetKycStatusQuery,
   useGetProfileQuery,
+  useLazyReverseGeocodeQuery,
   useSkipKycMutation,
   useSubmitKycMutation,
+  useUpdateDeliveryLocationMutation,
   useUploadKycImageMutation,
 } from '../../../services/api/mobileApi';
 import type { BusinessProfile } from '../businessProfileSlice';
@@ -88,6 +92,63 @@ const ProfileScreen = () => {
     [savedAddressesEnvelope],
   );
   const [createDeliveryLocation, { isLoading: isSavingAddress }] = useCreateDeliveryLocationMutation();
+  const [deleteDeliveryLocation, { isLoading: isDeletingAddress }] = useDeleteDeliveryLocationMutation();
+  const [updateDeliveryLocation, { isLoading: isSettingDefault }] = useUpdateDeliveryLocationMutation();
+  const [deletingAddressId, setDeletingAddressId] = useState<string | null>(null);
+  const [settingDefaultId, setSettingDefaultId] = useState<string | null>(null);
+
+  const handleSetDefaultAddress = async (addr: SavedAddress) => {
+    if (addr.is_default) return;
+    setSettingDefaultId(addr.id);
+    try {
+      await updateDeliveryLocation({
+        locationId: addr.id,
+        address_line1: addr.address_line1 || '',
+        address_line2: addr.address_line2 || undefined,
+        city: addr.city || '',
+        state: addr.state || '',
+        pincode: addr.pincode || '',
+        type: (addr.type as 'home' | 'office' | 'other') || 'home',
+        is_default: true,
+      } as any).unwrap();
+      await refetchSavedAddresses();
+      Toast.show({ type: 'success', text1: 'Default address updated' });
+    } catch (err: any) {
+      const serverMessage = err?.data?.detail || err?.data?.message;
+      Toast.show({
+        type: 'error',
+        text1: 'Could not set default address',
+        text2: typeof serverMessage === 'string' ? serverMessage : 'Please try again.',
+      });
+    } finally {
+      setSettingDefaultId(null);
+    }
+  };
+
+  const handleDeleteAddress = async (id: string) => {
+    const ok = await confirm({
+      title: 'Delete address',
+      message: 'Are you sure you want to delete this address?',
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!ok) return;
+    setDeletingAddressId(id);
+    try {
+      await deleteDeliveryLocation({ locationId: id }).unwrap();
+      await refetchSavedAddresses();
+      Toast.show({ type: 'success', text1: 'Address deleted' });
+    } catch (err: any) {
+      const serverMessage = err?.data?.detail || err?.data?.message;
+      Toast.show({
+        type: 'error',
+        text1: 'Could not delete address',
+        text2: typeof serverMessage === 'string' ? serverMessage : 'Please try again.',
+      });
+    } finally {
+      setDeletingAddressId(null);
+    }
+  };
 
   // Add new address form state.
   const [isAddingAddress, setIsAddingAddress] = useState(false);
@@ -97,7 +158,81 @@ const ProfileScreen = () => {
   const [editState, setEditState] = useState('');
   const [editPincode, setEditPincode] = useState('');
   const [newAddrType, setNewAddrType] = useState<'home' | 'office' | 'other'>('home');
-  const [newAddrDefault, setNewAddrDefault] = useState(false);
+  const [reverseGeocode, { isFetching: isReverseGeocoding }] = useLazyReverseGeocodeQuery();
+  const [isLocating, setIsLocating] = useState(false);
+
+  const requestLocationPermissionAndroid = async () => {
+    if (Platform.OS !== 'android') return true;
+    try {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      );
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleUseMyLocation = async () => {
+    try {
+      const ok = await requestLocationPermissionAndroid();
+      if (!ok) {
+        Toast.show({
+          type: 'error',
+          text1: 'Location permission denied',
+          text2: 'Please allow location permission and try again.',
+        });
+        return;
+      }
+
+      setIsLocating(true);
+      Geolocation.getCurrentPosition(
+        async pos => {
+          try {
+            const lat = pos?.coords?.latitude;
+            const lng = pos?.coords?.longitude;
+            if (typeof lat !== 'number' || typeof lng !== 'number') {
+              throw new Error('Missing lat/lng from device');
+            }
+
+            const res = await reverseGeocode({ lat, lng }).unwrap();
+            const data = res?.data;
+
+            if (!data?.address_line1) {
+              Toast.show({
+                type: 'error',
+                text1: 'Could not resolve address',
+                text2: 'Google did not return address details for this location.',
+              });
+              return;
+            }
+
+            setEditLine1(data.address_line1 ?? '');
+            setEditLine2(data.address_line2 ?? '');
+            setEditCity(data.city ?? '');
+            setEditState(data.state ?? '');
+            setEditPincode(data.pincode ?? '');
+          } catch {
+            Toast.show({
+              type: 'error',
+              text1: 'Location resolution failed',
+              text2: 'Please try again or enter address manually.',
+            });
+          } finally {
+            setIsLocating(false);
+          }
+        },
+        () => {
+          setIsLocating(false);
+          Toast.show({ type: 'error', text1: 'Failed to get your location', text2: 'Please try again.' });
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 },
+      );
+    } catch {
+      Toast.show({ type: 'error', text1: 'Could not fetch location' });
+      setIsLocating(false);
+    }
+  };
 
   const openAddForm = (prefill = false) => {
     setEditLine1(prefill ? profileAddressLine1 : '');
@@ -106,12 +241,12 @@ const ProfileScreen = () => {
     setEditState(prefill ? profileState : '');
     setEditPincode(prefill ? profilePincode : '');
     setNewAddrType('home');
-    setNewAddrDefault(savedAddresses.length === 0);
     setIsAddingAddress(true);
   };
 
   const handleSaveAddress = async () => {
-    if (!editLine1.trim() || !editCity.trim() || !editState.trim() || editPincode.trim().length !== 6) {
+    const pincode = editPincode.trim();
+    if (!editLine1.trim() || !editCity.trim() || !editState.trim() || !/^\d{6}$/.test(pincode)) {
       Toast.show({
         type: 'error',
         text1: 'Please complete all required fields',
@@ -125,15 +260,20 @@ const ProfileScreen = () => {
         address_line2: editLine2.trim() || undefined,
         city: editCity.trim(),
         state: editState.trim(),
-        pincode: editPincode.trim(),
+        pincode,
         type: newAddrType,
-        is_default: newAddrDefault,
+        is_default: true,
       } as any).unwrap();
       await refetchSavedAddresses();
       setIsAddingAddress(false);
       Toast.show({ type: 'success', text1: 'Address saved' });
-    } catch {
-      Toast.show({ type: 'error', text1: 'Could not save address', text2: 'Please try again.' });
+    } catch (err: any) {
+      const serverMessage = err?.data?.detail || err?.data?.message;
+      Toast.show({
+        type: 'error',
+        text1: 'Could not save address',
+        text2: typeof serverMessage === 'string' ? serverMessage : 'Please try again.',
+      });
     }
   };
 
@@ -374,11 +514,36 @@ const ProfileScreen = () => {
                           {typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1)}
                         </Text>
                       </View>
-                      {addr.is_default && (
+                      {addr.is_default ? (
                         <View style={styles.defaultBadge}>
                           <Text style={styles.defaultBadgeText}>Default</Text>
                         </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={[styles.setDefaultBtn, { borderColor: `${primary}66` }]}
+                          onPress={() => handleSetDefaultAddress(addr)}
+                          disabled={isSettingDefault && settingDefaultId === addr.id}
+                          activeOpacity={0.85}>
+                          {isSettingDefault && settingDefaultId === addr.id ? (
+                            <ActivityIndicator size="small" color={primary} />
+                          ) : (
+                            <Text style={[styles.setDefaultBtnText, { color: primary }]}>
+                              Set as default
+                            </Text>
+                          )}
+                        </TouchableOpacity>
                       )}
+                      <TouchableOpacity
+                        style={styles.deleteAddrBtn}
+                        onPress={() => handleDeleteAddress(addr.id)}
+                        disabled={isDeletingAddress && deletingAddressId === addr.id}
+                        activeOpacity={0.7}>
+                        {isDeletingAddress && deletingAddressId === addr.id ? (
+                          <ActivityIndicator size="small" color="#EF4444" />
+                        ) : (
+                          <Icon name="trash-can-outline" size={16} color="#EF4444" />
+                        )}
+                      </TouchableOpacity>
                     </View>
                     <Text style={styles.savedAddrLine}>{fullAddress || '—'}</Text>
                   </View>
@@ -403,6 +568,17 @@ const ProfileScreen = () => {
                 ))}
               </View>
 
+              <TouchableOpacity
+                style={[styles.useLocationBtn, { borderColor: `${primary}66` }]}
+                onPress={handleUseMyLocation}
+                disabled={isLocating || isReverseGeocoding}
+                activeOpacity={0.85}>
+                <Icon name="crosshairs-gps" size={14} color={primary} />
+                <Text style={[styles.useLocationBtnText, { color: primary }]}>
+                  {isLocating || isReverseGeocoding ? 'Getting location...' : 'Use my current location'}
+                </Text>
+              </TouchableOpacity>
+
               <Text style={styles.editLabel}>Address line 1 *</Text>
               <TextInput style={styles.editInput} value={editLine1} onChangeText={setEditLine1}
                 placeholder="House / street / locality" autoCapitalize="none" />
@@ -425,18 +601,9 @@ const ProfileScreen = () => {
               </View>
 
               <Text style={styles.editLabel}>Pincode *</Text>
-              <TextInput style={styles.editInput} value={editPincode} onChangeText={setEditPincode}
-                placeholder="Pincode" keyboardType="phone-pad" />
-
-              <TouchableOpacity
-                style={styles.defaultToggleRow}
-                onPress={() => setNewAddrDefault(v => !v)}
-                activeOpacity={0.85}>
-                <View style={[styles.checkbox, newAddrDefault && { backgroundColor: primary, borderColor: primary }]}>
-                  {newAddrDefault && <Icon name="check" size={12} color="#FFFFFF" />}
-                </View>
-                <Text style={styles.defaultToggleText}>Set as default delivery address</Text>
-              </TouchableOpacity>
+              <TextInput style={styles.editInput} value={editPincode}
+                onChangeText={t => setEditPincode(t.replace(/\D/g, '').slice(0, 6))}
+                placeholder="Pincode" keyboardType="number-pad" maxLength={6} />
 
               <View style={styles.editActions}>
                 <TouchableOpacity
@@ -880,6 +1047,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   savedAddrBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  deleteAddrBtn: { marginLeft: 8, padding: 4 },
+  setDefaultBtn: {
+    marginLeft: 'auto',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  setDefaultBtnText: { fontSize: 11, fontWeight: '700' },
+  useLocationBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    marginBottom: 4,
+  },
+  useLocationBtnText: { fontSize: 13, fontWeight: '700' },
   savedAddrLine: { color: '#1F2937', fontSize: 13, lineHeight: 18 },
   typeBadge: {
     flexDirection: 'row',

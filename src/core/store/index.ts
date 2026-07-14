@@ -10,6 +10,7 @@ import {
   PURGE,
   REGISTER,
   persistStore,
+  PersistConfig,
 } from 'redux-persist';
 import authReducer from '../../features/auth/authSlice';
 import cartReducer from '../../features/cart/cartSlice';
@@ -42,7 +43,9 @@ const authTransform = createTransform(
   { whitelist: ['auth'] },
 );
 
-const persistConfig = {
+type RootReducerState = ReturnType<typeof rootReducer>;
+
+const persistConfig: PersistConfig<RootReducerState> = {
   key: 'root',
   storage: AsyncStorage,
   whitelist: [
